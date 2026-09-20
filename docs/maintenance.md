@@ -6,7 +6,7 @@ adapter → mpv or FFmpeg PCM / Music Assistant airplay-cli. Older Python/Node
 receiver experiments are not the production Cast frontend. The latest decisions
 in [WORKING-PLAN.md](WORKING-PLAN.md) override historical experiment instructions.
 
-## Reproducibility inventory (audit: 2026-09-13)
+## Reproducibility inventory (release audit: 2026-09-20)
 
 Update after dev6 verification: a complete current Rust patch now exists;
 fresh-checkout source reconstruction matches the build host. See
@@ -16,20 +16,20 @@ be applied as a series.
 
 | Component | Existing version record | Remaining gap |
 | --- | --- | --- |
-| Our adapter | `pyproject.toml`, package version, `CHANGELOG.md` | Release tags, immutable artifacts and install manifest are not established. |
-| Vibecast | Base `b4616f8f399be706a1409ed21922aa2df892e303`, complete dev6 patch, Cargo.lock | 109-file reconstruction verified. Full environment lock and redistribution audit remain. See Working Plan for current deployment. |
+| Our adapter | `pyproject.toml`, package version, `CHANGELOG.md`, dev18 release | Keep release tag, image digest and HA version aligned. |
+| Vibecast | Maintained commit `e67628fa72550095f92197550d60d8e94c503d4e`, Cargo.lock, vendored-source release archive | Frozen archive rebuild passes; full OS/toolchain bit reproducibility is not claimed. |
 | yt-dlp extraction stack | `config/youtube-extractor-requirements.txt`: yt-dlp 2026.8.19, yt-dlp-ejs 0.8.0, deno 2.9.6; complete container resolution in `config/container-linux-x86_64-cp312.lock.txt` | amd64 CPython 3.12 is hash-locked and offline-verified; ARM remains separate. |
-| AirPlay sender | `config/cliairplay-linux-x86_64.lock.json`: unified Music Assistant airplay-cli v0.5.4, source/asset/checksum pins | Candidate: Linux x86_64 verified; physical update acceptance and other architectures remain separate. |
+| AirPlay sender | `config/cliairplay-linux-x86_64.lock.json`: unified Music Assistant airplay-cli v0.5.4, source/asset/checksum pins | Linux x86_64/reference-RAOP verified; HomePod/Yamaha and other architectures remain separate. |
 | Python libraries | Tested constraints and separate 17-wheel CPython3.12/3.13 Linux x86_64 hash locks | Fresh offline install/pip-check/tests verified for both; ARM and extractor/build dependencies remain separate. See dependency-locks.md. |
 | FFmpeg / mpv | Host-installed executables | Host versions/build options must be recorded; no application-controlled pin yet. |
-| Device authentication | Private replaceable bundle and validation tools | Coverage, deployed file and collection inventory are separate facts. Expiry checks do not establish future sender acceptance. |
+| Device authentication | Separately released, hash-pinned, replaceable bundle and validation tools | Coverage, installed file and sender acceptance are separate facts; revocation can happen before expiry. |
 
 Do not run all files in `patches/` as a patch series. For example, Controls-17 is
 a cumulative two-file snapshot, not a complete replacement for earlier changes
 in other files. Use the single complete patch for the intended version from the
 reconstruction guide; dev6 needs no additional supplements. A documented base commit alone does not reproduce
-the running binary. Before publication, complete environment pinning and a fresh
-release-build/license review. Preserve applicable license/attribution files.
+the running binary. Every release needs a fresh build/source/licence review and
+must preserve applicable copyright and attribution files.
 
 ## When something stops working
 
@@ -194,23 +194,24 @@ Future state schema migrations need explicit backward compatibility or a backup
 restoration procedure before shipping. Never change the Linux system clock to
 test future validity; use synthetic boundary tests instead.
 
-## Detection and release automation to add before a public release
+## Existing release automation and follow-up
 
-- A single auditable build manifest and complete locks/source provenance; clean
-  rebuild verification, retained license notices and architecture-specific assets.
-- Offline CI for unit/regression tests, compilation, log-redaction and secret
-  checks; opt-in live compatibility jobs separated from deterministic tests.
-- Dependency update notifications/PRs, not unattended production upgrades.
-  Review Cast, YouTube and AirPlay upstream releases; a service-side change can
-  happen without any dependency release, so notifications alone are insufficient.
-- Extend the existing health/status/support diagnostics with bounded failure
-  categories and certificate-coverage warnings, but no credential payloads.
-- Versioned OCI/Home Assistant App releases with persistent private/config data,
-  a configurable web UI port, tested restart/update/rollback and migration policy.
+- CI runs Python 3.11–3.13, clean source-export/history/wheel checks, Rust tests
+  and an amd64 container build. Manual workflows retain OCI SBOM/provenance and
+  frozen Rust/native source archives.
+- Dependabot and `upstream-watch.yml` report dependency changes; production is
+  never upgraded unattended. Service-side changes may occur without a release,
+  so notifications are evidence to investigate, not availability monitoring.
+- `/health`, `/status` and `/api/support` provide bounded diagnostics without
+  credential payloads. More failure categories may be added when incidents show
+  that the current allowlisted output is insufficient.
+- The versioned OCI/Home Assistant App preserves `/data` and exposes a configurable
+  LAN UI port. Published-image update/rollback, state migrations and additional
+  architectures remain explicit acceptance work.
 
 The desired “send version + redacted logs, isolate the changed boundary, test an
 update” workflow is realistic. Most extractor or CLI compatibility changes can
 be investigated independently. It is not an availability guarantee: a Cast
 trust-policy change or unavailable service API may require substantial work or
-have no sustainable fix. Current reproducibility/documentation gaps must be
-closed before describing updates as one-click or fully reproducible.
+have no sustainable fix. The project does not claim bit-for-bit reproducibility
+or universal one-click recovery from external protocol changes.

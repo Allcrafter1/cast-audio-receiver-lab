@@ -13,11 +13,8 @@ unreviewed full logs to a public issue. Start with `/api/support`, the exact app
 version, the failing stage and a short redacted log excerpt as described in
 `docs/maintenance.md`.
 
-For a suspected vulnerability, use GitHub's private vulnerability-reporting
-channel once it is enabled for the public repository. Until then, do not publish
-exploit details or credentials in an issue; contact the repository owner through
-their GitHub profile and provide only enough non-sensitive context to arrange a
-private report.
+For a suspected vulnerability, use GitHub's **Report a vulnerability** private
+reporting channel. Do not publish exploit details or credentials in an issue.
 
 Cast authentication compatibility, service revocation and protocol breakage are
 known availability risks, not promises made by this project. A long local

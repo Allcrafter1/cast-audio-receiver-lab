@@ -15,7 +15,7 @@ native solutions before adding another service-specific adapter.
 
 Follow the [current runbook](docs/current-runbook.md) and
 [source reconstruction](docs/source-reconstruction.md). Use a separate virtual
-environment and the matching complete frontend patch, not all historical patches.
+environment and the pinned maintained frontend commit; do not stack historical patches.
 Preserve private state. With management extras installed, run:
 
 ```sh
@@ -53,5 +53,4 @@ Our GPL-3.0-or-later declaration does not relicense dependencies. Preserve
 upstream notices and credit actual contributions. Unresolved distribution
 questions are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Passing tests
 is not independent security review. Do not imply Google/Apple/Music Assistant
-endorsement or guarantee future service compatibility. Music Assistant outreach
-must wait for a usable, public, documented repository.
+endorsement or guarantee future service compatibility.

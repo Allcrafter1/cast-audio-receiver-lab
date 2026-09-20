@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Private security report
+    url: https://github.com/Allcrafter1/cast-audio-receiver-lab/security/advisories/new
+    about: Report vulnerabilities or sensitive security details privately.

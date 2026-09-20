@@ -1,0 +1,54 @@
+name: Bug report
+description: Report a reproducible receiver, output, UI or packaging problem
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve this experimental project. Never attach authentication bundles, keys, tokens, cookies, pairing credentials, signed media URLs, private addresses or unreviewed full logs. Start with the redacted `/api/support` output.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Release/App version and installation type (HA, OCI or native)
+    validations:
+      required: true
+  - type: input
+    id: path
+    attributes:
+      label: Playback path
+      description: Sender/input and output type, for example YouTube Music → AirPlay
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+    validations:
+      required: true
+  - type: textarea
+    id: support
+    attributes:
+      label: Redacted support information
+      description: Paste `/api/support` output and only a short, reviewed log excerpt if needed.
+      render: json
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check
+      options:
+        - label: I reviewed this report and removed credentials, authentication material, signed URLs and private data.
+          required: true
