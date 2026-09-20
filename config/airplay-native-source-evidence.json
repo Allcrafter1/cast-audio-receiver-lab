@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "airplay_commit": "431c5c582eef9307c4e39c50a0ea65e970bc1128",
+  "openssl_proxy_path": "libraop/libopenssl",
+  "openssl_proxy_commit": "ac74d79efc7a702386fcf00d4b7e0a785721a3ed",
+  "binary_introduction_commit": "d8653048bbfaf65b44bcef67c8c66e368b822cde",
+  "recorded_source_commit": "8ddacec11481a37302c19f4454e23299af399f83",
+  "matching_version_source_commit": "c1eeb9406b6142148f267594197d853403d10208",
+  "openssl_version": "3.5.4",
+  "libcrypto_sha256": "181cfb9b864d79be76acc419e2017126c8bec619c93f043f187cdf1b302e4237",
+  "status": "historical source association verified; independent rebuild not yet verified"
+}

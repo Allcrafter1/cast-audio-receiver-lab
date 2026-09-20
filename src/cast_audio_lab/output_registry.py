@@ -191,7 +191,7 @@ def _dlna_backend(args: argparse.Namespace) -> AudioBackend:
     if args.target_config is None:
         raise ValueError("--backend dlna requires --target-config")
     target = load_dlna_target(args.target_config)
-    return DlnaAudioBackend(target["description_url"])
+    return DlnaAudioBackend(target["description_url"], ffmpeg=args.ffmpeg)
 
 
 def _sonos_backend(args: argparse.Namespace) -> AudioBackend:

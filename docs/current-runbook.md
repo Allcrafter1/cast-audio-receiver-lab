@@ -1,13 +1,13 @@
 # Current development runbook
 
-Current packaged development release: **0.6.0.dev12**. It adds one supervisor,
-the static output registry, output-control protocol v2, operational endpoints,
-container/HA packaging and the maintained Vibecast fork on top of the accepted
-dev11 artwork path. The old laptop deployment and build directories remain
-historical evidence; do not treat them as the source of the packaged release.
+Current private review candidate: **0.6.0.dev13**. It retains the dev12 supervisor,
+output registry and protocol v2, with mpv compatibility, status feedback, UI,
+internal-bridge and airplay-cli updates. See [review results](review-dev13.md).
+Old laptop deployments/build directories are historical evidence, not the source
+of the packaged release.
 
-This is a Linux development installation, not a finished distribution or HA
-App/add-on. Keep the prior working release and private state available. Do not
+Linux and private HA App builds have been tested; there is no public release yet.
+Keep the prior working release and private state available. Do not
 mix old standalone Python receiver commands with the current Vibecast frontend.
 
 ## Components and boundaries
@@ -50,7 +50,7 @@ Create a separate versioned release/environment directory. From its source root:
 
 ```sh
 python3 -m venv .venv
-.venv/bin/python -m pip install -c config/management-tested-constraints.txt '.[management]'
+.venv/bin/python -m pip install -c config/management-tested-constraints.txt .
 .venv/bin/python -m pip install -r config/youtube-extractor-requirements.txt
 ```
 
@@ -62,9 +62,9 @@ Do not run an unbounded upgrade against a live environment. Ensure the extractor
 environment's bin directory is on the **frontend's** PATH: it launches yt-dlp,
 so configuring only the adapter's PATH is insufficient.
 
-Build the frontend using the single current complete patch and recorded source
-lock, following [source reconstruction](source-reconstruction.md). Never stack
-the historical cumulative snapshots. Keep binary/source/dependency hashes with
+Build the frontend from the maintained dev12 commit plus the recorded dev13
+overlay, following [source reconstruction](source-reconstruction.md). Never stack
+unrelated historical cumulative snapshots. Keep binary/source/dependency hashes with
 the release; source reconstruction is not a bit-identical build guarantee.
 
 ## Start the supervised runtime
@@ -93,7 +93,8 @@ multiple explicit AirPlay targets are possible but real concurrent audio testing
 remains pending. See [speaker management](speaker-management.md) for migration.
 
 Discovery uses mDNS; frontend per-speaker Cast/eureka ports are dynamically
-assigned. Port 8788 is only the management UI; 8010 is the shared player bridge.
+assigned. Port 8788 is the management UI; 8010 is the loopback-only shared player
+bridge, not a second browser interface. Cast/eureka remain LAN-visible.
 Do not confuse them when diagnosing port collisions. VLANs, Wi-Fi isolation and
 container networking can prevent discovery despite a reachable management page.
 The LAN UI deliberately has no authentication. Do not expose it via port

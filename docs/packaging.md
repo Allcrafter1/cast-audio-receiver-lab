@@ -14,7 +14,7 @@ still allowing rotation without rebuilding the receiver.
 
 The `Containerfile` is the first pinned `linux/amd64` build recipe. It builds
 the maintained Vibecast source, verifies the downloaded Music Assistant
-`cliairplay` v0.5.3 artifact against the recorded SHA-256, installs the tested
+`cliairplay` v0.5.4 candidate against the recorded SHA-256, installs the tested
 extractor versions and includes FFmpeg/mpv. It never bakes `/data` or a private
 authentication bundle into an image layer.
 

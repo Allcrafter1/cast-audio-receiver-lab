@@ -19,7 +19,7 @@ be applied as a series.
 | Our adapter | `pyproject.toml`, package version, `CHANGELOG.md` | Release tags, immutable artifacts and install manifest are not established. |
 | Vibecast | Base `b4616f8f399be706a1409ed21922aa2df892e303`, complete dev6 patch, Cargo.lock | 109-file reconstruction verified. Full environment lock and redistribution audit remain. See Working Plan for current deployment. |
 | yt-dlp extraction stack | `config/youtube-extractor-requirements.txt`: yt-dlp 2026.8.19, yt-dlp-ejs 0.8.0, deno 2.9.6; complete container resolution in `config/container-linux-x86_64-cp312.lock.txt` | amd64 CPython 3.12 is hash-locked and offline-verified; ARM remains separate. |
-| AirPlay sender | `config/cliairplay-linux-x86_64.lock.json`: unified Music Assistant airplay-cli v0.5.3, asset/checksum hashes | Only Linux x86_64 provisioned; other architectures require explicit validation. |
+| AirPlay sender | `config/cliairplay-linux-x86_64.lock.json`: unified Music Assistant airplay-cli v0.5.4, source/asset/checksum pins | Candidate: Linux x86_64 verified; physical update acceptance and other architectures remain separate. |
 | Python libraries | Tested constraints and separate 17-wheel CPython3.12/3.13 Linux x86_64 hash locks | Fresh offline install/pip-check/tests verified for both; ARM and extractor/build dependencies remain separate. See dependency-locks.md. |
 | FFmpeg / mpv | Host-installed executables | Host versions/build options must be recorded; no application-controlled pin yet. |
 | Device authentication | Private replaceable bundle and validation tools | Coverage, deployed file and collection inventory are separate facts. Expiry checks do not establish future sender acceptance. |

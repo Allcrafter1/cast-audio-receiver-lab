@@ -1,12 +1,13 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "cast-audio-receiver-lab"
-version = "0.6.0.dev12"
+version = "0.6.0.dev17"
 description = "An experimental, audio-only Google Cast V2 receiver"
 license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "licenses/*"]
 requires-python = ">=3.11"
 dependencies = [
     "aiohttp>=3.14,<4",
@@ -28,6 +29,7 @@ cast-speaker-manager = "cast_audio_lab.management:main"
 cast-audio-receiver = "cast_audio_lab.runtime:main"
 cast-audio-container = "cast_audio_lab.container_entrypoint:main"
 cast-audio-bootstrap = "cast_audio_lab.container_bootstrap:main"
+cast-audio-bundle = "cast_audio_lab.bundle_artifact:main"
 
 [tool.setuptools.package-data]
 cast_audio_lab = ["web/*.html", "web/*.js", "web/*.css", "web/*.svg"]

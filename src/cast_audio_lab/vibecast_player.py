@@ -10,6 +10,7 @@ import platform
 import uuid
 from pathlib import Path
 from typing import Any
+from websockets.exceptions import ConnectionClosed
 
 from .backend import (
     AudioBackend,
@@ -217,7 +218,18 @@ class VibecastAudioPlayer:
             return
         self._last_event_state = key
         if self.session_id is not None and self._websocket is not None:
-            asyncio.create_task(self._send_status(self.session_id, status))
+            asyncio.create_task(self._report_current_status(self.session_id, self._websocket))
+
+    async def _report_current_status(self, session_id: str, websocket: Any) -> None:
+        # A callback is queued, not sent synchronously. A seek, replacement load
+        # or reconnect can happen before it runs. Never replay its old snapshot
+        # into a newer playback state (even when the session ID is unchanged).
+        if self.session_id != session_id or self._websocket is not websocket:
+            return
+        try:
+            await self._send_backend_state(session_id)
+        except (OSError, RuntimeError, ConnectionClosed):
+            LOGGER.debug("Status notification interrupted; connection loop handles recovery")
 
     def _backend_control_requested(self, request: ControlRequest) -> None:
         if self.session_id is None or self._websocket is None:

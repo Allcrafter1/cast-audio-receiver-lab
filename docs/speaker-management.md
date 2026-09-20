@@ -1,8 +1,10 @@
-# Speaker management — 0.6.0.dev3
+# Speaker management — dev13
 
-Deployed on the live test laptop, including both existing speaker identities.
-The manager owns one Python adapter process per enabled speaker. The existing
-Rust frontend remains separately managed. Playback protocols are unchanged.
+The manager owns one Python adapter process per enabled speaker. The normal
+`cast-audio-receiver` supervisor owns both manager and Rust frontend. The private
+HA deployment retains the configured speaker identities. Use the installation
+guide for normal deployment; the manager-only command below is for development
+with an already running internal frontend.
 
 ## Install and start
 
@@ -11,7 +13,7 @@ in place. From the repository root:
 
 ```sh
 python3 -m venv .venv-management
-.venv-management/bin/pip install -c config/management-tested-constraints.txt '.[management]'
+.venv-management/bin/pip install -c config/management-tested-constraints.txt .
 .venv-management/bin/cast-speaker-manager --state-dir .state/speaker-manager --port 8788
 ```
 

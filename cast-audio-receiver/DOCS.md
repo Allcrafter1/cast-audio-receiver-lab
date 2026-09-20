@@ -32,3 +32,17 @@ Only `amd64` is declared because that is the architecture for which the pinned
 AirPlay sender binary and current physical tests exist. Adding an architecture
 requires a corresponding verified `cliairplay` artifact/build and a full
 receiver test; editing the architecture list alone is not support.
+# Local audio and embedded interface
+
+The app uses Home Assistant's shared PulseAudio service (`audio: true`), not
+direct access to `/dev/snd`. Pass the sound card through to HA OS first, then
+select the desired output using Home Assistant's app audio settings. A physical
+device visible to HA alone is insufficient without the app's audio mapping.
+The container runs the player as a named, non-root service user with a writable
+home. AirPlay does not require a local sound card.
+
+The embedded management page uses HA's existing Ingress session cookie for
+same-origin API calls. It adds no application login or token. Direct LAN access
+remains unauthenticated. Reopen the app panel after an update or expired HA
+session. If states disagree, report the version displayed by each page and any
+visible error; never include your ingress URL/session cookie in a public issue.

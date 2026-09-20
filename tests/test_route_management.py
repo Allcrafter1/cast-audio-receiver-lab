@@ -234,6 +234,45 @@ class HTTPTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.store.load()[0].name, "New kitchen")
         self.assertEqual(self.manager.tasks, {})
 
+    async def test_dlna_target_correction_preserves_route_identity(self):
+        response = await self.client.post("/api/routes", json={"name": "TV", "backend": "dlna",
+            "target": {"description_url": "http://192.0.2.2"}})
+        ident = (await response.json())["id"]
+        url = "http://192.0.2.2:52235/dmr/device.xml"
+        response = await self.client.patch("/api/routes/" + ident,
+            json={"target": {"description_url": url}})
+        self.assertEqual(response.status, 200)
+        item = await response.json()
+        self.assertEqual(item["id"], ident)
+        self.assertEqual(item["target"]["description_url"], url)
+        self.assertEqual(self.store.load()[0].target["port"], 52235)
+        response = await self.client.patch("/api/routes/" + ident,
+            json={"target": {"description_url": "file:///etc/passwd"}})
+        self.assertEqual(response.status, 400)
+        self.assertEqual(self.store.load()[0].target["description_url"], url)
+
+    async def test_dlna_discovery_import_preserves_backend_and_starts_disabled(self):
+        store = RouteStore(Path(self.temp.name) / "dlna-discovery")
+        manager = RouteManager(store)
+        discovery = AsyncMock(return_value=[{"name": "TV", "target": {
+            "description_url": "http://192.0.2.2:123/device.xml", "device_id": "uuid:tv"}}])
+        client = TestClient(TestServer(create_app(manager, discover_renderers=discovery)))
+        await client.start_server()
+        try:
+            response = await client.post("/api/scan/dlna", json={})
+            self.assertEqual(response.status, 200)
+            candidate = (await response.json())["candidates"][0]
+            response = await client.post("/api/routes", json={"name": "TV", "candidate_id": candidate["candidate_id"]})
+            self.assertEqual(response.status, 201)
+            created = await response.json()
+            self.assertEqual(created["backend"], "dlna")
+            self.assertFalse(created["enabled"])
+            response = await client.post("/api/scan/dlna", json={})
+            self.assertTrue((await response.json())["candidates"][0]["already_imported"])
+            self.assertEqual(len(store.load()), 1)
+        finally:
+            await client.close()
+
     async def test_local_duplicate_rejected_then_delete_allows_replacement(self):
         first = await self.client.post("/api/routes", headers=self.headers,
             json={"name":"Local", "backend":"mpv"})

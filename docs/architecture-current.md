@@ -1,7 +1,13 @@
-# Current architecture (dev12)
+# Current architecture (dev13)
 
 This document describes the active product path. Historical experiments live
 under `research/` and are not installed with the runtime wheel.
+
+The player bridge is a separate loopback listener; only the Python management
+interface is user-facing. The inherited browser player is an explicitly enabled
+development feature, absent from the normal build. See the dev13 review for
+the bounded changes rather than assuming every upstream Vibecast feature is
+part of this audio product.
 
 ## Processes and ownership
 

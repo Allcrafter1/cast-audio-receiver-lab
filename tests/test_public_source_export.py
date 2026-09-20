@@ -8,6 +8,16 @@ from tools.create_public_source_export import _validate_text, create
 
 
 class PublicSourceExportTests(unittest.TestCase):
+    def test_only_reviewed_branding_binary_is_allowed(self):
+        root = Path(__file__).parents[1]
+        path = Path("cast-audio-receiver/icon.png")
+        payload = (root / path).read_bytes()
+        self.assertEqual(_validate_text(path, payload), hashlib.sha256(payload).hexdigest())
+        with self.assertRaisesRegex(ValueError, "unreviewed branding"):
+            _validate_text(path, payload + b"unreviewed data")
+        with self.assertRaisesRegex(ValueError, "binary"):
+            _validate_text(Path("unexpected.png"), payload)
+
     def test_export_is_allowlisted_text_and_manifest_matches(self):
         with tempfile.TemporaryDirectory() as temporary:
             target = Path(temporary) / "export"

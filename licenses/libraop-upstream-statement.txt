@@ -1,0 +1,14 @@
+Upstream LICENSE.txt, commit 4fe461a809eadd5230e3b587a3b3c948f90d9617
+https://github.com/philippe44/libraop/blob/4fe461a809eadd5230e3b587a3b3c948f90d9617/LICENSE.txt
+
+(c) Philippe, philippe_44@outlook.com
+
+This is under MIT license (https://mit-license.org)
+
+This program uses 3rd party software that is licensed by their
+author under their own conditions.
+
+Inventory note (not part of upstream text): this statement is newer than the
+libraop revision pinned by airplay-cli v0.5.4. Preserve third-party licences and
+do not describe the whole linked binary as MIT. The historical missing-grant
+wording in airplay-cli's notice is retained alongside this updated evidence.

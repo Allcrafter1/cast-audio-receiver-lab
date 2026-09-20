@@ -18,6 +18,8 @@ class HomeAssistantTestRepositoryTests(unittest.TestCase):
                 "certificate_path: /share/cast-audio-receiver/certs.json", config
             )
             self.assertTrue((app / "Dockerfile").is_file())
+            for name in ("icon.png", "logo.png", "README.md", "CHANGELOG.md"):
+                self.assertTrue((app / name).is_file(), name)
             self.assertTrue((app / "src" / "cast_audio_lab" / "runtime.py").is_file())
             self.assertFalse(any(root.rglob("certs.json")))
             self.assertFalse(any(path.name == ".state" for path in root.rglob("*")))

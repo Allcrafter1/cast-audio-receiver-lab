@@ -1,5 +1,15 @@
 # Reconstructing the Rust frontend
 
+## Current dev13 private review overlay
+
+Start at the dev12 maintained commit below, then apply
+`patches/vibecast-dev13-internal-bridge.patch` once. Its exact digest/base are in
+`config/vibecast-0.6.0.dev13-overlay.lock.json`. OCI and CI use this same input.
+The patch disables the normal browser page and separates bridge/Cast binding;
+it contains no authentication material. The source changes are local review
+work, not a newly published fork revision. Do not apply it on top of itself or
+assume the old dev12 binary hash identifies the dev13 build.
+
 ## Current dev12 source
 
 The primary source is the reviewable maintained fork commit

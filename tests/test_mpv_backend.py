@@ -4,6 +4,37 @@ from cast_audio_lab.mpv_backend import MpvAudioBackend
 
 
 class MpvEventTests(unittest.IsolatedAsyncioTestCase):
+    async def test_older_mpv_loadfile_retains_start_and_pause(self):
+        b = MpvAudioBackend()
+        b._start = AsyncMock()
+        b._command = AsyncMock(side_effect=[None, ValueError(
+            "mpv command failed: invalid parameter"), None])
+        await b.load("https://example.invalid/audio", "audio/wav", False, 42)
+        self.assertEqual(b._command.await_args_list[-1].args,
+                         ("loadfile", "https://example.invalid/audio", "replace", {"start": "42"}))
+        self.assertFalse(b._autoplay)
+        self.assertEqual(b.status().current_time, 42)
+
+    async def test_load_does_not_retry_unrelated_failure(self):
+        b = MpvAudioBackend()
+        b._start = AsyncMock()
+        b._command = AsyncMock(side_effect=[None, ValueError("media failed")])
+        with self.assertRaisesRegex(ValueError, "media failed"):
+            await b.load("https://example.invalid/audio", "audio/wav", True, 0)
+        self.assertEqual(b._command.await_count, 2)
+        self.assertFalse(b._loading)
+        self.assertEqual(b.status().idle_reason, "ERROR")
+
+    async def test_rejected_legacy_fallback_does_not_leave_buffering(self):
+        b = MpvAudioBackend()
+        b._start = AsyncMock()
+        b._command = AsyncMock(side_effect=[None, ValueError(
+            "mpv command failed: invalid parameter"), ValueError("load failed")])
+        with self.assertRaisesRegex(ValueError, "load failed"):
+            await b.load("https://example.invalid/audio", "audio/wav", True, 0)
+        self.assertFalse(b._loading)
+        self.assertEqual(b.status().state, "IDLE")
+
     async def test_failed_load_releases_feedback_gates(self):
         b = MpvAudioBackend()
         b._loading = True

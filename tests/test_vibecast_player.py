@@ -6,6 +6,24 @@ from cast_audio_lab.vibecast_player import VibecastAudioPlayer
 
 
 class VibecastAudioPlayerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_queued_notification_reads_post_seek_position(self):
+        self.player.session_id = "s1"
+        self.player._websocket = object()
+        await self.backend.load("https://example.test/a", "audio/mpeg", False, 12)
+        self.player._backend_status_changed(self.backend.status())
+        await self.backend.seek(80)
+        await asyncio.sleep(0)
+        self.assertTrue(self.sent)
+        self.assertTrue(all(m["currentTime"] == 80 for m in self.sent))
+
+    async def test_queued_notification_does_not_cross_reconnect(self):
+        self.player.session_id = "s1"
+        self.player._websocket = object()
+        self.player._backend_status_changed(self.backend.status())
+        self.player._websocket = object()
+        await asyncio.sleep(0)
+        self.assertEqual(self.sent, [])
+
     async def asyncSetUp(self):
         self.backend = NullAudioBackend()
         self.player = VibecastAudioPlayer(

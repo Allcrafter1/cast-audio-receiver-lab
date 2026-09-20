@@ -1,5 +1,87 @@
 # Changelog
 
+## 0.6.0.dev17 — release-preparation candidate (not deployed)
+
+- Add Home Assistant icon/logo derived from the existing speaker SVG, with
+  reviewed binary export pins and app-store README/changelog. Branding is live
+  in the private HA store without changing its dev16 playback runtime.
+- Verify an isolated AirPlay source build with corrected OpenSSL and rebuilt
+  native archives; preserve the currently tested upstream runtime executable.
+
+- Add repeatable native-source evidence checks for the upstream OpenSSL gitlink
+  mismatch, without replacing the tested AirPlay binary.
+- Check reachable Git history as well as isolated source exports in CI; include
+  regressions for private material present only in an older commit. These checks
+  are bounded safeguards, not automatic permission to publish.
+
+- Keep DLNA preloaded media ready while the renderer reports STOPPED; do not
+  confuse autoplay=false with cancellation. On explicit Play, report buffering
+  until the renderer confirms playback. Add a regression test.
+- Record successful user YT Music/DLNA acceptance for dev16 and retain concrete
+  native-source, clean-export and distribution gates before publication.
+
+## 0.6.0.dev16 — DLNA discovery and local media compatibility
+
+- Add bounded SSDP renderer discovery and disabled import in the management UI,
+  using the existing async-upnp-client dependency. Detect existing targets.
+- Handle UPnP failures without crashing/re-registering the Cast speaker. Wait
+  for real transport feedback before reporting PLAYING; bound initial buffering.
+- Add DLNA-only local HTTP file serving with correct HEAD/byte-range support.
+  HTTPS, loopback sources and incompatible audio types use bounded FFmpeg
+  preparation; copy supported formats, otherwise encode MP3. Direct compatible
+  HTTP playback remains unchanged. This fallback buffers a finite item first;
+  it adds startup latency and does not support infinite live conversion.
+- Physical Samsung test: converted WebM/Opus from Cast through HA to MP3, reached
+  actual TV playback and clean stop. User subsequently confirmed YT Music works.
+- Add relay HTTP/cancellation/conversion, discovery/import and error regression
+  tests. Real FFmpeg conversion is also tested inside the container build.
+
+## 0.6.0.dev15 — DLNA endpoint correction
+
+- Allow correcting a DLNA description URL without deleting/recreating the Cast
+  speaker. Explain that a full UPnP description URL, not a bare IP, is required.
+- Validate edited routes against duplicate target rules; reject invalid target
+  updates without changing saved configuration.
+- Retry initial UPnP discovery after failed initialization rather than caching a
+  partially initialized profile. Add regression tests.
+- Physical Samsung control/discovery succeeds at its advertised XML URL.
+  Actual playback and source-format compatibility remain separate test gates.
+
+## 0.6.0.dev14 — HA audio and ingress correction
+
+- Enable Supervisor audio mapping and provide a real non-login UID/GID 1000
+  account with a writable home for PulseAudio clients. Verified on HA using a
+  synthetic silent Cast stream; mpv feeds the physical analog stereo sink.
+- Preserve same-origin cookies for HA Ingress requests, while keeping direct
+  LAN management login-free. Disable request caching and explain expired or
+  rejected ingress sessions. Add executed JavaScript request-helper regression.
+- Full Python suite: 222 tests, 9 environment skips. Audible playback and
+  embedded-browser user acceptance remain manual checks.
+
+## 0.6.0.dev13 — private review candidate
+
+- Fix old-mpv `loadfile` argument compatibility without retrying unrelated
+  playback failures; clear buffering gates on command errors. Add a real silent
+  decoder test to the container build.
+- Prevent queued player notifications from replaying a pre-seek snapshot or
+  crossing a WebSocket reconnection. Physical YT Music UI acceptance remains a
+  separate check.
+- Group DLNA/Sonos controls independently and verify mobile/desktop layout.
+- Default the maintained frontend bridge to loopback and disable the inherited
+  browser player in normal builds; retain an explicit development Cargo feature.
+  Pin and apply the review overlay in both OCI and CI builds.
+- Update airplay-cli to verified v0.5.4, retain v0.5.3 rollback pins, pass upstream
+  tests and the physical reference-RAOP persistent-control/recovery test.
+- Rewrite project identity/provenance documentation; package third-party notices
+  in wheels/images and record Debian/FFmpeg/mpv build versions. Correct stale
+  libraop/OpenSSL notice evidence without claiming a complete source-rights audit.
+- Prepare bounded, explicit hash-pinned bundle artifact acquisition with atomic
+  private import and synthetic rejection tests. No real bundle publication,
+  automatic download URL or signing identity is introduced.
+- Build/update the private HA App successfully; verify ingress/LAN health,
+  closed LAN bridge, restart and preserved speaker identities. This is not a
+  public release or universal hardware-compatibility claim.
+
 ## 0.6.0.dev12 — supervised and versioned modular runtime
 
 - Add one deterministic supervisor for the Rust frontend and Python speaker

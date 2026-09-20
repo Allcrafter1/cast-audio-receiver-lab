@@ -1,5 +1,34 @@
 # Reproducible test matrix
 
+## dev13 review regression commands
+
+Run `PYTHONPATH=src:. python -m unittest discover -s tests -v`. The real mpv
+test uses a generated silent WAV and `--ao=null`: no physical sound device is
+required. It checks paused offset load, seek, EOF, replacement and stop, and is
+also run inside the OCI build against the packaged mpv. Unit tests separately
+exercise the legacy/modern argument signatures and failed-load gate cleanup.
+
+Reconstruct the dev12 frontend plus the digest-pinned dev13 overlay, then run
+the seven-crate CI gate and `cargo fmt --all -- --check`. Also run
+`cargo test --locked -p vibecast-bridge --features browser-player --lib` to
+keep the explicit upstream development example functional. The default build
+must return 404 for `/`, `/index.html`, `/player.js` on its internal bridge.
+
+For an explicitly selected physical test receiver, the existing
+`tools/test_persistent_airplay.py --config PRIVATE_TARGET --cliairplay VERIFIED_BINARY`
+emits quiet synthetic tones. It checks one connection across load/seek/EOF and
+recovery after killing only its own CLI. Never select another household device
+automatically just because the intended target is unavailable.
+
+Manual follow-up on the HA output: several forward/back YT Music seeks (watch
+for old-position flashes), paused seek, queue/direct song selection, next track,
+volume feedback, artwork, disconnect and reconnect. Keep HomePod/Yamaha and
+multiple-target acceptance distinct from the reference-phone result.
+
+Bundle tests use synthetic JSON only. Do not attach real credentials to tests,
+screenshots, logs or public issues. Tests prove artifact integrity/import behavior,
+not future acceptance of a device identity by Google.
+
 Dev11 adds `tools/test_default_media.py --artwork-check` to the existing silent
 fixture. It verifies actual square conversion, HTTP image retrieval and Cast
 metadata feedback without changing playback position/state. See

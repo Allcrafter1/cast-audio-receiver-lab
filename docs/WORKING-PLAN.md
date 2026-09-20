@@ -1,5 +1,427 @@
 # Working plan
 
+## Publication preparation — dev17 candidate, 2026-09-20
+
+- HA branding implemented from the existing project SVG: reviewed 128 px icon
+  and 256 px logo, exact digest allowlist for binary exports, App README/changelog
+  and private-test packaging. Private LAN repository commit 5172cad contains
+  presentation only; Supervisor's icon endpoint returns the exact expected
+  digest despite its store-reload CLI timeout. Runtime stays dev16 unchanged.
+- Controlled native source build now passes upstream make test and --check:
+  immutable airplay-cli source, corrected OpenSSL 3.5.4, rebuilt ALAC and mdnssd.
+  Recipe: tools/build_airplay_source_candidate.sh. This is a candidate, not a
+  silently substituted deployment binary or byte-identical upstream rebuild.
+
+- Added historical-blob safety check and regression coverage for an old secret
+  absent from the latest tree, empty histories and symlinks. Fresh private
+  staging clone: seven reachable commits, 259 path/blob versions, no findings
+  under the bounded existing export rules. CI now checks full reachable history.
+  This is not a claim of exhaustive secret detection or manual clearance.
+- Final local verification after these additions: 242 tests successful, 10
+  environment skips; 248-file publication export passes bounded safety checks;
+  diff whitespace check clean. New checks/documentation remain local, not
+  pushed or deployed. The full suite was not rerun from this final expanded
+  export (the preceding 242-file export's full run is recorded below).
+
+- Follow-up: found OpenSSL 3.5.4 source association in the immediately preceding
+  proxy commit; the next commit changed only its gitlink back to older source.
+  Added pinned evidence record, read-only checker and negative regression tests.
+  Real recursive-checkout verification passes all seven checks. Detailed next
+  steps: `airplay-native-source-audit.md`. No runtime/binary replacement yet;
+  corresponding-source correction and controlled rebuild remain to complete.
+
+- User confirms actual YT Music playback through DLNA works. dev16 remains the
+  deployed, accepted version; do not silently replace it during release audits.
+- Publication preparation is authorized. GitHub access verified; main project
+  is private, maintained Vibecast fork public. No public release made here.
+- Fixed DLNA autoplay=false preloads being mistaken for cancellation when the
+  renderer reports STOPPED. Explicit Play now waits for real PLAYING feedback.
+  Added automated preload → delayed Play → observed playback regression.
+- Native provenance investigation confirms libopenssl's .gitmodules requests
+  branch openssl-3.5.4, but its recorded gitlink is
+  8ddacec11481a37302c19f4454e23299af399f83 (1.1.1 lineage). A branch hint does
+  not change recursive checkout or prove which source built a static archive.
+  Do not close the corresponding-source release gate on that evidence alone.
+- Verification: full local suite and isolated 242-file publication export each
+  run 238 tests successfully (10 environment skips). CI now repeats the suite
+  from the isolated export on Python 3.12 to detect development-only file
+  dependencies. This does not replace manual privacy/licence review.
+- Next release tasks: resolve exact native corresponding source/build inputs;
+  audit clean export and its new history; reconstruct/test the clean release;
+  generate image dependency inventory/SBOM; verify image update/rollback.
+  Separate bundle distribution/provenance gate remains open. Do not publish
+  private runtime state or claim general hardware acceptance.
+
+## DLNA compatibility and discovery — dev16, 2026-09-20
+
+- Actual latest YT Music adapter log: SetAVTransportURI returns UPnP **402**;
+  UpnpActionResponseError was not covered by the shared command handler and
+  caused a whole adapter reconnect. Translate DLNA library failures into safe
+  recoverable command errors, clean loading/stop state, retain the speaker.
+- Controlled TV comparison: same local MP3 HTTP URL accepted; HTTPS immediately
+  rejected with 402. User also confirmed the TV required controller permission
+  and then the earlier direct MP3 test was audible. Do not attribute all earlier
+  failures to HTTP headers; the permission change is a confounding factor.
+- User explicitly approved an output-local compatibility relay. Implemented
+  within DLNA only: HTTPS, loopback-only sources and unadvertised MIME types are
+  prepared as local HTTP files; compatible audio is remuxed without re-encoding,
+  otherwise FFmpeg makes stereo 44.1 kHz/192 kbit MP3. Supported direct HTTP
+  sources remain direct. No new library or changes to Cast/AirPlay decoding.
+- Conservative **finite-item** implementation: wait for a complete bounded file
+  so old TVs receive Content-Length plus real byte ranges, not invented lengths
+  or an incompatible chunked response. 64 MiB/item, 90 s preparation timeout,
+  at most two completed files plus one in progress; stop removes temporary data.
+  The temporary filesystem may be RAM-backed. More initial latency/CPU/storage
+  than direct forwarding; infinite/live sources needing conversion are not yet
+  supported. This is not gapless/multiroom support.
+- Automatic IPv4 SSDP renderer discovery via existing async-upnp-client;
+  bounded same-responder local-IP description fetches, XML limits, UDN dedup,
+  explicit disabled import and existing-route detection. HA live search finds
+  the physical Samsung and correctly marks it already imported.
+- Private dev16 deployed. Full physical test: Cast DMR WebM/Opus source through
+  HA relay → MP3 over HTTP → TV reached PLAYING with advancing real position;
+  clean owned-session STOP; all three route restart counters remain zero.
+- Verification: 237 Python tests successful, 10 environment skips. Container
+  rebuild passed real FFmpeg conversion/HTTP-range tests and real silent mpv.
+  Final targeted rebuild succeeded after a store-wide git-reload timeout;
+  app health confirms all three routes ready. Source-review export: 242 files,
+  bounded secret scan passed (not a full publication/source-history clearance).
+- User YT Music acceptance passed. Pending: seeking/pause/volume/automatic-next on the
+  real TV, other DLNA devices, repeatability after power cycles and resource
+  measurements on smaller hardware. No general device compatibility promise.
+- Explicit follow-up for generic DMR: test autoplay=false preloading against a
+  renderer reporting STOPPED before first Play; the polling state mapping needs
+  to distinguish that from a cancelled/finished session. Not covered by the
+  successful autoplay=true physical tone test.
+- All prior licensing, publication, bundle and other output test gates remain.
+
+## DLNA physical TV investigation — dev15, 2026-09-20
+
+- User confirms dev14 local HA audio and embedded UI now work.
+- Samsung TV route contained only an HTTP origin on port 80; that port refuses
+  connections. SSDP from the LAN test host reports a MediaRenderer description
+  on port 52235 at `/dmr/SamsungMRDesc.xml`. Fetch and upstream DmrDevice status
+  query succeed at that address. This is a proven configuration blocker, not
+  evidence that playback/transcoding works yet.
+- Prepare stable-ID DLNA target editing in management API/UI; validate the
+  complete route set to retain duplicate-target protection. Failed initial
+  UPnP updates no longer cache a partially initialized profile.
+- TV advertises MP3/LPCM audio; no audio MP4/WebM/Opus support advertised.
+  Current DLNA output forwards source URLs without transcoding. After correcting
+  the endpoint, test a known-compatible HTTP MP3, then actual YT Music. Older
+  TV HTTPS/codecs may require an output-local HTTP/transcoding relay; do not
+  promise compatibility or introduce that larger change without evidence.
+- Remaining release, licensing, other target tests and bundle gates unchanged.
+- dev15 deployed privately; existing Samsung route updated to the SSDP URL
+  without changing its route/Cast ID. 224 Python tests pass (9 environment skips).
+- Playback is NOT confirmed: an ordinary HTTP MP3 fixture elicited UPnP 716 at
+  SetAVTransportURI even with empty DIDL. A fixture with HTTP/1.1 and explicit
+  DLNA contentFeatures/transferMode headers was accepted, but the bounded test
+  saw TRANSITIONING/STOPPED rather than confirmed advancing TV playback. These
+  fixture changes were combined, so no individual header is proven causal.
+  Capture/compare actual source delivery next; do not treat this as a codec-only
+  failure or claim the full DLNA path fixed. Temporary fixture servers self-stop.
+
+## HA audio and embedded UI correction — dev14, 2026-09-20
+
+- User supplied a physical audio device; the older statement that HA has none
+  is superseded. Supervisor sees an active analog stereo output.
+- Fixed missing `audio: true` app declaration. The first live test still failed:
+  the container also lacked a passwd entry for runtime UID 1000 and inherited
+  root's HOME. Added a non-login service user/group and its writable HOME.
+- Private HA dev14 deployed. Two subsequent synthetic-silence Cast DMR tests
+  progressed from BUFFERING to PLAYING with advancing decoder time and clean
+  test-session STOP. Supervisor confirms mpv belongs to this app and feeds the
+  physical analog output, not a null sink. Audible/user YT Music test still open.
+- UI API requests now preserve same-origin HA Ingress cookies instead of
+  explicitly omitting them. LAN access remains login-free. Explicit no-store
+  requests and understandable 401/403 errors prevent opaque JSON failures.
+- Ingress and LAN live API responses agree on version, route IDs and process
+  states. JavaScript helper executed under Node verifies relative paths,
+  credentials policy and expired-session error. User iframe acceptance remains
+  open; an API proxy check is not equivalent to a full logged-in browser test.
+- Python suite: 222 tests, 9 environment skips, successful. No Cast protocol,
+  AirPlay or bundle changes; laptop receiver remains stopped.
+- Remaining dev13 release/licence/SBOM, hardware tests and distribution gates
+  below are unchanged. These two fixes do not authorize publication.
+
+## Execution result — dev13 review candidate, 2026-09-20
+
+This updates the review gates below, not the publication authorization. Causes
+and evidence: [`review-dev13.md`](review-dev13.md).
+
+### Implemented and verified
+
+- **Local/HA mpv:** exact older-signature fallback, preserved offset/pause,
+  terminal errors instead of stuck BUFFERING. Real silent IPC test is now part
+  of the container build and passed against the packaged mpv.
+- **Seek/status:** queued notifications read current state instead of replaying
+  pre-seek snapshots; socket/session replacements reject stale notifications.
+  Deterministic tests pass. YT Music visual acceptance remains separate.
+- **DLNA/Sonos UI:** independent labelled fieldsets and responsive grid; DOM
+  tests plus visual Chromium checks at 390/1200 px widths pass.
+- **One UI:** direct login-free LAN management/HA ingress retained. Player bridge
+  defaults to loopback; inherited browser root/script disabled in normal builds.
+  Bridge/proxy/registration tests and optional browser-feature tests pass. OCI
+  and CI use the same hash-recorded overlay on the maintained fork base; no new
+  public fork commit was pushed.
+- **airplay-cli v0.5.4:** verified source/asset/checksum pins; upstream static test
+  suite and binary self-check pass. v0.5.3 rollback record retained. Runtime does
+  not use a shared PTP daemon.
+- **Physical reference RAOP:** updated sender passes pause, paused seek, load,
+  EOF and short remainder on the same connection, then recovery after deliberately
+  terminating only the test-owned CLI. Laptop-to-reference-phone test, not HomePod.
+- **README/provenance:** Vibecast foundation/fork/product clearly distinguished,
+  AI disclosure and experimental boundaries retained. Historical receiver remains
+  in research. Added Chromium BSD, original AirPlay notices/GPL, newer libraop
+  MIT and OpenSSL 3.5.4 evidence; notices are packaged, not only linked.
+- **Bundle plumbing:** explicit trusted-hash acquisition, bounded HTTPS/no
+  downgrade, private atomic import, rejection/withdrawal tests; synthetic data
+  only. BYO/HA share import unchanged. No real hosted release or signing identity.
+
+### Verification and deployment
+
+- CPython 3.12: **220 tests, 9 environment skips**, successful.
+- CPython 3.13 on Linux test host: **220 tests, no skips**, including real FFmpeg
+  and silent mpv. Compile and diff-whitespace checks pass; no Python 3.11 claim.
+- Rust: **144 passing, 1 opt-in live YouTube test ignored** across seven crates.
+  Final bridge/platform rerun, **17 browser-feature tests**, rustfmt check pass.
+- Wheel builds/runtime inventory and source allowlist export pass. These do not
+  constitute full Git-history secret or transitive licence clearance.
+- Private **HA dev13** build/update passes (including packaged-mpv/CLI checks).
+  App-scoped backup made beforehand. LAN UI and ingress work, health shows both
+  routes running, and LAN port 8010 refuses connections. Restart preserves IDs,
+  names, backends and enabled state. Tested support response excludes route
+  names, private LAN addresses and credential fields.
+- Laptop Cast receiver remains stopped. No repo/image/real bundle/community
+  announcement published externally.
+
+### Still open — do not silently mark complete
+
+1. User acceptance of YT Music seek feedback, song changes, disconnect,
+   volume/artwork on the HA AirPlay path. Physical local audio was subsequently
+   supplied and exercised in dev14 (see latest section); audible acceptance is
+   still separate from the successful silent decoder/physical-sink checks.
+2. HomePod/native AP2/OS27, Yamaha, DLNA/Sonos, simultaneous real targets and
+   receiver-origin controls require physical tests. No universal Cast claim.
+3. Final image SBOM/corresponding-source audit: upstream notice says OpenSSL
+   1.1.1u; inspected prebuilt x86_64 library is 3.5.4 but its source submodule is
+   1.1.1-era. Provide matching source/build inputs before public binary release.
+   This is not proof of a blanket GPL/OpenSSL prohibition. Preserve actual
+   Debian/Python/Rust component notices.
+4. Real bundle hosting/signing identity, signature/attestation issuance and
+   verification, provenance/rights text, explicit upload checkpoint. Implemented
+   trust path is a **pinned hash**, not a live signing service. Withdrawal cannot
+   recall copies; rollback/BYO remains local.
+5. Final source/history/image secret audit; publish the fork overlay and replace
+   it with an immutable commit pin only in the approved publication round.
+   Community announcement follows usable public source/documentation.
+6. Public-image installation/rollback (distinct from private source update), ARM
+   and resource measurements on smaller hardware.
+
+No worker, Rust/yt-dlp merge, format-probe removal, Google Home groups or protocol
+redesign was introduced.
+
+## Manual acceptance correction and Astra review gate — 2026-09-20
+
+This section is the authoritative immediate plan. It supersedes broad wording
+elsewhere that the current tree is generally "clean and functional". The
+architecture remains a credible open-source base, but the product is **not
+release-ready** after the latest manual acceptance round. Do not publish the
+repository, image or authentication bundle until the gates below are resolved.
+
+### Decisions after the licence/distribution review — 2026-09-20
+
+- Keep original Cast Audio Receiver Lab code under **GPL-3.0-or-later** while
+  retaining every incorporated component's own copyright, licence and source
+  obligations. The root licence does not relicense Vibecast, Chromium protocol
+  files, airplay-cli, libraop, FFmpeg, mpv or credentials.
+- The project does **not** use the official Google Cast SDK or a receiver
+  registered through its developer console. Document the Cast path as an
+  independent implementation based on the maintained MIT-licensed Vibecast
+  fork and separately licensed open-source protocol material. Google/YouTube/
+  Play terms can still apply to services and the purchased reference app.
+- The current `libraop` upstream now explicitly states that Philippe's code is
+  MIT-licensed while third-party code retains its own terms. This materially
+  resolves the prior `pairing.cpp`/`bplist.cpp` ambiguity. Preserve the current
+  upstream statement, correct the stale airplay-cli notice in our provenance
+  record and retain all third-party component notices.
+- Adopt Music Assistant **airplay-cli v0.5.4** as the next candidate, not as an
+  untested blind pin. Compared with v0.5.3 it adds OS-27 standalone-HomePod PTP
+  clock following and raises the shared followed-clock capacity from four to
+  eight. It does not intentionally change the RAOP command/status contract.
+  Update the verified asset/checksum/source pins together and run the regression
+  matrix in the Astra hand-off before calling it accepted.
+- The owner has consciously selected **public, separate, withdrawable
+  distribution** of the completed authentication bundle unless a later review
+  finds a clear legal exclusion. Never commit bundle bytes to the main Git
+  history and never bake them into the normal source tree or OCI image.
+- Preferred first implementation: a dedicated minimal GitHub repository used
+  only for documentation and versioned Release Assets. Commit only a manifest,
+  provenance/risk documentation and verification metadata; attach the bundle,
+  checksum and signature/attestation to a release. The main project pins one
+  bundle version, URL and digest, supports explicit verified acquisition, and
+  always permits a local user-supplied replacement. Deleting/withdrawing the
+  release disables our distribution but cannot recall downloaded or mirrored
+  copies. Dedicated object storage is unnecessary for the initial 2.74 MiB
+  artifact and can be adopted later without changing the bundle-provider
+  contract.
+- Astra may prepare and test the manifest/provider/import/update/withdrawal
+  plumbing with synthetic credentials, but must **not publish or upload the real
+  bundle** during the technical review round. Publication is a separate explicit
+  release action after source/history/artifact review.
+
+### Classification of the new findings
+
+#### Confirmed product bugs
+
+1. **Home Assistant/local mpv output does not start playback.** The retained HA
+   log shows successful media resolution followed by
+   `PLAYBACK_COMMAND_FAILED: mpv command failed: invalid parameter`. The active
+   Python backend sends the five-argument/property-map form of `loadfile`; the
+   mpv shipped in the HA image rejects that form. This is a packaged-version
+   compatibility regression, independent of whether HA currently has an audible
+   local sound device.
+2. **AirPlay seek feedback can briefly expose the old position.** Playback ends
+   at the requested position, but an old progress/status observation sometimes
+   wins briefly during the replacement decoder/FLUSH transition. Treat this as
+   a state-correlation race until instrumentation proves whether the stale value
+   originates in Python, airplay-cli/receiver events or Rust canonical state.
+3. **Experimental DLNA/Sonos form layout is structurally ambiguous.** The two
+   protocols share one flat row of inline labels/buttons, so responsive wrapping
+   visually associates controls with the wrong section. This is a small UI bug,
+   not a reason to redesign the manager.
+
+#### Architecture/product-boundary problems
+
+4. **Two visible HTTP interfaces have different jobs but look like competing
+   products.** Port 8788/HA ingress is our management UI. Vibecast's inherited
+   port 8010 page is an embedded Shaka browser *player*, not management: opening
+   it connects to `/player`, registers a `Browser` player and therefore creates
+   another advertised Cast receiver. The WebSocket `/player` bridge and possibly
+   the session-scoped `/license` and `/manifest` proxy routes remain runtime
+   infrastructure; the browser page and `/player.js` do not belong in normal
+   Cast Audio Receiver Lab operation.
+5. **Project identity/origin is not clear enough.** The README names Vibecast but
+   does not lead with a precise product goal or clearly separate upstream code,
+   the maintained fork, and this project's substantial audio/output/management/
+   HA work. This is a documentation and provenance blocker, not a playback bug.
+6. **Release licensing/attribution is incomplete.** Vibecast's MIT notice is
+   present, and original project code declares GPL-3.0-or-later, but the final
+   artifact inventory, Chromium `cast_channel.proto` BSD notice, corresponding-
+   source records, updated libraop evidence and direct/transitive notices still
+   need to be made release-complete.
+7. **Authentication-bundle distribution needs product plumbing and a final
+   publication checkpoint.** The 773-window bundle is complete and privately
+   functional. The owner accepts the documented legal and revocation uncertainty
+   and has chosen a separate public Release Asset rather than main Git history or
+   an image layer. The real material remains private during implementation; the
+   release round must verify provenance text, digest/signature, withdrawal,
+   replacement and secret-free diagnostics before an explicit upload.
+
+### Product decision for the two interfaces
+
+- Keep **one user-facing interface**: the Python manager on the configured LAN
+  port and through Home Assistant ingress.
+- Split Vibecast's Cast listener address from its player-bridge listener. Bind
+  the player bridge to loopback by default in this product while Cast/eureka
+  listeners remain reachable on the LAN.
+- Preserve `/player`, `/license/{session}` and `/manifest/{session}/{route}` as
+  internal protocol/proxy endpoints required by adapters and eligible media.
+- Disable/remove the browser-player root and `/player.js` from the normal product
+  build, or gate them behind an explicit development-only option that defaults
+  off. Do not merge or reverse-proxy that player page into the management UI.
+- Add tests that LAN clients cannot create `Browser` receivers, internal Python
+  adapters still register, and manifest/licence proxy URLs remain reachable by
+  the intended local consumer. Document port 8010 as internal, not as a second
+  web interface.
+
+This is a bounded maintained-fork change, not a replacement of Vibecast's
+player protocol. Upstream Vibecast may reasonably keep its browser player; our
+fork can retain it as an opt-in development example.
+
+### Licence and authentication publication decision
+
+- Keep the maintained Vibecast fork under its upstream **MIT** licence and retain
+  the upstream copyright/licence text plus a clear modified-by/changelog record.
+  MIT permits modification and combination, and is GPL-compatible, but its code
+  and notice do not become ours or lose their MIT provenance.
+- Keep original Cast Audio Receiver Lab product/glue code under
+  **GPL-3.0-or-later**, subject to a final per-file/origin audit. A combined
+  distribution can carry GPL obligations while preserving each incorporated
+  component's notices. Do not use the root GPL file to imply that every bundled
+  third-party component or credential was relicensed.
+- Before a public image: finish exact FFmpeg/mpv/Rust/Python/airplay-cli source,
+  licence and notice inventory; incorporate libraop's current MIT statement and
+  airplay-cli's mixed native notices; generate an SBOM and corresponding-source
+  record. Preserve the Chromium BSD notice carried by `cast_channel.proto`.
+- Keep the AirReceiver-derived bundle outside the main Git history and all image
+  layers. Prepare a dedicated Release-Asset provider with a versioned manifest,
+  immutable digest, verifiable signature/attestation, bounded download, atomic
+  validation/import and a local-file override. The management surface must state
+  the source, purpose, shared-identity/revocation risk and selected version. A
+  missing or withdrawn official asset fails clearly and never falls back to
+  unverified material.
+- Keep HA `/share` and ordinary local import as first-class offline/BYO paths.
+  Exclude bundle bodies, keys, signatures and signed URLs from logs, support
+  bundles, tests, issues and source exports. Separating the asset improves
+  withdrawal/versioning but is not presented as resolving the legal question.
+
+This is a release-risk assessment, not legal advice. The owner's informed
+distribution decision is now recorded; it authorizes preparation, not an
+unreviewed upload from the development workspace.
+
+### Mandatory gates before public release
+
+1. Fix and regression-test packaged mpv/local loading.
+2. Investigate and deterministically test the AirPlay stale-seek feedback race;
+   fix only the proven generation/correlation boundary, without sleep-based
+   masking or discarding the persistent transport.
+3. Correct and responsively test the DLNA/Sonos form grouping.
+4. Internalize the Vibecast player bridge and remove the normal browser-player
+   surface while preserving the WebSocket/proxy runtime contract.
+5. Rewrite the README/project-origin narrative: product goal, what came from
+   Vibecast, what the maintained fork changes, what this repository adds,
+   supported/experimental paths, AI-assisted development and fragility.
+6. Update to airplay-cli v0.5.4 with exact source/asset/checksum pins and complete
+   its automatic plus available physical regression matrix.
+7. Complete licence/attribution/source-notice review, including Vibecast MIT,
+   Chromium BSD, current libraop MIT evidence, airplay-cli native components and
+   exact FFmpeg/mpv/Python/Rust artifacts. Retain thanks without implying
+   endorsement.
+8. Prepare the separate bundle Release-Asset mechanism and verify synthetic
+   download, digest/signature rejection, atomic import, BYO override, withdrawal
+   failure and diagnostic redaction. Re-run secret/history scans on source and
+   every image. The real upload remains an explicit later release action.
+9. Run the complete Python/Rust/container gates and repeat real HA source-build,
+   ingress/LAN, restart/state, local-load and physical AirPlay acceptance. Keep
+   hardware-unavailable DLNA/Sonos/HomePod claims explicitly unverified.
+
+### Ordered next implementation round
+
+1. Establish a reproducible baseline and preserve current user-confirmed AirPlay
+   output, Home Assistant status, artwork and certificate rotation behavior.
+2. Update the pinned AirPlay candidate from v0.5.3 to v0.5.4, preserving exact
+   hashes/source notices and proving that its unchanged interfaces still match
+   our persistent adapter before mixing in unrelated fixes.
+3. Fix local mpv compatibility because it blocks a primary advertised
+   output and has concrete log evidence.
+4. Instrument, reproduce and fix AirPlay seek feedback without changing audio
+   encoding or transport lifetime.
+5. Apply the small DLNA/Sonos UI grouping correction and automated DOM/responsive
+   checks.
+6. Make the player bridge internal in the maintained Vibecast fork, update the
+   immutable pin/patch/build metadata and verify no accidental Browser receiver.
+7. Rewrite README/origin/licensing documentation from the verified code and
+   dependency inventory; do not overstate readiness.
+8. Prepare, but do not publish, the separate bundle provider/release manifest and
+   test it with non-secret fixtures plus the existing local import path.
+9. Execute full CI/package/HA regression and report remaining manual hardware
+   tests and publication blockers. Do not publish real credentials in this round.
+
+The detailed hand-off for this round is
+[`docs/ASTRA-REVIEW-2026-09-20.md`](ASTRA-REVIEW-2026-09-20.md).
+
 ## Architecture and publication decision gate — 2026-09-19
 
 This section is the authoritative next-phase plan. Do not start the Home
@@ -87,11 +509,12 @@ internal implementation detail.
   original device-authentication/certificate lifecycle so the project need not
   depend on AirReceiver-derived research forever. This does not block release.
   Research must remain bounded to owned hardware and must not publish secrets.
-- User would prefer distributing the currently extracted authentication material.
-  Publication is NOT approved by this plan: distinguish public certificates from
-  private TLS/device/authentication keys, establish rights and security impact,
-  and keep private material outside Git/artifacts until that review is resolved.
-  Support a replaceable private runtime bundle meanwhile.
+- The subsequent 2026-09-20 review distinguished the legal, contractual,
+  open-source-licence and technical-revocation questions. The informed product
+  decision is now to prepare a separately versioned public Release Asset while
+  keeping credential bytes out of the main Git history and image. A real upload
+  still requires the explicit release checkpoint defined in the authoritative
+  section above; replaceable local/HA import remains supported.
 
 ### Immediate sequence
 
@@ -122,8 +545,9 @@ internal implementation detail.
 
 - Prepare and review a clean public source export and Git history; do not publish
   the dirty research workspace or private bundle/state/log artifacts.
-- Complete redistribution/source-notice review, especially the documented
-  airplay-cli/libraop ambiguity, before shipping a combined public image.
+- Complete redistribution/source-notice review using libraop's later explicit
+  MIT statement, airplay-cli's mixed native notices and the missing Chromium
+  BSD attribution before shipping a combined public image.
 - Publish, inventory/scan and test the intended image's update and rollback path.
 - Run end-to-end AirPlay from the HA App on a physical target. Yamaha/other RAOP,
   HomePod/AirPlay 2, DLNA, Sonos, concurrent routes and smaller/ARM hardware stay

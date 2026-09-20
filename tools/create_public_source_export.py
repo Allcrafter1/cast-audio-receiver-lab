@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create an allowlisted, text-only source tree for publication review.
+"""Create an allowlisted source tree with reviewed branding for publication review.
 
 This is deliberately stricter than ``git archive`` because the development
 checkout predates the release layout and also contains private runtime state,
@@ -74,6 +74,12 @@ FORBIDDEN_CONTENT = (
     re.compile(r"\b10\.42\.0\.24\b"),
 )
 MAX_TEXT_FILE = 12 * 1024 * 1024
+# Only these visually reviewed, reproducible project images bypass text checks.
+# Updating an image requires reviewing the rendering and updating its digest.
+BRANDING_SHA256 = {
+    "cast-audio-receiver/icon.png": "0c22dc53aa7ef68567847f6baa973dfdc5fca25e9896e66ec38fa97e79efc2cb",
+    "cast-audio-receiver/logo.png": "93f8cb766d6fa51a52999435582423bc8e1c4d388534dbdd8b8b91e753145ffd",
+}
 
 
 def _source_files() -> list[tuple[Path, Path]]:
@@ -104,6 +110,11 @@ def _source_files() -> list[tuple[Path, Path]]:
 
 
 def _validate_text(relative: Path, payload: bytes) -> str:
+    if relative.as_posix() in BRANDING_SHA256:
+        digest = hashlib.sha256(payload).hexdigest()
+        if digest != BRANDING_SHA256[relative.as_posix()]:
+            raise ValueError(f"unreviewed branding asset: {relative}")
+        return digest
     if relative.suffix.lower() in FORBIDDEN_SUFFIXES:
         raise ValueError(f"forbidden release artifact: {relative}")
     if len(payload) > MAX_TEXT_FILE:

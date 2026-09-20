@@ -131,8 +131,23 @@ class MpvAudioBackend(NullAudioBackend):
         self._status.idle_reason = None
         self._status.state = "BUFFERING"
         self._set_position(max(0, start_time))
-        await self._command("set_property", "pause", not autoplay)
-        await self._command("loadfile", url, "replace", -1, {"start": str(max(0, start_time))})
+        try:
+            await self._command("set_property", "pause", not autoplay)
+            options = {"start": str(max(0, start_time))}
+            try:
+                await self._command("loadfile", url, "replace", -1, options)
+            except ValueError as exc:
+                # mpv before 0.38 has no insertion-index argument. Retry only
+                # argument rejection, never media/network failures.
+                if str(exc) != "mpv command failed: invalid parameter":
+                    raise
+                await self._command("loadfile", url, "replace", options)
+        except (OSError, ValueError, TimeoutError):
+            self._loading = self._seeking = False
+            self._status.state = "IDLE"
+            self._status.idle_reason = "ERROR"
+            self._emit_status()
+            raise
 
     async def play(self):
         await self._command("set_property", "pause", False)

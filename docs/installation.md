@@ -58,7 +58,7 @@ The checked-in `Containerfile` builds the maintained Vibecast fork, the Python
 manager and pinned `cliairplay` in one `linux/amd64` image:
 
 ```sh
-docker build -f Containerfile -t cast-audio-receiver:dev12 .
+docker build -f Containerfile -t cast-audio-receiver:local .
 ```
 
 Use host networking for mDNS, Cast and target discovery. Mount state read/write
@@ -71,7 +71,7 @@ docker run --rm --network host \
   -v /absolute/private/certs.json:/run/secrets/cast-certs.json:ro \
   -e CAST_AUDIO_CERTS=/run/secrets/cast-certs.json \
   -e CAST_AUDIO_WEB_PORT=8788 \
-  cast-audio-receiver:dev12
+  cast-audio-receiver:local
 ```
 
 The UI is then available at `http://LINUX_LAN_IP:8788`. Container deployment on
@@ -109,4 +109,3 @@ After startup:
 `/api/support` intentionally omits route names, IDs, target addresses, media
 URLs, account data, certificates and keys. See the [maintenance guide](maintenance.md)
 before sharing any additional log excerpt.
-

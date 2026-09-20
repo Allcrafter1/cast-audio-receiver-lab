@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
-# First reproducible container target.  cliairplay v0.5.3 has only been pinned
-# and practically tested here on Linux x86_64, so this file deliberately fails
+# Version-recorded container candidate. cliairplay v0.5.4 is the verified
+# Linux x86_64 candidate (physical regression acceptance pending); fail
 # rather than pretending that another architecture is supported.
 FROM --platform=linux/amd64 rust:1.98-bookworm AS vibecast-builder
 ARG VIBECAST_REPOSITORY=https://github.com/Allcrafter1/vibecast.git
@@ -12,6 +12,8 @@ RUN apt-get update \
 WORKDIR /src
 RUN git clone --filter=blob:none "${VIBECAST_REPOSITORY}" . \
     && git checkout --detach "${VIBECAST_COMMIT}"
+COPY patches/vibecast-dev13-internal-bridge.patch /tmp/frontend.patch
+RUN git apply --check /tmp/frontend.patch && git apply /tmp/frontend.patch
 RUN cargo build --locked --release -p vibecast-cli
 
 FROM --platform=linux/amd64 python:3.12-slim-bookworm AS python-builder
@@ -20,12 +22,14 @@ COPY config/container-build-cp312.lock.txt /tmp/build-requirements.txt
 RUN python -m pip install --no-cache-dir --disable-pip-version-check \
       --require-hashes -r /tmp/build-requirements.txt
 COPY pyproject.toml README.md LICENSE ./
+COPY THIRD_PARTY_NOTICES.md ./
+COPY licenses/ ./licenses/
 COPY src/ ./src/
 RUN python -m pip wheel --no-deps --no-build-isolation --wheel-dir /tmp/wheels .
 
 FROM --platform=linux/amd64 debian:bookworm-slim AS airplay-fetch
-ARG CLIAIRPLAY_VERSION=v0.5.3
-ARG CLIAIRPLAY_SHA256=fd6fa451cdfd0c83c502e8cdfc7e73b24a9553e7058508b5e8c69cdd1dd621dd
+ARG CLIAIRPLAY_VERSION=v0.5.4
+ARG CLIAIRPLAY_SHA256=1ac56a15fb548f07a1dae94be16d4bea308420a0ec0cd04238023e44345fc1c9
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
@@ -36,7 +40,7 @@ RUN curl --fail --location --proto '=https' --tlsv1.2 \
     && chmod 0755 /tmp/cliairplay
 
 FROM --platform=linux/amd64 python:3.12-slim-bookworm
-ARG BUILD_VERSION=0.6.0-dev12
+ARG BUILD_VERSION=0.6.0-dev17
 ARG BUILD_ARCH=amd64
 LABEL org.opencontainers.image.title="Cast Audio Receiver Lab"
 LABEL org.opencontainers.image.description="Experimental Cast audio receiver with modular local and AirPlay outputs"
@@ -58,7 +62,19 @@ RUN python -m pip install --no-cache-dir --disable-pip-version-check \
     && python -m pip check
 COPY --from=vibecast-builder /src/target/release/vibecast /usr/local/bin/vibecast
 COPY --from=airplay-fetch /tmp/cliairplay /usr/local/bin/cliairplay
-RUN mkdir -p /data/private && chown -R 1000:1000 /data
+COPY tests/test_mpv_integration.py /tmp/cast-build-tests/test_mpv_integration.py
+COPY tests/test_dlna_media.py /tmp/cast-build-tests/test_dlna_media.py
+RUN python -m unittest discover -s /tmp/cast-build-tests -p 'test_*.py' -v \
+    && cliairplay --check
+COPY LICENSE THIRD_PARTY_NOTICES.md /usr/share/doc/cast-audio-receiver/
+COPY licenses/ /usr/share/doc/cast-audio-receiver/licenses/
+RUN dpkg-query -W > /usr/share/doc/cast-audio-receiver/debian-packages.txt \
+    && ffmpeg -version > /usr/share/doc/cast-audio-receiver/ffmpeg-build.txt \
+    && mpv --version > /usr/share/doc/cast-audio-receiver/mpv-build.txt
+RUN groupadd --gid 1000 cast-audio \
+    && useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin cast-audio \
+    && mkdir -p /data/private && chown -R 1000:1000 /data
+ENV HOME=/home/cast-audio
 VOLUME ["/data"]
 EXPOSE 8008 8009 8788
 ENTRYPOINT ["/usr/bin/tini", "--", "cast-audio-bootstrap"]

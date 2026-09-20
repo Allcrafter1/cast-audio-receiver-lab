@@ -16,6 +16,7 @@ from aiohttp import web
 from . import __version__
 from .artwork_cache import ArtworkCache
 from .airplay_discovery import discover_airplay
+from .dlna_discovery import discover_dlna
 from .route_manager import RouteManager
 from .routes import Route, RouteStore, validate_routes
 from .output_registry import is_singleton
@@ -41,7 +42,7 @@ async def serve(app, host: str, ports: list[int]) -> None:
         await runner.cleanup()
 
 
-def create_app(manager, *, discover=discover_airplay, ha_ingress=False):
+def create_app(manager, *, discover=discover_airplay, discover_renderers=discover_dlna, ha_ingress=False):
     candidates = {}
     scan_lock = asyncio.Lock()
     artwork_temp = tempfile.TemporaryDirectory(prefix='cast-artwork-')
@@ -117,14 +118,18 @@ def create_app(manager, *, discover=discover_airplay, ha_ingress=False):
 
     async def patch_route(request):
         body = await request.json()
-        if not isinstance(body, dict) or set(body) - {"name", "enabled"} or not body:
+        if not isinstance(body, dict) or set(body) - {"name", "enabled", "target"} or not body:
             raise ValueError("invalid route update")
         async with manager.lock:
             route = next((r for r in manager.routes if r.id == request.match_info["id"]), None)
             if route is None:
                 raise web.HTTPNotFound()
+            if "target" in body and route.backend != "dlna":
+                raise ValueError("target editing is currently supported only for DLNA")
             changed = Route.parse(dict(route.private(), **body))
-            routes = [changed if r.id == route.id else r for r in manager.routes]
+            routes = validate_routes([
+                (changed if r.id == route.id else r).private() for r in manager.routes
+            ])
             await manager.replace(routes)
             return web.json_response(changed.public())
 
@@ -139,7 +144,7 @@ def create_app(manager, *, discover=discover_airplay, ha_ingress=False):
             candidate = candidates.get(body["candidate_id"])
             if candidate is None or candidate[0] < time.monotonic():
                 raise web.HTTPConflict(text="Discovery expired; scan again")
-            route.update(backend="airplay", target=candidate[1])
+            route.update(backend=candidate[1], target=candidate[2])
         else:
             backend = body.get("backend")
             if backend == "mpv":
@@ -204,8 +209,41 @@ def create_app(manager, *, discover=discover_airplay, ha_ingress=False):
                             imported = True
                         ident = str(uuid.uuid4())
                         if not imported:
-                            candidates[ident] = (time.monotonic()+180, route.target)
+                            candidates[ident] = (time.monotonic()+180, "airplay", route.target)
                         result.append(dict(route.public(), candidate_id=ident, already_imported=imported))
+            return web.json_response({"candidates": result})
+
+    async def scan_dlna(request):
+        if await request.json() != {}:
+            raise ValueError("scan body must be empty")
+        if scan_lock.locked():
+            raise web.HTTPConflict(text="Scan already running")
+        async with scan_lock:
+            try:
+                async with asyncio.timeout(15):
+                    devices = await discover_renderers(timeout=4)
+            except TimeoutError:
+                raise web.HTTPGatewayTimeout(text="DLNA discovery timed out") from None
+            except ImportError:
+                raise web.HTTPServiceUnavailable(text="DLNA dependency unavailable") from None
+            candidates.clear()
+            result = []
+            async with manager.lock:
+                for device in devices[:32]:
+                    try:
+                        route = Route.parse({"id": str(uuid.uuid4()), "name": device["name"],
+                            "backend": "dlna", "target": device["target"]})
+                    except (ValueError, KeyError, TypeError):
+                        continue
+                    try:
+                        validate_routes([r.private() for r in manager.routes] + [route.private()])
+                        imported = False
+                    except ValueError:
+                        imported = True
+                    ident = str(uuid.uuid4())
+                    if not imported:
+                        candidates[ident] = (time.monotonic()+180, "dlna", route.target)
+                    result.append(dict(route.public(), candidate_id=ident, already_imported=imported))
             return web.json_response({"candidates": result})
 
     async def lifecycle(app):
@@ -230,6 +268,7 @@ def create_app(manager, *, discover=discover_airplay, ha_ingress=False):
     app.router.add_patch("/api/routes/{id}", patch_route)
     app.router.add_delete("/api/routes/{id}", delete_route)
     app.router.add_post("/api/scan", scan)
+    app.router.add_post("/api/scan/dlna", scan_dlna)
     app.router.add_post('/api/artwork', prepare_artwork)
     app.router.add_get('/artwork/{id:[0-9a-f]{32}}.jpg', image)
     return app

@@ -19,6 +19,10 @@ FILES = (
     "pyproject.toml",
     "README.md",
     "LICENSE",
+    "THIRD_PARTY_NOTICES.md",
+    "patches/vibecast-dev13-internal-bridge.patch",
+    "tests/test_mpv_integration.py",
+    "tests/test_dlna_media.py",
     "config/container-build-cp312.lock.txt",
     "config/container-linux-x86_64-cp312.lock.txt",
 )
@@ -31,6 +35,7 @@ def create(target: Path) -> None:
     app.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / "repository.yaml", target / "repository.yaml")
     shutil.copy2(ROOT / "Containerfile", app / "Dockerfile")
+    shutil.copytree(ROOT / "licenses", app / "licenses")
     shutil.copytree(
         ROOT / "src",
         app / "src",
@@ -41,6 +46,8 @@ def create(target: Path) -> None:
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(ROOT / relative, destination)
     shutil.copy2(ROOT / APP / "DOCS.md", app / "DOCS.md")
+    for name in ("icon.png", "logo.png", "README.md", "CHANGELOG.md"):
+        shutil.copy2(ROOT / APP / name, app / name)
 
     # A missing image key tells Supervisor to build the adjacent Dockerfile.
     config = (ROOT / APP / "config.yaml").read_text().splitlines()

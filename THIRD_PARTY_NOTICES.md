@@ -15,12 +15,13 @@ as relicensing third-party material or credentials.
 | --- | --- | --- |
 | [Vibecast](https://github.com/emilsvennesson/vibecast), Nils Emil Svensson and contributors | Active Cast frontend, application/player architecture and YouTube implementation, maintained in our [reviewable fork](https://github.com/Allcrafter1/vibecast/commit/f28befe02fe930db300294d6bf49cdf5fec5a747) | Fork commit `f28befe02fe930db300294d6bf49cdf5fec5a747`, based on upstream `b4616f8f399be706a1409ed21922aa2df892e303`; MIT. Preserve upstream copyright/license; copy in `licenses/Vibecast-MIT.txt`. |
 | [Shanocast](https://github.com/rgerganov/shanocast), rgerganov and contributors | Earlier compatibility research, public precomputed-signature format and importer reference | Local research checkout `1b57813f2a92c5dbb68c916263127b75e9c8164f`; README links [the author's explanation](https://xakcop.com/post/shanocast/). No standalone license file found in that checkout; do not assume the entire repository or embedded material is MIT/GPL. |
-| [Music Assistant airplay-cli](https://github.com/music-assistant/airplay-cli) and contributors | Actual persistent AirPlay output executable | v0.5.3, commit `bdee878e18fe6e859830ed20499fc87497ae53a1`; combined binary declared GPLv3 by upstream. Exact x86_64 artifact hash in `config/cliairplay-linux-x86_64.lock.json`. |
+| [Music Assistant airplay-cli](https://github.com/music-assistant/airplay-cli) and contributors | Actual persistent AirPlay output executable | v0.5.4, commit `431c5c582eef9307c4e39c50a0ea65e970bc1128`; combined binary declared GPLv3 by upstream. Exact x86_64 artifact hash in `config/cliairplay-linux-x86_64.lock.json`; preserved notices in `licenses/airplay-cli-THIRD_PARTY_NOTICES.md`. |
+| [Chromium](https://chromium.googlesource.com/chromium/src/), The Chromium Authors | `cast_channel.proto` envelope schema incorporated through Vibecast | File copyright 2014; BSD-3-Clause notice in `licenses/Chromium-BSD.txt`. This protocol file is not the Google Cast SDK. |
 | [philippe44/libraop](https://github.com/philippe44/libraop), Shiro Ninomiya and other authors listed upstream | RAOP/transport work incorporated by airplay-cli, not independently reimplemented here | Retain airplay-cli's full third-party notices and component texts; see caveat below. |
 | [FFmpeg](https://ffmpeg.org/) contributors | Audio decode/PCM normalization and bounded artwork conversion | External host executable; exact enabled-component/build license must be inventoried for the shipped artifact. No single blanket license claim for every FFmpeg build. |
 | [mpv](https://github.com/mpv-player/mpv) contributors | Local audio output and decoder-owned position/EOF/status via IPC | External host executable; retain the actual distribution's license/build information. |
 | [yt-dlp](https://github.com/yt-dlp/yt-dlp), EJS and Deno contributors | Checked YouTube audio-source extraction and its JavaScript support stack | Direct version pins in `config/youtube-extractor-requirements.txt`; complete artifact/transitive license audit still open. |
-| [async-upnp-client](https://github.com/StevenLooman/async_upnp_client), Steven Looman and contributors | Experimental direct DLNA/UPnP MediaRenderer output | Pinned to v0.48.1; Apache-2.0. Hardware interoperability remains unverified. |
+| [async-upnp-client](https://github.com/StevenLooman/async_upnp_client), Steven Looman and contributors | DLNA/UPnP MediaRenderer discovery, metadata and control | Pinned to v0.48.1; Apache-2.0. One older Samsung tested; wider interoperability remains unverified. The output-local HTTP/FFmpeg relay is project code using the already credited aiohttp/FFmpeg components. |
 | [SoCo](https://github.com/SoCo/SoCo), SoCo contributors | Experimental direct Sonos output and control | Pinned to v0.31.2; MIT. Hardware interoperability remains unverified. |
 | AirReceiver | Purchased reference receiver used in interoperability comparisons on user-owned Android devices | Reference testing, not an open-source dependency. Proprietary app/package and private credentials are not shipped by this repository. |
 
@@ -30,15 +31,45 @@ complete Open Screen runtime. Additional individual research articles mentioned
 during discussion must have their exact contribution/link verified before being
 added as implementation credits; do not invent attribution or endorsements.
 
-## AirPlay upstream caveat to resolve before release
+## AirPlay native licence evidence and remaining release check
 
-The inspected airplay-cli v0.5.3 `THIRD_PARTY_NOTICES.md` explicitly documents
-mixed component licenses and missing explicit upstream grants for libraop
-`pairing.cpp` / `bplist.cpp`. It also identifies bundled OpenSSL in static
-release binaries. Preserve that notice and investigate the actual shipped build
-and applicable obligations before distributing a combined image. Merely choosing
-GPLv3 for our code does not complete this audit. Do not silently remove ambiguous
-notices or describe all incorporated code as uniformly Apache/MIT.
+The airplay-cli v0.5.4 notice records mixed component licences. Its statement that
+libraop has no licence is now stale: upstream commit
+`4fe461a809eadd5230e3b587a3b3c948f90d9617` adds Philippe's MIT statement while
+explicitly preserving third-party conditions. We retain both the unmodified
+airplay-cli notice and that newer evidence in `licenses/`. Its pinned libraop
+revision is still `81c2182649da8645ac2a58b78e9f370c79a4165b`; no silent submodule
+upgrade or blanket relicensing is implied.
+
+The notice's OpenSSL version is also stale for the inspected x86_64 artifact:
+the pinned prebuilt `libcrypto.a` reports **OpenSSL 3.5.4** when queried by a
+minimal linked `OpenSSL_version()` program; its headers match. The downloaded
+release binary contains `3.5.4` and OpenSSL 3 provider symbols. OpenSSL 3 uses
+Apache-2.0, rather than the notice's 1.1.1u OpenSSL/SSLeay terms. Preserve the
+upstream notice as evidence, with this correction alongside it.
+
+The vendored OpenSSL *source submodule*, however, still points to a 1.1.1-era
+revision. Close this source/prebuilt mismatch before declaring corresponding
+source complete. This is a concrete provenance task, not proof of a blanket
+GPL/OpenSSL conflict. RAOP/AES GPL-2.0-or-later lineage, GPL-3.0 mdnssd and other
+MIT/BSD/Apache components retain their individual notices. Publish exact
+recursive corresponding source and build instructions with any binary release;
+GitHub's automatic airplay-cli source archive omits submodules.
+
+The dev17 audit additionally checked `libopenssl/.gitmodules`: its branch hint
+is `openssl-3.5.4`, while its actual gitlink remains
+`8ddacec11481a37302c19f4454e23299af399f83`. A normal recursive checkout uses
+the gitlink, not the hint. Its build script also skips existing static archives.
+Consequently, merely including that recursive checkout and invoking its build
+script does not yet establish matching source for the shipped library. Resolve
+this using documented upstream build provenance or a verified source-built
+artifact before distributing a project binary/image.
+
+Follow-up history inspection found the matching 3.5.4 source gitlink in the
+immediately preceding proxy commit, with unchanged Linux archive/build files.
+See [the evidence and repeatable check](docs/airplay-native-source-audit.md).
+This narrows the source correction required; it is not yet a verified rebuild
+or complete native dependency clearance.
 
 ## Python runtime dependencies
 

@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "base_commit": "f28befe02fe930db300294d6bf49cdf5fec5a747",
+  "patch": "patches/vibecast-dev13-internal-bridge.patch",
+  "patch_sha256": "660e536d026cb57681c3ea0534cb331ec91da8a75df08849d2f62819d74ed7c1",
+  "scope": "Local review overlay on the dev12 maintained fork; no new fork commit published"
+}

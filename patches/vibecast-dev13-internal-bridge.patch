@@ -1,0 +1,181 @@
+diff --git a/crates/vibecast-bridge/Cargo.toml b/crates/vibecast-bridge/Cargo.toml
+index ef6841e..59be97b 100644
+--- a/crates/vibecast-bridge/Cargo.toml
++++ b/crates/vibecast-bridge/Cargo.toml
+@@ -8,6 +8,10 @@ license.workspace = true
+ repository.workspace = true
+ publish.workspace = true
+ 
++[features]
++default = []
++browser-player = []
++
+ [dependencies]
+ vibecast-messages = { path = "../vibecast-messages" }
+ vibecast-player-api = { path = "../vibecast-player-api" }
+diff --git a/crates/vibecast-bridge/src/bridge.rs b/crates/vibecast-bridge/src/bridge.rs
+index 0cdb8a3..e1fcf6d 100644
+--- a/crates/vibecast-bridge/src/bridge.rs
++++ b/crates/vibecast-bridge/src/bridge.rs
+@@ -41,6 +41,7 @@ use vibecast_settings::{
+     SettingValue, SettingsService, SettingsServiceError, SettingsSnapshot,
+ };
+ 
++#[cfg(feature = "browser-player")]
+ use crate::web::{PLAYER_HTML, PLAYER_HTML_CONTENT_TYPE, PLAYER_JS, PLAYER_JS_CONTENT_TYPE};
+ 
+ /// Lifecycle events emitted by the bridge as players connect and disconnect.
+@@ -215,7 +216,7 @@ impl PlayerBridge {
+         tracing::info!(
+             host = %self.state.resolved_host,
+             port,
+-            "player bridge started (web=http://{}:{}/)",
++            "internal player bridge started (http://{}:{}/player)",
+             self.state.resolved_host,
+             port
+         );
+@@ -314,11 +315,13 @@ impl ProxyRegistrar for PlayerBridge {
+ }
+ 
+ fn router(state: BridgeState) -> Router {
+-    Router::new()
++    let app = Router::new();
++    #[cfg(feature = "browser-player")]
++    let app = app
+         .route("/", get(serve_page))
+         .route("/index.html", get(serve_page))
+-        .route("/player.js", get(serve_script))
+-        .route("/player", get(ws_handler))
++        .route("/player.js", get(serve_script));
++    app.route("/player", get(ws_handler))
+         .route("/license/{session_id}", post(license_handler))
+         .route(
+             "/manifest/{session_id}/{route_path}",
+@@ -327,10 +330,12 @@ fn router(state: BridgeState) -> Router {
+         .with_state(state)
+ }
+ 
++#[cfg(feature = "browser-player")]
+ async fn serve_page() -> impl IntoResponse {
+     ([(CONTENT_TYPE, PLAYER_HTML_CONTENT_TYPE)], PLAYER_HTML)
+ }
+ 
++#[cfg(feature = "browser-player")]
+ async fn serve_script() -> impl IntoResponse {
+     ([(CONTENT_TYPE, PLAYER_JS_CONTENT_TYPE)], PLAYER_JS)
+ }
+@@ -930,6 +935,7 @@ mod tests {
+             .unwrap_or("")
+     }
+ 
++    #[cfg(feature = "browser-player")]
+     #[tokio::test]
+     async fn serves_default_shaka_player_page() {
+         let (bridge, _events) = bridge().await;
+@@ -939,6 +945,7 @@ mod tests {
+         assert!(!body.is_empty());
+     }
+ 
++    #[cfg(feature = "browser-player")]
+     #[tokio::test]
+     async fn serves_player_script() {
+         let (bridge, _events) = bridge().await;
+@@ -948,6 +955,16 @@ mod tests {
+         assert!(!body.is_empty());
+     }
+ 
++    #[cfg(not(feature = "browser-player"))]
++    #[tokio::test]
++    async fn product_build_does_not_serve_browser_player() {
++        let (bridge, _events) = bridge().await;
++        for path in ["/", "/index.html", "/player.js"] {
++            let (status, _, _) = http_get(&bridge, path).await;
++            assert_eq!(status, StatusCode::NOT_FOUND);
++        }
++    }
++
+     #[tokio::test]
+     async fn start_and_stop() {
+         let (bridge, _events) = bridge().await;
+diff --git a/crates/vibecast-bridge/src/lib.rs b/crates/vibecast-bridge/src/lib.rs
+index 2f60662..94f1129 100644
+--- a/crates/vibecast-bridge/src/lib.rs
++++ b/crates/vibecast-bridge/src/lib.rs
+@@ -18,8 +18,10 @@
+ #![forbid(unsafe_code)]
+ 
+ mod bridge;
++#[cfg(feature = "browser-player")]
+ mod web;
+ 
+ pub use bridge::{PlayerBridge, PlayerEvent};
+ pub use vibecast_player_api::PlayerRegistration;
++#[cfg(feature = "browser-player")]
+ pub use web::{PLAYER_HTML, PLAYER_JS};
+diff --git a/crates/vibecast-cli/src/main.rs b/crates/vibecast-cli/src/main.rs
+index 9b534aa..70a6d0b 100644
+--- a/crates/vibecast-cli/src/main.rs
++++ b/crates/vibecast-cli/src/main.rs
+@@ -83,14 +83,14 @@ async fn run(args: Args) -> anyhow::Result<()> {
+         local_ip: None,
+     };
+ 
++    let player_host = config.network.player_bind_host.clone();
+     let receiver = vibecast_platform::run(config, inputs, None)
+         .await
+         .context("starting receiver")?;
+ 
+     tracing::info!(
+         ip = %receiver.local_ip,
+-        register = format_args!("ws://{}:{}/player", receiver.local_ip, receiver.player_port),
+-        web = format_args!("http://{}:{}/", receiver.local_ip, receiver.player_port),
++        register = format_args!("ws://{}:{}/player", player_host, receiver.player_port),
+         "vibecast server started; waiting for players to register"
+     );
+ 
+diff --git a/crates/vibecast-platform/src/config.rs b/crates/vibecast-platform/src/config.rs
+index 0550420..3edd225 100644
+--- a/crates/vibecast-platform/src/config.rs
++++ b/crates/vibecast-platform/src/config.rs
+@@ -98,8 +98,10 @@ impl Default for DeviceConfig {
+ #[derive(Debug, Clone, Deserialize)]
+ #[serde(default, deny_unknown_fields)]
+ pub struct NetworkConfig {
+-    /// Host/interface to bind all listeners to.
++    /// Host/interface for LAN Cast/eureka listeners.
+     pub bind_host: String,
++    /// Internal adapter/proxy bridge; separate from LAN discovery/listeners.
++    pub player_bind_host: String,
+     /// Player bridge port (players connect here to register).
+     pub player_port: u16,
+     /// HTTP client timeout (seconds).
+@@ -112,6 +114,7 @@ impl Default for NetworkConfig {
+     fn default() -> Self {
+         Self {
+             bind_host: "0.0.0.0".into(),
++            player_bind_host: "127.0.0.1".into(),
+             player_port: 8010,
+             http_timeout: 15.0,
+             cert_rotation_poll: 60.0,
+@@ -226,6 +229,8 @@ mod tests {
+         let config: Config = toml::from_str("").unwrap();
+         assert_eq!(config.device.model, "Chromecast");
+         assert_eq!(config.network.player_port, 8010);
++        assert_eq!(config.network.bind_host, "0.0.0.0");
++        assert_eq!(config.network.player_bind_host, "127.0.0.1");
+         assert_eq!(config.volume.level, 1.0);
+         assert!(config.cast.user_agent.contains("CrKey"));
+         assert!(config.device.capabilities.cast_connect_supported);
+diff --git a/crates/vibecast-platform/src/lib.rs b/crates/vibecast-platform/src/lib.rs
+index 591f2df..b6c3abb 100644
+--- a/crates/vibecast-platform/src/lib.rs
++++ b/crates/vibecast-platform/src/lib.rs
+@@ -267,7 +267,7 @@ pub async fn run(
+     // --- shared player bridge (registration + proxy hosting) ---
+     let (events_tx, events_rx) = mpsc::channel(64);
+     let bridge = Arc::new(PlayerBridge::new(
+-        bind_host.clone(),
++        config.network.player_bind_host.clone(),
+         config.network.player_port,
+         events_tx,
+         settings,

@@ -49,6 +49,8 @@ class Route:
         result = self.private()
         result["target"] = ({k: self.target[k] for k in ("host", "port", "protocol", "device_id")}
                             if self.target else None)
+        if self.backend == "dlna" and self.target:
+            result["target"]["description_url"] = self.target["description_url"]
         return result
 
 
