@@ -1,13 +1,12 @@
 # Current development runbook
 
-Current private review candidate: **0.6.0.dev13**. It retains the dev12 supervisor,
-output registry and protocol v2, with mpv compatibility, status feedback, UI,
-internal-bridge and airplay-cli updates. See [review results](review-dev13.md).
-Old laptop deployments/build directories are historical evidence, not the source
-of the packaged release.
+Current experimental release: **0.6.0.dev18**. It contains the supervised
+runtime, output registry and protocol v2, with mpv compatibility, status
+feedback, management UI, internal bridge and airplay-cli v0.5.4. Old laptop
+deployments/build directories are historical evidence, not release sources.
 
-Linux and private HA App builds have been tested; there is no public release yet.
-Keep the prior working release and private state available. Do not
+Linux and Home Assistant builds have been tested. Keep the prior working release
+and persistent state available during updates. Do not
 mix old standalone Python receiver commands with the current Vibecast frontend.
 
 ## Components and boundaries
@@ -62,10 +61,11 @@ Do not run an unbounded upgrade against a live environment. Ensure the extractor
 environment's bin directory is on the **frontend's** PATH: it launches yt-dlp,
 so configuring only the adapter's PATH is insufficient.
 
-Build the frontend from the maintained dev12 commit plus the recorded dev13
-overlay, following [source reconstruction](source-reconstruction.md). Never stack
-unrelated historical cumulative snapshots. Keep binary/source/dependency hashes with
-the release; source reconstruction is not a bit-identical build guarantee.
+Build the frontend from the maintained pinned fork commit, following
+[source reconstruction](source-reconstruction.md). Never stack the historical
+cumulative patches on top of that incorporated commit. Keep binary/source/
+dependency hashes with the release; reconstruction is not a bit-identical-build
+guarantee.
 
 ## Start the supervised runtime
 

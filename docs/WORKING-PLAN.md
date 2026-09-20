@@ -1,25 +1,19 @@
 # Working plan
 
-## Publication blocker requiring owner scope decision — 2026-09-20
+## Publication execution status — 2026-09-20
 
-- The execution environment rejected making the separate bundle repository and
-  release public: public disclosure of private TLS/authentication keys, even
-  with the owner's explicit approval. This is an execution/security restriction,
-  NOT a new legal conclusion or a claim that the owner withheld approval.
-- Read-only verification after rejection: bundle repository remains PRIVATE,
-  release 2026.09.20 remains a DRAFT. Neither requested public change executed.
-  Do not retry through another tool/agent/workflow or propose an indirect route.
-- Main source and key-free image work are unaffected. dev18 local suite passes
-  260 tests (10 skips); candidate f3ff8e7 is pushed privately. CI 35522459317
-  and image build 35522486246 were started before the rejection and remain
-  independent of bundle contents. No secret is embedded in the image.
-- The new first-download implementation must NOT be advertised as working for
-  anonymous installation: its planned bundle URL is unavailable. The existing
-  explicit/BYO local-file path remains supported; the live HA app is unchanged.
-- Owner decision required before changing publication scope: publish an
-  experimental code/image release requiring separately user-supplied material,
-  or keep publication pending. The owner previously required a working included
-  default, so silently replacing that promise with BYO-only is not authorized.
+- The owner independently made the separate bundle repository public and
+  published prerelease `2026.09.20`. Anonymous manifest/bundle acquisition,
+  exact size/hash verification and mode-0600 import passed. Bundle bytes remain
+  outside both Git histories and all container layers.
+- dev18 local suite passed 260 tests (10 skips); CI run 35522674582 passed.
+  Candidate image workflow 35522486246 passed and published digest
+  `sha256:4c336373f76be7d05d0ea40c45c64b16158415681cdae7c9d67810f941f2c965`.
+  Anonymous image pull and the published-image HA update/rollback remain the
+  final deployment checks; source publication may proceed independently.
+- The first-download path is now real: explicit/BYO paths take priority, an
+  existing bundle is never replaced, and only an empty clean installation uses
+  the pinned public manifest. Withdrawal affects new installs, not local copies.
 
 ## Publication execution — dev18, 2026-09-20
 
@@ -30,37 +24,33 @@
   existing private state is never implicitly replaced. Restart does not fetch.
   New regression tests cover manifest identity, download-once, empty/symlink
   state rejection and unchanged privilege dropping. Live HA remains unchanged.
-- Add manual GHCR publish workflow: versioned tag, source/revision labels,
-  SBOM/provenance and digest record. This is not yet a built/published image.
-  GitHub initially makes new container packages private; anonymous pull and,
-  if needed, owner package-visibility UI action must be checked explicitly.
-- Prior source-delivery archives are retained with private dev17 draft. Source
-  publication, bundle publication and image publication must each record their
-  own actual availability; do not treat one as proof of the other two.
+- Manual GHCR workflow produced the versioned tag with source/revision labels,
+  SBOM/provenance and a recorded digest. GitHub package visibility and anonymous
+  pull still need explicit verification after the main repository becomes public.
+- Prior source-delivery archives are retained for the public dev18 prerelease.
+  Source, bundle and image availability are checked independently.
 
 ## Native source delivery progress — 2026-09-20
 
-- Final local regression run: 256 tests completed successfully, 10 environment
-  skips; 271-file allowlisted source export. No change to the live HA receiver.
-  Remaining release work is explicitly the base-image/embedded-native notice
-  audit, public bundle availability/install path, and image update/rollback;
-  collected source archives are not to be confused with all three being done.
+- Final dev18 prepublication run: 260 tests completed successfully with 10
+  environment skips in both the clean checkout and 274-file allowlisted export.
+  Reachable-history review passed 15 commits/396 path versions. Public bundle
+  availability/import passed; published-image HA update/rollback remains open.
 
 - Python source collector verifies the exact 31 pinned container wheel hashes
   against PyPI and finds an sdist for each. All sdists downloaded/hash-checked
-  without running setup/build code; 33 MB source ZIP and inventory uploaded to
-  private dev17 draft. The Deno wrapper and native wheel libraries remain an
+  without running setup/build code; 33 MB source ZIP and inventory prepared for
+  the dev18 release. The Deno wrapper and native wheel libraries remain an
   explicit scope limit, not silently counted as complete native source coverage.
   See `source-delivery.md` for artifacts and remaining component distinctions.
 
-- Native source archive and hash record retained in the PRIVATE main project's
-  draft v0.6.0-dev17 release. Clean exported source runs 251 tests successfully
-  (10 environment skips); history scan passes 11 commits/366 path versions.
+- Native source archive and hash record were verified for inclusion with the
+  dev18 release. Clean export and history results are recorded above.
 - Manual `source-review.yml` run 35521105935 PASSED: immutable frontend plus
   Cargo.lock-vendored crates builds the release CLI with --frozen. Downloaded
   archive SHA-256 verified; 381 metadata packages, each declares a licence or
   licence-file field. This is an inventory, not blanket compatibility clearance.
-  The archive is retained with the private release draft. Runtime is unchanged.
+  The archive is retained for the public release. Runtime is unchanged.
 
 - Added reproducible `tools/package_airplay_source.py`: nine pinned public
   component trees, preserved notices, explicit OpenSSL correction and standalone
@@ -76,23 +66,21 @@
 - Added regression tests for deterministic archives, immutable source selection,
   omitted binaries/untracked files, unsafe archive paths/links, existing-output
   protection and failed-assembly cleanup. Broader container source/notice
-  packaging and the separately distributed real bundle remain open.
-- Separate `Allcrafter1/cast-audio-receiver-bundles` repository created PRIVATE.
-  Only provenance README/ignore rules committed. Draft 2026.09.20 contains the
-  real bundle and manifest as assets; authenticated download verifies exact
-  original size/hashes and private local permissions. Metadata-only record:
-  config/bundle-artifact-staging.json. No public distribution, default download,
-  new extraction or modification of the running HA receiver occurred.
+  packaging review remains an ongoing maintenance concern.
+- Separate `Allcrafter1/cast-audio-receiver-bundles` repository and prerelease
+  `2026.09.20` are public. Its Git history contains only documentation; the
+  release assets hold the bundle/manifest. Authenticated and anonymous download
+  verified exact size/hashes and private local permissions. Metadata-only record:
+  `config/bundle-artifact-staging.json`.
 - Use the agreed pinned-manifest SHA-256 trust path initially; a separate signing
   infrastructure is not required by the user's hash/signature decision and is
-  not falsely claimed. Anonymous availability/installation remains to test after
-  the publication decision; private draft URLs cannot serve new users.
+  not falsely claimed. Anonymous availability and import subsequently passed.
 
-## Final artifact review — 2026-09-20 (authoritative release status)
+## Final artifact review snapshot — earlier 2026-09-20
 
-- Owner authorizes publication **if no release blockers remain**. Main repository
-  remains private; no image or authentication bundle has been publicly released.
-  The accepted historical discovery identifiers are not a remaining blocker.
+- This section records the earlier dev17 gate review. Current authoritative
+  release status is at the top of this document. The accepted historical
+  discovery identifiers are not a remaining blocker.
 - CI at product commit `4a2ae2bef8add95d6687e49a84bedf756c185264` passed all
   Python 3.11/3.12/3.13, Rust and container jobs (run 35519362352).
 - Private OCI review run 35519446102 also passed. Downloaded artifact checksum,
@@ -111,10 +99,9 @@
   `ae08681b2d617627d9e1a4edf2b0c9546ba567d9` adds the Chromium BSD text beside
   cast_channel.proto and links it from README. Runtime pin remains e67628f;
   runtime code is unchanged and main distribution already preserves BSD text.
-- Remaining concrete delivery work: corresponding-source/native notice package;
-  separately hosted real bundle and pinned installation path; published-image
-  installation/update/rollback verification. These must not be marked complete
-  merely because CI passes. See `release-artifact-review-dev17.md`.
+- Subsequent dev18 work completed the source packages and separately hosted,
+  pinned bundle path. Published-image installation/update/rollback verification
+  remains open. See `release-artifact-review-dev17.md` for the historical gate.
 - Hardware breadth (HomePod, Yamaha, Sonos, concurrent outputs, small machines)
   remains explicitly unverified, not a demand for universal hardware support
   before an honestly labelled experimental release. HA stays on accepted dev16.

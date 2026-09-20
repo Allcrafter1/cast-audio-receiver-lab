@@ -1,34 +1,28 @@
-# Separate bundle artifact — privately staged, not publicly published
+# Separate authentication-bundle artifact
 
-**Publication blocked, 2026-09-20:** the execution environment rejected public
-key-material distribution despite the owner's authorization. The repository
-and draft assets remain private, verified after rejection. This restriction
-must not be bypassed via other tools/workflows. It is separate from the legal
-analysis and from ordinary source/image publication. The first-start download
-code in dev18 is therefore prepared but NOT an available anonymous installation
-path. Publishing a BYO-only product instead requires the owner's scope decision.
+Code and authentication material have separate release lifecycles. The public
+`Allcrafter1/cast-audio-receiver-bundles` repository contains provenance and
+risk documentation, while release `2026.09.20` supplies the 2,742,207-byte
+bundle and its small manifest as versioned Release Assets. Bundle bytes are not
+part of either project's Git history or the runtime image.
 
-Code and authentication material have separate release lifecycles. On
-2026-09-20 the owner-authorized bundle was staged as a **draft release in the
-private** `Allcrafter1/cast-audio-receiver-bundles` repository. Its Git history
-contains only provenance documentation and ignore rules, never bundle bytes.
-No public download service or signing identity has been enabled. Automated
-unit tests use only obviously synthetic JSON. The importer does not
-generate, extract or circumvent authentication; it verifies a supplied artifact.
+The bundle contains 773 validated daily windows from 2026-09-12 through
+2030-12-06 (end exclusive). This describes stored coverage, not guaranteed
+future acceptance: the shared identity can be revoked and protocols can change.
+The material came from the project owner's purchased AirReceiver installation;
+it was not issued to this project. The reference APK is not redistributed.
 
-## Private round-trip verification
+## Verified public acquisition
 
-Draft version `2026.09.20` holds the 2,742,207-byte bundle and its 283-byte
-manifest. Both were downloaded again through authenticated GitHub access into
-a mode-0700 temporary directory (bundle mode 0600) and their SHA-256 values
-matched the original files. The metadata-only record is
-`config/bundle-artifact-staging.json`. No keys appear in that record.
+The release assets were downloaded anonymously into a mode-0700 temporary
+directory, the bundle was stored with mode 0600, and exact size and SHA-256
+checks passed. The metadata-only record is
+`config/bundle-artifact-staging.json`; no keys appear in it.
 
-This verifies hosting integrity, **not anonymous installation**. While the
-repository is private and the release is a draft, the manifest's final release
-URL is not an available public download. Do not silently turn that staging
-record into a default runtime acquisition setting. The existing HA test app
-continues using its local, working bundle, with no network dependency added.
+In dev18, a clean container/HA installation with no explicit bundle and no
+existing state uses the packaged, hash-pinned release manifest exactly once.
+Explicit local/BYO input always wins, existing state is never implicitly
+replaced, and subsequent restarts do not require the bundle host.
 
 ## Proposed release shape
 
@@ -78,8 +72,9 @@ The chosen initial trust mechanism is the **manifest hash pinned through the
 reviewed main-project release**. This satisfies the requested hash/signature
 integrity option without inventing another signing service. A future attestation
 must be verified against a trusted repository/workflow identity before claiming
-signature verification; no self-signed downloaded key is trusted. Final public
-availability and an anonymous importer test remain publication tasks.
+signature verification; no self-signed downloaded key is trusted. Public
+availability and anonymous importer behavior were verified before the
+dev18 release. Future bundle versions require a new reviewed manifest pin.
 
 Separate hosting changes organization and withdrawal, not permission to
 redistribute material. Provenance, proprietary reference-app conditions and

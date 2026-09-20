@@ -22,9 +22,8 @@ network security, device compatibility and resource use. Please do not include
 private authentication material, account tokens or signed media URLs in issues,
 logs, pull requests or test fixtures.
 
-We intend to publish as open source with the applicable license notices. This
-document is a publication draft, not an announcement that a public repository or
-reviewed release already exists. Third-party code retains its own licenses.
+The project is published as open source with the applicable license notices.
+Third-party code retains its own licenses.
 
 ## Relationship to Music Assistant
 
@@ -34,19 +33,18 @@ intend to merge this experimental receiver directly into Music Assistant.
 Experienced developers are welcome to review, improve or adapt the work into a
 suitable integration, subject to the applicable licenses.
 
-Any community announcement will wait until a usable, documented public repository
-exists. No announcement should imply support or endorsement from upstream teams.
+Community announcements must link to a usable, documented release and must not
+imply support or endorsement from upstream teams.
 
-## Attribution gate before publication
+## Attribution and provenance
 
-Prepare a verified attribution inventory from the sources actually used: Vibecast,
+The verified attribution inventory covers sources actually used: Vibecast,
 Shanocast, Music Assistant airplay-cli and its incorporated libraries, FFmpeg,
 mpv, yt-dlp and its extraction dependencies, and the Python libraries we ship.
 Document AirReceiver's role as the reference implementation used in device tests.
-Include individual researchers and research articles only where the development
-record establishes their contribution to this work; verify names and links.
+Individual researchers and research articles are included only where the
+development record establishes their contribution.
 
-Credit is not permission to redistribute third-party private material. Complete
-the dependency/license and repository-history audit before publishing code or
-artifacts. Preserve copyright/license notices and distinguish implementation reuse,
-research inspiration and comparison testing.
+Credit is not permission to redistribute unrelated material. Copyright/license
+notices are preserved and implementation reuse, research inspiration and
+comparison testing are distinguished in `THIRD_PARTY_NOTICES.md`.

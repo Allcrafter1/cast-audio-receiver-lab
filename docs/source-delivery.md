@@ -1,8 +1,8 @@
 # Release source delivery
 
 Source archives are assembled separately from runtime credentials and retained
-as assets in the **private draft** release `v0.6.0-dev17`. This document is a
-progress record, not a declaration of complete redistribution clearance.
+as assets with the public experimental release. This document records the
+reviewed source-delivery scope; it is not a claim of universal compatibility.
 
 ## Native AirPlay
 
@@ -44,7 +44,7 @@ python tools/python_source_inventory.py \
 The checked source ZIP is 33,188,344 bytes, SHA-256
 `ec83949c9ef27f743bd08127357467325104e205f75ef15e5bccb52cff75e61d`.
 It contains the 31 hash-verified, unopened source distributions and a metadata
-record; it is retained in the private draft release. No package setup/build code
+record; it is retained with the public release. No package setup/build code
 was executed to collect it. Runtime versions have not changed.
 
 **Do not equate a Python sdist with complete native source coverage.** In

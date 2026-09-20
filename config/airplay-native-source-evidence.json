@@ -8,5 +8,5 @@
   "matching_version_source_commit": "c1eeb9406b6142148f267594197d853403d10208",
   "openssl_version": "3.5.4",
   "libcrypto_sha256": "181cfb9b864d79be76acc419e2017126c8bec619c93f043f187cdf1b302e4237",
-  "status": "historical source association verified; independent rebuild not yet verified"
+  "status": "historical source association verified; exported source candidate independently rebuilt and tested; original release binary byte identity not claimed"
 }

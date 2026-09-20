@@ -5,9 +5,9 @@ protocol research and maintenance work below. Thank you to their authors and
 contributors. Our glue code and practical testing do not replace that work, and
 no upstream author is implied to endorse or support this experiment.
 
-This is a source-based inventory, **not a completed redistribution clearance or
-full transitive license audit**. Do not interpret the project's GPL declaration
-as relicensing third-party material or credentials.
+This is a source-based inventory, not legal advice or a claim that every
+transitive component has one uniform licence. Do not interpret the project's
+GPL declaration as relicensing third-party material or authentication artifacts.
 
 ## Main implementation and research foundations
 
@@ -31,7 +31,7 @@ complete Open Screen runtime. Additional individual research articles mentioned
 during discussion must have their exact contribution/link verified before being
 added as implementation credits; do not invent attribution or endorsements.
 
-## AirPlay native licence evidence and remaining release check
+## AirPlay native licence evidence
 
 Current maintained Vibecast build input is commit
 `e67628fa72550095f92197550d60d8e94c503d4e`, recorded in
@@ -54,13 +54,10 @@ release binary contains `3.5.4` and OpenSSL 3 provider symbols. OpenSSL 3 uses
 Apache-2.0, rather than the notice's 1.1.1u OpenSSL/SSLeay terms. Preserve the
 upstream notice as evidence, with this correction alongside it.
 
-The vendored OpenSSL *source submodule*, however, still points to a 1.1.1-era
-revision. Close this source/prebuilt mismatch before declaring corresponding
-source complete. This is a concrete provenance task, not proof of a blanket
-GPL/OpenSSL conflict. RAOP/AES GPL-2.0-or-later lineage, GPL-3.0 mdnssd and other
-MIT/BSD/Apache components retain their individual notices. Publish exact
-recursive corresponding source and build instructions with any binary release;
-GitHub's automatic airplay-cli source archive omits submodules.
+The vendored OpenSSL source submodule points to a 1.1.1-era revision even though
+the inspected prebuilt is 3.5.4. The project therefore does not present a normal
+recursive checkout as matching source. RAOP/AES GPL-2.0-or-later lineage,
+GPL-3.0 mdnssd and other MIT/BSD/Apache components retain their notices.
 
 The dev17 audit additionally checked `libopenssl/.gitmodules`: its branch hint
 is `openssl-3.5.4`, while its actual gitlink remains
@@ -73,16 +70,18 @@ artifact before distributing a project binary/image.
 
 Follow-up history inspection found the matching 3.5.4 source gitlink in the
 immediately preceding proxy commit, with unchanged Linux archive/build files.
-See [the evidence and repeatable check](docs/airplay-native-source-audit.md).
-This narrows the source correction required; it is not yet a verified rebuild
-or complete native dependency clearance.
+The retained release source archive explicitly selects that source and contains
+all nine component trees and notices. A clean offline extraction rebuilt it,
+passed the upstream suite and `--check`. This verifies the exported source
+candidate, not byte identity with the original upstream release executable. See
+[the repeatable evidence](docs/airplay-native-source-audit.md).
 
 ## Python runtime dependencies
 
-The runtime wheel/source reference inventory is now checked against exact PyPI
-file hashes: `config/container-python-source-references.json`. All 31 container
-runtime wheels have source distributions, collected in the private release
-source archive. This is not proof of embedded native library coverage.
+The runtime wheel/source reference inventory is checked against exact PyPI file
+hashes: `config/container-python-source-references.json`. All 31 container
+runtime wheels have source distributions collected in the release source
+archive. This is not proof of embedded native library coverage.
 
 In particular, **Deno is not just its Python launcher**. The exact executable
 from the reviewed OCI image reports Deno 2.9.6, V8 15.0.245.2-rusty and

@@ -1,23 +1,22 @@
 # Installation and deployment
 
-The project is still an experimental pre-release. The tested deployment is
-Linux `amd64`; the public GHCR image and one-click Home Assistant repository are
-not published yet. All delivery forms run the same `cast-audio-receiver`
+The project is an experimental pre-release. The tested deployment is Linux
+`amd64`; a versioned GHCR image and Home Assistant repository metadata are
+published from this repository. All delivery forms run the same `cast-audio-receiver`
 supervisor and therefore do not maintain separate playback implementations.
 
-## Required private Cast input
+## Cast authentication input
 
 A usable Google Cast speaker requires a compatible `certs.json` authentication
 bundle. The process fails closed when the configured input is missing or
 unreadable; a management page alone is not proof that Cast is ready.
 
-The owner's Home Assistant installation already contains the complete validated
-773-window bundle through 2030-12-06 at
-`/share/cast-audio-receiver/certs.json`. It is imported atomically into the
-App's private `/data` state with mode `0600` during startup. The source
-repository and public container context deliberately do not contain that
-reusable private material. Back up the `/share` copy privately before changing
-or reinstalling the host.
+The source repository and container image contain only a pinned manifest, not
+the bundle. On a clean first start with no explicit path, the runtime downloads
+the separately published `2026.09.20` bundle once, checks its exact size and
+SHA-256 digest, then atomically stores it under private `/data` state with mode
+`0600`. Restarts do not redownload it and existing material is never silently
+replaced. Set `certificate_path` to use a local/BYO bundle instead.
 
 Certificate date coverage is not a guarantee of Google acceptance: server-side
 revocation or a protocol change can invalidate it earlier.
@@ -25,15 +24,12 @@ revocation or a protocol change can invalidate it earlier.
 ## Home Assistant App preview
 
 The source package under `cast-audio-receiver/` has passed a real HAOS/
-Supervisor build, install, ingress, LAN, restart and state-persistence test.
-The referenced public image is not published, so this is not a one-click public
-installation yet.
+Supervisor build, install, ingress, LAN, local-audio restart and
+state-persistence test. It references the version-matched public GHCR image.
 
-Before starting the App, ensure the private bundle exists at the default path:
-
-```text
-/share/cast-audio-receiver/certs.json
-```
+No bundle option is required for a clean install. To avoid the network download
+or use your own material, put a bundle at a persistent absolute path and set
+`certificate_path` to it.
 
 Normal configuration intentionally stays small:
 
@@ -47,10 +43,9 @@ Open Web UI launches the same manager through Home Assistant ingress without a
 second login. Direct LAN access is `http://HOME_ASSISTANT_IP:8788`. Do not expose
 that unauthenticated port to the Internet or an untrusted network.
 
-Persistent routes and frontend identity live under the App's `/data`; an App
-restart retains them. Updating or rolling back must preserve `/data` and the
-private `/share` bundle. Published-image update/rollback acceptance remains a
-release gate.
+Persistent routes, frontend identity and the acquired bundle live under the
+App's `/data`; an App restart retains them. Updating or rolling back must
+preserve `/data`.
 
 ## Local OCI build
 
@@ -68,15 +63,16 @@ private state before permanently dropping to UID/GID 1000:
 ```sh
 docker run --rm --network host \
   -v /absolute/cast-audio-state:/data \
-  -v /absolute/private/certs.json:/run/secrets/cast-certs.json:ro \
-  -e CAST_AUDIO_CERTS=/run/secrets/cast-certs.json \
   -e CAST_AUDIO_WEB_PORT=8788 \
-  cast-audio-receiver:local
+  ghcr.io/allcrafter1/cast-audio-receiver:0.6.0-dev18
 ```
 
-The UI is then available at `http://LINUX_LAN_IP:8788`. Container deployment on
-non-Home-Assistant hosts is implemented, but the first public image inventory,
-SBOM, vulnerability scan, update and rollback test are still open.
+For BYO material, additionally mount the file read-only and set
+`CAST_AUDIO_CERTS` to its container path.
+
+The UI is then available at `http://LINUX_LAN_IP:8788`. The published image has
+an attached GitHub Actions provenance/SBOM record; broader hardware and
+published-image rollback testing remain open.
 
 ## Native Linux development install
 

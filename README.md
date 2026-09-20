@@ -66,7 +66,9 @@ disabled in normal builds; its WebSocket/manifest/licence routes remain internal
 | Sonos | Implemented with library and mocked tests; real hardware unverified. External renderers cannot pull internal-only manifest URLs. |
 | ARM / simultaneous targets / small devices | Not release-validated. |
 
-This is an active pre-release project, **not generally release-ready**. The
+This is an **experimental pre-release**. The core paths are usable and tested,
+but hardware coverage is deliberately limited and the Cast authentication path
+can be revoked independently of this code. The
 [working plan](docs/WORKING-PLAN.md) distinguishes implemented, automated-tested,
 deployed and user-confirmed work. airplay-cli v0.5.4 is the update candidate,
 not evidence of tested HomePod compatibility.
@@ -84,15 +86,17 @@ cast-audio-receiver --frontend /path/to/vibecast \
 ```
 
 Open the LAN URL to add, rename, disable or delete outputs. HA uses the same
-runtime with ingress and a configurable LAN port. No public image or one-click
-release is claimed here.
+runtime with ingress and a configurable LAN port. The published amd64 image is
+`ghcr.io/allcrafter1/cast-audio-receiver:0.6.0-dev18`; see the installation
+guide before deploying this experimental release.
 
 Authentication material is **not committed to source or embedded in images**.
-Missing material fails explicitly. Separate versioned Release Assets are planned
-subject to publication review; [artifact acquisition](docs/bundle-distribution.md)
-is prepared using synthetic tests only. Local/BYO replacement remains supported.
-No download URL or shared credentials are built in. Separate distribution
-improves management/withdrawal, not the underlying legal or revocation position.
+On a clean first start the pinned release manifest downloads the separately
+published experimental bundle once, verifies its size and SHA-256 digest and
+stores it privately. Existing state is never silently replaced and a local/BYO
+bundle remains supported. See [bundle distribution](docs/bundle-distribution.md).
+Separate distribution improves management/withdrawal, not the underlying legal
+or revocation position.
 
 The code does not use Google's official Cast SDK or a receiver registered in its
 developer console. This independently implemented protocol path does not mean
@@ -122,7 +126,8 @@ Original product code: **GPL-3.0-or-later**. Third-party code retains its own
 copyright/licence, including Vibecast MIT and Chromium protocol BSD notices.
 See [LICENSE](LICENSE), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and
 `licenses/`. A code licence does not grant rights to unrelated credentials.
-Binary/source/notice inventory is still a publication gate.
+Release assets retain the reviewed source and notice inventories; this remains
+an experimental project rather than a claim of universal compatibility.
 
 Much of the code was developed collaboratively with **GPT/Astra and other AI
 coding assistance**. The initiator had almost no programming experience;

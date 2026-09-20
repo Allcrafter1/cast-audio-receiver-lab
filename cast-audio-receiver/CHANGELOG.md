@@ -1,5 +1,11 @@
 # App changelog
 
+## 0.6.0-dev18 — experimental pre-release
+
+- Add verified one-time acquisition of the separately published authentication
+  bundle on a clean install; keep local overrides and existing state authoritative.
+- Publish the versioned OCI image with source/revision labels, SBOM and provenance.
+
 ## 0.6.0-dev17 — candidate
 
 - Add the project speaker icon and logo to the Home Assistant App.

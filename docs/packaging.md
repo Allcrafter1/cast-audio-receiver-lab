@@ -7,10 +7,10 @@ frontend and the Python manager/output adapters. Native Linux services, the OCI
 image and Home Assistant must invoke this same entrypoint; none may grow a
 separate playback implementation.
 
-The Home Assistant App maps `/share` read-only and defaults the replaceable
-authentication input to `/share/cast-audio-receiver/certs.json`. This keeps
-private material out of the image, Git history, web UI and diagnostics while
-still allowing rotation without rebuilding the receiver.
+The Home Assistant App maps `/share` read-only for optional local/BYO input.
+With no configured path and no existing private state, a pinned manifest fetches
+the separately released bundle once. This keeps material out of the image, Git
+history, web UI and diagnostics while allowing replacement without rebuilding.
 
 The `Containerfile` is the first pinned `linux/amd64` build recipe. It builds
 the maintained Vibecast source, verifies the downloaded Music Assistant
