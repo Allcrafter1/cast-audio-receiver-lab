@@ -1,4 +1,4 @@
 # Tested together against both failing sender-selected tracks on 2026-09-12.
 yt-dlp[default]==2026.8.19
 yt-dlp-ejs==0.8.0
-deno==2.9.6
+deno==2.9.7
