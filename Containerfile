@@ -38,11 +38,12 @@ RUN curl --fail --location --proto '=https' --tlsv1.2 \
     && chmod 0755 /tmp/cliairplay
 
 FROM --platform=linux/amd64 python:3.12-slim-bookworm
-ARG BUILD_VERSION=0.6.0-dev17
+ARG BUILD_VERSION=0.6.0-dev18
 ARG BUILD_ARCH=amd64
 LABEL org.opencontainers.image.title="Cast Audio Receiver Lab"
 LABEL org.opencontainers.image.description="Experimental Cast audio receiver with modular local and AirPlay outputs"
 LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
+LABEL org.opencontainers.image.source="https://github.com/Allcrafter1/cast-audio-receiver-lab"
 LABEL io.hass.version="${BUILD_VERSION}"
 LABEL io.hass.type="app"
 LABEL io.hass.arch="${BUILD_ARCH}"

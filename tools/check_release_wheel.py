@@ -7,6 +7,7 @@ import zipfile
 
 
 REQUIRED = {
+    "cast_audio_lab/data/bundle-release.json",
     "cast_audio_lab/runtime.py",
     "cast_audio_lab/output_registry.py",
     "cast_audio_lab/dlna.py",

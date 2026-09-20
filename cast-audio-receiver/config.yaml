@@ -1,5 +1,5 @@
 name: Cast Audio Receiver Lab
-version: "0.6.0-dev17"
+version: "0.6.0-dev18"
 slug: cast_audio_receiver
 description: Experimental audio-only Cast receiver with modular outputs
 url: https://github.com/Allcrafter1/cast-audio-receiver-lab
@@ -20,7 +20,7 @@ options:
   web_port: 8788
   log_level: INFO
   artwork_public_url: ""
-  certificate_path: /share/cast-audio-receiver/certs.json
+  certificate_path: ""
 schema:
   web_port: port
   log_level: list(DEBUG|INFO|WARNING|ERROR)

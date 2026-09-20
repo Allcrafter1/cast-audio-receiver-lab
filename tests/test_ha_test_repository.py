@@ -15,7 +15,7 @@ class HomeAssistantTestRepositoryTests(unittest.TestCase):
 
             self.assertNotIn("\nimage:", "\n" + config)
             self.assertIn(
-                "certificate_path: /share/cast-audio-receiver/certs.json", config
+                'certificate_path: ""', config
             )
             self.assertTrue((app / "Dockerfile").is_file())
             for name in ("icon.png", "logo.png", "README.md", "CHANGELOG.md"):

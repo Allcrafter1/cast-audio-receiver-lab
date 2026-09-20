@@ -16,6 +16,11 @@
       "sha256": "a28678fd34d5fafb2f9567c7ab7b7774904c170f360e21956e22c782deddc127"
     },
     {
+      "bytes": 2258,
+      "path": ".github/workflows/publish-image.yml",
+      "sha256": "b69db701c6b99e8c734832b96da8a06046b12fdc31274c5e1c256b0ea1079eb6"
+    },
+    {
       "bytes": 1396,
       "path": ".github/workflows/release-review.yml",
       "sha256": "c7b2b651de7c856bced25b04a49dada61788ea51d16993d1e0b2bc85ce2e944f"
@@ -36,9 +41,9 @@
       "sha256": "57d61edc4a7b995c3d99fdf77e29ee7b3252576491e697c682682051c96b054b"
     },
     {
-      "bytes": 38417,
+      "bytes": 39077,
       "path": "CHANGELOG.md",
-      "sha256": "97ad4eb8ba9bd595db1c35ff3a97e7ae47fbfba5a2d5708ea57491a92012f4bf"
+      "sha256": "2dab24eeffe76fdcc8783620f8f36fdae9132f777178f2009570d0eb32e9efdb"
     },
     {
       "bytes": 3018,
@@ -46,9 +51,9 @@
       "sha256": "47a2fe798e4839e149ee2eae01a1484c42171648a505890bc80adeed3243c5b1"
     },
     {
-      "bytes": 4012,
+      "bytes": 4107,
       "path": "Containerfile",
-      "sha256": "5e8f037ab74384c313c2a959542f886c5d900c5a56d4ff7ad2136cc176fdf9f6"
+      "sha256": "30eea1b7842798e3c4aa296cd2867e5b124db662a38ab07c7c1c391e5f55a292"
     },
     {
       "bytes": 35149,
@@ -86,9 +91,9 @@
       "sha256": "8398019f64792c03d3db71d12145a0d6adc2e8d8da8ea36258427d12e1c9b88b"
     },
     {
-      "bytes": 767,
+      "bytes": 732,
       "path": "cast-audio-receiver/config.yaml",
-      "sha256": "b71ed73fcf6be4d4fd8b98e068b60fd0e1e9b1c6ff58e8d8e226bb159e268ab0"
+      "sha256": "dc0a84f1a4cec0378dec62042bde81ccc3fbf439be24df645e2c185f88b110b2"
     },
     {
       "bytes": 3957,
@@ -246,9 +251,9 @@
       "sha256": "e23a00b7a392aa4b072905e707510d91a413a14b18b66761044f324f8cf4edac"
     },
     {
-      "bytes": 140502,
+      "bytes": 141625,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "a33594bb28ecb1b209a25588914ca0614caba6252c310d19f21f2ebedb0fa29c"
+      "sha256": "417a25b37c88df06ff0c1a86872fa05711f1c86e4d8f52a04c6e0a6e80b3c8c1"
     },
     {
       "bytes": 4535,
@@ -531,6 +536,11 @@
       "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
     },
     {
+      "bytes": 3093,
+      "path": "licenses/V8-BSD.txt",
+      "sha256": "6ab33af8774a0f396ee3aeeb761e3229057682d6f9fa7f572e390c2cb3a6e509"
+    },
+    {
       "bytes": 1075,
       "path": "licenses/Vibecast-MIT.txt",
       "sha256": "c7be50cabe9219b38ff5ec920b9b4091d583d44a69c6ff45214e1226af2a012f"
@@ -711,9 +721,9 @@
       "sha256": "2394ffda1aeedb74c2730817dbe0e7b6dd991dd6551b3c1283fc7ca4554d7ec7"
     },
     {
-      "bytes": 1283,
+      "bytes": 1298,
       "path": "pyproject.toml",
-      "sha256": "ffaa654535c76e3e575adb7d2da91550aa8a0b6ed460dc41d783c81d606add82"
+      "sha256": "9efae97662ec7091a6cd911cc74de8f0797e533ff6b383a6a23e466ccad43d7b"
     },
     {
       "bytes": 114,
@@ -778,7 +788,7 @@
     {
       "bytes": 78,
       "path": "src/cast_audio_lab/__init__.py",
-      "sha256": "a25176581cd9666bca60e7fd0a535e7beea55cc3d3895f83069213a35521684b"
+      "sha256": "1d217a6b2b5c63a0189831fd25f9a7a525f986a8b43b3b2f74dc9fc06231714c"
     },
     {
       "bytes": 118,
@@ -816,14 +826,19 @@
       "sha256": "a3effb346cd7dd0ca0687b8a298363b41022f74c3ef3b554a749aaa23dea2f90"
     },
     {
-      "bytes": 4389,
+      "bytes": 5718,
       "path": "src/cast_audio_lab/container_bootstrap.py",
-      "sha256": "6156303871decaa0d8a59f7add245d7b434c72345142b9b3b8a428200cb76c0b"
+      "sha256": "490e0bafd258831a22a8b00dac9049eac427f02d5d108474f20b1df18a2eccd8"
     },
     {
       "bytes": 4335,
       "path": "src/cast_audio_lab/container_entrypoint.py",
       "sha256": "defffce7f6363c7a997e5582603bffaf6ff7db779e097358905fac3241d3283c"
+    },
+    {
+      "bytes": 283,
+      "path": "src/cast_audio_lab/data/bundle-release.json",
+      "sha256": "2a8edc6897c5763c97c25762cf248f3926b6725550d9a736b358ffcf87a62d51"
     },
     {
       "bytes": 10509,
@@ -981,9 +996,9 @@
       "sha256": "6f7af95762dcd3ad44218e0e90710fc3409bb645eef5d07a4c698dc130c1326a"
     },
     {
-      "bytes": 5668,
+      "bytes": 8003,
       "path": "tests/test_container_bootstrap.py",
-      "sha256": "95721faa8672812cd408c2bfbb509b1d625dcabe2f0676f72c7e7077e0d629f1"
+      "sha256": "e88534c2b8a71537c435f96130424a3ee9c1b9961f5ec2d5c5fbec7274877e80"
     },
     {
       "bytes": 4314,
@@ -1016,9 +1031,9 @@
       "sha256": "e9c903a06f0988fd026a60e50fb1200d939999ce7f577e3a15623ac72ef8b60a"
     },
     {
-      "bytes": 1698,
+      "bytes": 1663,
       "path": "tests/test_ha_test_repository.py",
-      "sha256": "1d8c4a8ca7058639f28576004627adbfc59b0f7825c1e2bc643d1cdd098b9027"
+      "sha256": "1ab87147b7e30bf4e3f1e75fb38e45518eebaf2bd824697449efee3c95c19faf"
     },
     {
       "bytes": 7333,
@@ -1206,9 +1221,9 @@
       "sha256": "7cf2a65e0d006e1cb39a4eb1efa3659965357a22b0ee7c85a44bb02c882037d6"
     },
     {
-      "bytes": 1324,
+      "bytes": 1371,
       "path": "tools/check_release_wheel.py",
-      "sha256": "a7b221bed330b48474b36f4a51dabebb8ee368ee6054d45c31c18dde6e476adf"
+      "sha256": "3b9130543c2f8a48a9bdf80ebdfed84fd6408e807c2f43e1270eda99f74fd686"
     },
     {
       "bytes": 8692,

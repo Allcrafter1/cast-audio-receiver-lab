@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0.dev18 — initial-release installation candidate
+
+- First container start can acquire the separately distributed, release-pinned
+  bundle when no explicit local override or existing private bundle is present.
+  Later restarts work offline; existing files and invalid explicit paths never
+  trigger an implicit replacement. No keys are embedded in code or images.
+- Add a manually triggered, version-tagged GHCR build with SBOM/provenance and
+  recorded image digest. Package visibility and anonymous install are separate
+  checks, not inferred from a successful image push.
+- Retain Deno and V8 attribution alongside the source-delivery inventories.
+
 ## 0.6.0.dev17 — release-preparation candidate (not deployed)
 
 - Assemble and rebuild a standalone native AirPlay source archive without Git

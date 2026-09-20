@@ -8,11 +8,15 @@ import json
 import shutil
 import sys
 
+from .bundle_artifact import acquire
+
 
 SERVICE_UID = 1000
 SERVICE_GID = 1000
 STATE_DIRECTORIES = ("frontend", "speakers", "private")
 MAX_CERTIFICATE_BUNDLE_BYTES = 32 * 1024 * 1024
+DEFAULT_MANIFEST = Path(__file__).parent / "data" / "bundle-release.json"
+DEFAULT_MANIFEST_SHA256 = "2a8edc6897c5763c97c25762cf248f3926b6725550d9a736b358ffcf87a62d51"
 
 
 def _chown_tree(path: Path, uid: int, gid: int) -> None:
@@ -55,7 +59,7 @@ def _configured_certificate_source(
     except (OSError, json.JSONDecodeError) as error:
         raise ValueError("invalid Home Assistant options file") from error
     source = options.get("certificate_path") if isinstance(options, dict) else None
-    if source is None:
+    if source is None or source == "":
         return None
     if not isinstance(source, str) or not source.startswith("/"):
         raise ValueError("certificate_path must be an absolute path")
@@ -101,19 +105,38 @@ def import_certificate_bundle(
     return destination
 
 
+def ensure_default_bundle(data_dir: Path, *, acquire_artifact=None) -> Path:
+    """Acquire once only; existing state never depends on remote availability."""
+    destination = data_dir / "private" / "certs.json"
+    if destination.is_symlink() or any(p.is_symlink() for p in destination.parents):
+        raise ValueError("certificate state must not use symlinks")
+    if destination.exists():
+        if not destination.is_file() or not 0 < destination.stat().st_size <= MAX_CERTIFICATE_BUNDLE_BYTES:
+            raise ValueError("existing certificate state is invalid; supply a replacement explicitly")
+        return destination
+    fetch = acquire if acquire_artifact is None else acquire_artifact
+    fetch(DEFAULT_MANIFEST, DEFAULT_MANIFEST_SHA256, destination)
+    return destination
+
+
 def main() -> None:
     data_dir = Path(os.environ.get("CAST_AUDIO_DATA_DIR", "/data"))
     if os.geteuid() == 0:
         try:
             prepare_state(data_dir)
             imported = import_certificate_bundle(data_dir)
-            if imported is not None:
-                os.environ["CAST_AUDIO_CERTS"] = str(imported)
+            if imported is None:
+                imported = ensure_default_bundle(data_dir)
+                os.chmod(imported, 0o600)
+                os.chown(imported, SERVICE_UID, SERVICE_GID, follow_symlinks=False)
+            os.environ["CAST_AUDIO_CERTS"] = str(imported)
             os.setgroups([])
             os.setgid(SERVICE_GID)
             os.setuid(SERVICE_UID)
         except (OSError, ValueError) as error:
             raise SystemExit(f"container state setup failed: {error}") from error
+    elif _configured_certificate_source(data_dir) is None:
+        os.environ["CAST_AUDIO_CERTS"] = str(ensure_default_bundle(data_dir))
     os.execv(
         sys.executable,
         [sys.executable, "-m", "cast_audio_lab.container_entrypoint", *sys.argv[1:]],

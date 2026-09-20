@@ -1,5 +1,22 @@
 # Working plan
 
+## Publication execution — dev18, 2026-09-20
+
+- User explicitly asks to finish publication, not add more features. Freeze
+  playback behavior and prepare the existing experimental amd64 receiver.
+- Implement initial container bundle acquisition using the packaged non-secret
+  manifest and separately pinned digest. Explicit BYO paths take priority;
+  existing private state is never implicitly replaced. Restart does not fetch.
+  New regression tests cover manifest identity, download-once, empty/symlink
+  state rejection and unchanged privilege dropping. Live HA remains unchanged.
+- Add manual GHCR publish workflow: versioned tag, source/revision labels,
+  SBOM/provenance and digest record. This is not yet a built/published image.
+  GitHub initially makes new container packages private; anonymous pull and,
+  if needed, owner package-visibility UI action must be checked explicitly.
+- Prior source-delivery archives are retained with private dev17 draft. Source
+  publication, bundle publication and image publication must each record their
+  own actual availability; do not treat one as proof of the other two.
+
 ## Native source delivery progress — 2026-09-20
 
 - Final local regression run: 256 tests completed successfully, 10 environment
