@@ -26,9 +26,9 @@
       "sha256": "57d61edc4a7b995c3d99fdf77e29ee7b3252576491e697c682682051c96b054b"
     },
     {
-      "bytes": 32395,
+      "bytes": 32574,
       "path": "CHANGELOG.md",
-      "sha256": "b984638629cd6983af44c283747eea9eee453a2ab2428c93032960c734dd7bcc"
+      "sha256": "e7751d3fb3d53ea162219ccae77bee57be1a53d5ac658cb1025d11f8ee7920b1"
     },
     {
       "bytes": 3018,
@@ -176,9 +176,9 @@
       "sha256": "cba8c7810c90723b7ecd9f4f5f87b388d3ac052d43a12a6b21d7f239017d0194"
     },
     {
-      "bytes": 101567,
+      "bytes": 101970,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "082dca102d5e65cf64780e059f29944e3d98d6a0f1aa35109ffa0676eb60fc74"
+      "sha256": "6af5db8f4219ca4050df50dbee0ceb5140a58ee9b2b815d5ecee7db016d649b4"
     },
     {
       "bytes": 4535,

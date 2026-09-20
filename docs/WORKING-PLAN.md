@@ -161,6 +161,12 @@ internal implementation detail.
   Complete Python runtime/build wheel locks now install offline with exact
   hashes. Publication, image SBOM/scan and real HA update/rollback acceptance
   are still open.
+- **Maintenance automation accepted:** the weekly upstream watcher completed a
+  real manual-dispatch run and opened private issue `#6` after detecting
+  `airplay-cli` v0.5.4 while the tested pin remains v0.5.3. It did not mutate
+  locks or runtime code. The new release contains HomePod/PTP fixes, so review,
+  a new artifact hash, CI and physical regression testing are required before
+  adopting it.
 - **Done in packaging source:** Home Assistant repository metadata is at the
   Git root; `ingress_port: 0` uses Supervisor's collision-free allocation while
   a separate configurable `web_port` serves the trusted LAN. Options and the

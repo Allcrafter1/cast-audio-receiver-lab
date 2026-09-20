@@ -436,6 +436,9 @@ interfaces are still experimental.
 - Validate one real midnight certificate-window rotation in the running Home
   Assistant App: TLS/device-auth/discovery state rotated without restart and the
   receiver continued accepting Cast connections.
+- Exercise the scheduled upstream watcher end-to-end; it detected the new
+  airplay-cli v0.5.4 release and opened a review issue without changing the
+  tested v0.5.3 runtime pin.
 
 - Controls-4 experiment: associate sessions with their LAUNCH connection and
   stop them when that connection closes, independent of lingering subscribers.
