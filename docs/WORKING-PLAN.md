@@ -16,7 +16,10 @@
   release unit; remove automatic pip PRs that cannot preserve that invariant.
 - After documentation is public, mention the release only in existing threads
   whose stated need is a Linux/HA Cast-audio receiver or Cast-to-AirPlay bridge.
-  Avoid unrelated or duplicate announcements.
+  Avoid unrelated or duplicate announcements. Completed for the exact Airbridge
+  receiver feature and Shanocast authentication-failure threads; the older Home
+  Assistant Community receiver requests remain suitable places for a future
+  owner post because this GitHub session has no forum identity.
 
 ## Publication execution status — 2026-09-20
 

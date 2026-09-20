@@ -48,4 +48,7 @@ jobs:
           if [ -z "$issue_number" ]; then
             printf 'The weekly watcher found:%b\n\nReview changelogs, rebuild locks, run CI and hardware acceptance. Do not auto-merge protocol updates.\n' "$notes" \
               | gh issue create --title "$title" --body-file -
+          else
+            printf 'The weekly watcher currently finds:%b\n\nReview changelogs, rebuild locks, run CI and hardware acceptance. Do not auto-merge protocol updates.\n' "$notes" \
+              | gh issue edit "$issue_number" --body-file -
           fi
