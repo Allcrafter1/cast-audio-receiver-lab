@@ -2,6 +2,14 @@
 
 ## 0.6.0.dev17 — release-preparation candidate (not deployed)
 
+- Assemble and rebuild a standalone native AirPlay source archive without Git
+  or downloads; include pinned component manifest, notices and shared build
+  recipe. Test deterministic exports and rejection/cleanup behavior.
+- Stage the separate bundle and hash-pinned manifest in a private draft release;
+  verify authenticated download integrity. No public/default acquisition yet.
+- Verify private OCI artifact descriptors, SBOM/provenance subjects and all blob
+  hashes. Keep runtime/hardware acceptance separate from build integrity.
+
 - Add Home Assistant icon/logo derived from the existing speaker SVG, with
   reviewed binary export pins and app-store README/changelog. Branding is live
   in the private HA store without changing its dev16 playback runtime.

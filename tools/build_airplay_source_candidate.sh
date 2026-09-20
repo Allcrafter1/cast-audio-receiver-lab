@@ -37,23 +37,4 @@ export_source libraop/libmdns d7f58bf2791c3c25fd729d739a9267ce9db5b696 "$cast_ou
 export_source libraop/libmdns/mdnssd 16402f3293b8bf09b8274ba7188202953d8e4f40 "$cast_output/airplay/libraop/libmdns/mdnssd"
 export_source libraop/libopenssl/openssl c1eeb9406b6142148f267594197d853403d10208 "$cast_output/openssl"
 
-cd "$cast_output/openssl"
-./Configure linux-x86_64 no-shared
-make -j"${CAST_BUILD_JOBS:-4}" build_libs
-cd "$cast_output/airplay/libraop/libcodecs/alac/codec"
-make -j"${CAST_BUILD_JOBS:-4}" AR=ar
-cd "$cast_output/airplay/libraop/libmdns/mdnssd"
-make lib HOST=linux PLATFORM=x86_64 CC=gcc AR=ar -j"${CAST_BUILD_JOBS:-4}"
-cd "$cast_output/airplay"
-
-# The linker uses only ALAC, mdnssd and libcrypto from these archives. Rebuild
-# those from source; do not reuse upstream's precompiled archive contents.
-mkdir -p libraop/libopenssl/targets/linux/x86_64/include
-cp -a "$cast_output/openssl/include/openssl" libraop/libopenssl/targets/linux/x86_64/include/
-cp "$cast_output/openssl/libcrypto.a" libraop/libopenssl/targets/linux/x86_64/libopenssl.a
-cp libraop/libcodecs/alac/codec/obj/libalac.a libraop/libcodecs/targets/linux/x86_64/libcodecs.a
-cp libraop/libmdns/mdnssd/lib/linux/x86_64/libmdnssd.a libraop/libmdns/targets/linux/x86_64/libmdns.a
-make -j"${CAST_BUILD_JOBS:-4}" STATIC=1 HOST=linux PLATFORM=x86_64 CC=gcc CXX=g++ VERSION=0.5.4-source-candidate
-make test STATIC=1 HOST=linux PLATFORM=x86_64 CC=gcc CXX=g++ VERSION=0.5.4-source-candidate
-bin/cliairplay-linux-x86_64 --check
-sha256sum bin/cliairplay-linux-x86_64
+bash "$cast_tools/build_exported_airplay.sh" "$cast_output"

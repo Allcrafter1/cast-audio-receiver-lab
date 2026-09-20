@@ -31,9 +31,9 @@
       "sha256": "57d61edc4a7b995c3d99fdf77e29ee7b3252576491e697c682682051c96b054b"
     },
     {
-      "bytes": 37641,
+      "bytes": 38179,
       "path": "CHANGELOG.md",
-      "sha256": "005747039e6984a3fbe95513744e4fc49be84ccf60677f2c62964fef77a37bca"
+      "sha256": "ac8e96e20ee9effe68855ef847947d03156b895e6abf28e4d86aa5704a85c1eb"
     },
     {
       "bytes": 3018,
@@ -99,6 +99,16 @@
       "bytes": 638,
       "path": "config/airplay-native-source-evidence.json",
       "sha256": "04b4b397230b35b6cf3f076b831c7153e5172fb8883fe31b5c486d5cf2b107ff"
+    },
+    {
+      "bytes": 526,
+      "path": "config/airplay-source-artifact.json",
+      "sha256": "d5522abeced2b2feaef62d85768d2694017aec7bb9d094001ca1866e35f2ec62"
+    },
+    {
+      "bytes": 557,
+      "path": "config/bundle-artifact-staging.json",
+      "sha256": "248cdd1cc6c719e884896c6af3b7afe3afdf5ecdd42d18f0e280f46129597cb9"
     },
     {
       "bytes": 440,
@@ -226,9 +236,9 @@
       "sha256": "e23a00b7a392aa4b072905e707510d91a413a14b18b66761044f324f8cf4edac"
     },
     {
-      "bytes": 137042,
+      "bytes": 139006,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "ddb19b17d04baa374c7d8f38990f8b9ce5820fff51fed8784d3300087cc1d22a"
+      "sha256": "2777c3f79a9fc7b6fb2c2d8b34d203e17315a73cea6aeee245464e2e23e52955"
     },
     {
       "bytes": 4535,
@@ -241,9 +251,9 @@
       "sha256": "8ec247d94dff75c2e54892e29ea49a7993af00e7bf55e59d0975fc8124f473ba"
     },
     {
-      "bytes": 3923,
+      "bytes": 4915,
       "path": "docs/airplay-native-source-audit.md",
-      "sha256": "0ec04408ddcd75b78e02572bfbcc0f296bd927d841c14f434621a2db556b060e"
+      "sha256": "50a23b82852eeaec8f76ab429f70b64851fc9972e64ab15a961f208e72aa11de"
     },
     {
       "bytes": 2864,
@@ -316,9 +326,9 @@
       "sha256": "d769a4f83d828e89791da51bd99c8d1058b8e2f5211769712d739ca6e73868f2"
     },
     {
-      "bytes": 3315,
+      "bytes": 4458,
       "path": "docs/bundle-distribution.md",
-      "sha256": "72c199ff510aef6b05e1ad2a2ee9ad025a1c4134220b2dd8637e03e0870b6b31"
+      "sha256": "fa70362b139d54a3e20a353ff00c91dfa8d4e239ab540ee26a44fda33f7c68ba"
     },
     {
       "bytes": 8472,
@@ -891,6 +901,11 @@
       "sha256": "4adb783dec53515dcf2c00ad3472c3155182fa82b869ca595ae7fb259212962c"
     },
     {
+      "bytes": 2957,
+      "path": "tests/test_airplay_source_package.py",
+      "sha256": "da6cc1ca8b2d1cf5bf6936c556002eea5993825bcd9665d8a95f3affca0e62b1"
+    },
+    {
       "bytes": 5788,
       "path": "tests/test_artwork.py",
       "sha256": "062b5ca5f5c20d7427f027c3beab79667da8151ca8eccb3d2251d767469ef458"
@@ -1116,9 +1131,14 @@
       "sha256": "d009d410775a323514a71615fc77bc46e71fb4f06d6f1985786804a2ebb84c48"
     },
     {
-      "bytes": 3299,
+      "bytes": 2139,
       "path": "tools/build_airplay_source_candidate.sh",
-      "sha256": "12c034199ade2822d51d0350f4fbd5dc5cf8def4949a4a8882877f6c23c7a83c"
+      "sha256": "3a23a03fd68b5bc3095ab8e9f08fdf86c87d9212518305d6df175f7cdb9ed2ab"
+    },
+    {
+      "bytes": 1480,
+      "path": "tools/build_exported_airplay.sh",
+      "sha256": "66b1b394dce2e7db3f6e1daed9ddf558150068d7c0df977e623ce582428c1f94"
     },
     {
       "bytes": 7119,
@@ -1219,6 +1239,11 @@
       "bytes": 4547,
       "path": "tools/merge_certificate_windows.py",
       "sha256": "9019808ba10e0ff73a918c463559d455486c258453a9d1f1b408695c40c09c48"
+    },
+    {
+      "bytes": 7168,
+      "path": "tools/package_airplay_source.py",
+      "sha256": "5124f3bc900d8c2e553ebb897ad8643d1346ba14de66c8038460d91bce0fbaca"
     },
     {
       "bytes": 2243,

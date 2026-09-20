@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "artifact": "cast-airplay-native-source-v054-release.tar.gz",
+  "sha256": "e2f41970f210c04b0f606b3461060266d289a09af7a4abcfb112b4343701e42f",
+  "size": 61324156,
+  "components": 9,
+  "build_platform": "Linux x86_64 development host",
+  "source_candidate_binary_sha256": "054121676576a7c5a89a02609b96db224a65d9f98cb3fd7c2633b87be3651c79",
+  "upstream_tests_passed": true,
+  "runtime_replaced": false,
+  "upstream_release_binary_byte_identity_claimed": false,
+  "complete_container_source_inventory": false
+}

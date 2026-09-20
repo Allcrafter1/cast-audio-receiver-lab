@@ -1,5 +1,33 @@
 # Working plan
 
+## Native source delivery progress — 2026-09-20
+
+- Added reproducible `tools/package_airplay_source.py`: nine pinned public
+  component trees, preserved notices, explicit OpenSSL correction and standalone
+  build instructions. No worktree edits, untracked files, Git database, runtime
+  credentials or precompiled libraries enter this archive. Exclusive atomic
+  output prevents overwritten releases and incomplete artifacts on failure.
+- Split the already tested compilation steps into `build_exported_airplay.sh`,
+  shared by the Git-based provenance build and the standalone archive. This is
+  developer/release tooling only, not a runtime binary change.
+- Real archive extracted to a fresh directory, built without Git/downloads:
+  upstream suite and --check passed; binary SHA-256 matches the earlier source
+  candidate (05412167…3651c79). No physical receiver was restarted.
+- Added regression tests for deterministic archives, immutable source selection,
+  omitted binaries/untracked files, unsafe archive paths/links, existing-output
+  protection and failed-assembly cleanup. Broader container source/notice
+  packaging and the separately distributed real bundle remain open.
+- Separate `Allcrafter1/cast-audio-receiver-bundles` repository created PRIVATE.
+  Only provenance README/ignore rules committed. Draft 2026.09.20 contains the
+  real bundle and manifest as assets; authenticated download verifies exact
+  original size/hashes and private local permissions. Metadata-only record:
+  config/bundle-artifact-staging.json. No public distribution, default download,
+  new extraction or modification of the running HA receiver occurred.
+- Use the agreed pinned-manifest SHA-256 trust path initially; a separate signing
+  infrastructure is not required by the user's hash/signature decision and is
+  not falsely claimed. Anonymous availability/installation remains to test after
+  the publication decision; private draft URLs cannot serve new users.
+
 ## Final artifact review — 2026-09-20 (authoritative release status)
 
 - Owner authorizes publication **if no release blockers remain**. Main repository

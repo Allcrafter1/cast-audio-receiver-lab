@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "status": "private-draft-not-default-install-input",
+  "repository": "Allcrafter1/cast-audio-receiver-bundles",
+  "version": "2026.09.20",
+  "manifest_asset": "cast-bundle-manifest-2026.09.20.json",
+  "manifest_sha256": "2a8edc6897c5763c97c25762cf248f3926b6725550d9a736b358ffcf87a62d51",
+  "bundle_asset": "bundle-through-2030-12-06.json",
+  "bundle_sha256": "97ac49c254dfdd9ef4a140481ffbff9d62d1bad9aa3909f5e06ea211691af7ef",
+  "bundle_size": 2742207,
+  "private_upload_download_verified": true,
+  "anonymous_download_verified": false
+}

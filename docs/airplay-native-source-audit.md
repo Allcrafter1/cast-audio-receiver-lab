@@ -61,9 +61,25 @@ environment and assume compatibility.
 
 ## Remaining publication work
 
-- Assemble corresponding source with the **explicit OpenSSL source correction**,
-  preserving the original pin and reason for the override in the manifest.
-  A default recursive clone by itself is not sufficient.
+### Source archive assembled and rebuilt
+
+`tools/package_airplay_source.py CHECKOUT NEW_ARCHIVE.tar.gz` now assembles the
+nine immutable component trees used by the controlled build. It excludes
+precompiled libraries/build outputs and untracked/modified checkout content,
+preserves component notices, and includes a component manifest plus the offline
+`build_exported_airplay.sh` recipe. Failed assembly never publishes a partial
+archive or overwrites an existing one. No Cast identity material is read.
+
+An actual archive was extracted into a fresh directory and rebuilt without Git
+or downloads. Upstream tests and `--check` pass; the binary digest again equals
+`054121676576a7c5a89a02609b96db224a65d9f98cb3fd7c2633b87be3651c79`.
+This closes the source-collection/rebuild task for this **candidate**. It does
+not retroactively prove the original release executable's exact build inputs.
+The complete container additionally needs its Rust/Python/Debian source and
+notice inventory; this archive does not claim to replace those deliverables.
+
+- Retain the assembled native source archive and its SHA-256 with the release,
+  preserving the original pin and reason for the OpenSSL override in the manifest.
 - Verify the remaining native dependencies and included notices, not only
   OpenSSL. Do not mistake a complete source tree for proof of which objects were
   actually linked into the release executable.
