@@ -1,0 +1,11 @@
+.git
+.state
+build
+dist
+*.egg-info
+**/__pycache__
+**/.git
+**/target
+third_party
+research
+patches

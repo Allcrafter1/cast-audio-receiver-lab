@@ -1,0 +1,158 @@
+diff --git a/crates/vibecast-apps-youtube/src/lib.rs b/crates/vibecast-apps-youtube/src/lib.rs
+index 253f5d9..e7386aa 100644
+--- a/crates/vibecast-apps-youtube/src/lib.rs
++++ b/crates/vibecast-apps-youtube/src/lib.rs
+@@ -18,7 +18,7 @@ use vibecast_sdk::{
+ use lounge::{LoungeCommand, LoungeConnection, LoungeIdentity};
+ use resolver::{PreferredVideoCodec, ResolveError, Resolver, PREFERRED_VIDEO_CODEC_KEY};
+ 
+-const APP_IDS: &[&str] = &["233637DE"];
++const APP_IDS: &[&str] = &["233637DE", "2DB7CC49"];
+ const MDX_NAMESPACE: &str = "urn:x-cast:com.google.youtube.mdx";
+ const CUSTOM_DATA_NAMESPACE: &str = "urn:x-cast:com.google.cast.customdata";
+ const ICON_URL: &str = "https://www.gstatic.com/youtube/img/branding/favicon/favicon_144x144.png";
+@@ -224,6 +224,23 @@ struct QueueState {
+     next_pending: bool,
+ }
+ 
++// One session-local speculative result; never written to disk. Dropping it
++// cancels the async task, so obsolete results cannot start playback.
++struct NextResolution {
++    video_id: String,
++    task: Option<tokio::task::JoinHandle<(Result<PlaybackMedia, ResolveError>, std::time::Instant)>>,
++}
++
++impl Drop for NextResolution {
++    fn drop(&mut self) {
++        if let Some(task) = &self.task { task.abort(); }
++    }
++}
++
++fn prefetched_is_fresh(completed: std::time::Instant) -> bool {
++    completed.elapsed() < std::time::Duration::from_secs(600)
++}
++
+ async fn run_commands(
+     mut commands: mpsc::Receiver<LoungeCommand>,
+     resolver: Resolver,
+@@ -233,6 +250,8 @@ async fn run_commands(
+     mut cancel: watch::Receiver<bool>,
+ ) {
+     let mut queue = QueueState::default();
++    let mut next_resolution: Option<NextResolution> = None;
++    let mut playback_active = false;
+     loop {
+         let command = tokio::select! {
+             result = cancel.changed() => {
+@@ -247,6 +266,9 @@ async fn run_commands(
+             }
+         };
+ 
++        // New-queue selections keep their established load/coalescing path.
++        // Only explicit/automatic Next consumes speculative media.
++        let use_prefetch = matches!(&command, LoungeCommand::Next);
+         let load = match command {
+             LoungeCommand::SetPlaylist {
+                 video_ids,
+@@ -304,22 +326,70 @@ async fn run_commands(
+                 playback.seek(position).await;
+                 None
+             }
++            LoungeCommand::Stop => {
++                queue.next_pending = false;
++                playback_active = false;
++                next_resolution = None;
++                playback.stop().await;
++                None
++            }
+         };
+ 
+         if let Some((video_id, start_time)) = load {
++            tracing::info!(%video_id, start_time, "YouTube queue requests load");
+             let snapshot = settings.snapshot();
+             let preferred_video_codec = PreferredVideoCodec::from_snapshot(&snapshot);
+-            match resolver
+-                .resolve(&video_id, start_time, &capabilities, preferred_video_codec)
+-                .await
+-            {
+-                Ok(media) => playback.load(media).await,
++            let mut prepared = None;
++            if let Some(mut pending) = next_resolution.take() {
++                if use_prefetch && pending.video_id == video_id {
++                    if let Some(task) = pending.task.as_mut() {
++                        if let Ok((Ok(mut media), completed)) = task.await {
++                            if prefetched_is_fresh(completed) {
++                                media.start_time = start_time.max(0.0);
++                                prepared = Some(media);
++                                tracing::info!(%video_id, "using prefetched YouTube media");
++                            }
++                        }
++                    }
++                }
++            }
++            let result = match prepared {
++                Some(media) => Ok(media),
++                None => resolver.resolve(&video_id, start_time, &capabilities, preferred_video_codec).await,
++            };
++            match result {
++                Ok(media) => {
++                    playback_active = true;
++                    playback.load(media).await;
++                }
+                 Err(error) => {
++                    playback_active = false;
+                     tracing::warn!(%video_id, %error, "failed to resolve YouTube video");
+                     playback.stop().await;
+                 }
+             }
+         }
++
++        let candidate = if playback_active {
++            queue.video_ids.get(queue.current_index + 1).cloned()
++        } else { None };
++        if next_resolution.as_ref().map(|p| &p.video_id) != candidate.as_ref() {
++            next_resolution = None;
++            if let Some(video_id) = candidate {
++                let resolver = resolver.clone();
++                let capabilities = capabilities.clone();
++                let codec = PreferredVideoCodec::from_snapshot(&settings.snapshot());
++                let id = video_id.clone();
++                tracing::info!(%video_id, "prefetching next YouTube media");
++                next_resolution = Some(NextResolution {
++                    video_id,
++                    task: Some(tokio::spawn(async move {
++                        let result = resolver.resolve(&id, 0.0, &capabilities, codec).await;
++                        (result, std::time::Instant::now())
++                    })),
++                });
++            }
++        }
+     }
+ }
+ 
+@@ -341,6 +411,24 @@ fn map_resolve_error(error: ResolveError) -> MediaResolveError {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn prefetch_expires_after_ten_minutes() {
++        let now = std::time::Instant::now();
++        assert!(prefetched_is_fresh(now));
++        assert!(!prefetched_is_fresh(now - std::time::Duration::from_secs(601)));
++    }
++
++    #[tokio::test]
++    async fn dropping_prefetch_aborts_its_task() {
++        let task = tokio::spawn(async {
++            std::future::pending::<()>().await;
++            (Err(ResolveError::Protocol("unused")), std::time::Instant::now())
++        });
++        let handle = task.abort_handle();
++        drop(NextResolution { video_id: "unused".into(), task: Some(task) });
++        tokio::task::yield_now().await;
++        assert!(handle.is_finished());
++    }
+     use std::sync::Mutex;
+ 
+     #[derive(Default)]
+

@@ -1,0 +1,220 @@
+[
+  {
+    "name": "aiohappyeyeballs",
+    "version": "2.7.1",
+    "filename": "aiohappyeyeballs-2.7.1-py3-none-any.whl",
+    "sha256": "9243213661e29250eb41368e5daa826fc017156c3b8a11440826b2e3ed376472",
+    "license": "PSF-2.0"
+  },
+  {
+    "name": "aiohttp",
+    "version": "3.14.3",
+    "filename": "aiohttp-3.14.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "543906c127fb1d929b95076db19b83fa2d46751006ff1e23b093aa5ac4d8db42",
+    "license": "Apache-2.0 AND MIT"
+  },
+  {
+    "name": "aiosignal",
+    "version": "1.4.0",
+    "filename": "aiosignal-1.4.0-py3-none-any.whl",
+    "sha256": "053243f8b92b990551949e63930a839ff0cf0b0ebbe0597b0f3fb19e1a0fe82e",
+    "license": "Apache 2.0"
+  },
+  {
+    "name": "appdirs",
+    "version": "1.4.4",
+    "filename": "appdirs-1.4.4-py2.py3-none-any.whl",
+    "sha256": "a841dacd6b99318a741b166adb07e19ee71a274450e68237b4650ca1055ab128",
+    "license": "MIT"
+  },
+  {
+    "name": "async_upnp_client",
+    "version": "0.48.1",
+    "filename": "async_upnp_client-0.48.1-py3-none-any.whl",
+    "sha256": "726ce14ad93a91bdf72b6ddd04c0b85a9ee95e84c996929690aa6cc57569d759",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "attrs",
+    "version": "26.1.0",
+    "filename": "attrs-26.1.0-py3-none-any.whl",
+    "sha256": "c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309",
+    "license": "MIT"
+  },
+  {
+    "name": "brotli",
+    "version": "1.2.0",
+    "filename": "brotli-1.2.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+    "sha256": "072e7624b1fc4d601036ab3f4f27942ef772887e876beff0301d261210bca97f",
+    "license": "MIT"
+  },
+  {
+    "name": "certifi",
+    "version": "2026.7.22",
+    "filename": "certifi-2026.7.22-py3-none-any.whl",
+    "sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
+    "license": "MPL-2.0"
+  },
+  {
+    "name": "charset-normalizer",
+    "version": "3.5.1",
+    "filename": "charset_normalizer-3.5.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "b9af956078716df40d985fb0dfeb2c2120c5ca92ba4ff4b388acfd01cdc14d08",
+    "license": "MIT"
+  },
+  {
+    "name": "defusedxml",
+    "version": "0.7.1",
+    "filename": "defusedxml-0.7.1-py2.py3-none-any.whl",
+    "sha256": "a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61",
+    "license": "PSFL"
+  },
+  {
+    "name": "deno",
+    "version": "2.9.6",
+    "filename": "deno-2.9.6-py3-none-manylinux_2_27_x86_64.whl",
+    "sha256": "037458003a1c76382e41baa1cd152b3325d9a13b2678f75cc653c893c0b2dfec",
+    "license": "MIT"
+  },
+  {
+    "name": "frozenlist",
+    "version": "1.8.0",
+    "filename": "frozenlist-1.8.0-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+    "sha256": "494a5952b1c597ba44e0e78113a7266e656b9794eec897b19ead706bd7074383",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "idna",
+    "version": "3.20",
+    "filename": "idna-3.20-py3-none-any.whl",
+    "sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "ifaddr",
+    "version": "0.2.0",
+    "filename": "ifaddr-0.2.0-py3-none-any.whl",
+    "sha256": "085e0305cfe6f16ab12d72e2024030f5d52674afad6911bb1eee207177b8a748",
+    "license": "MIT"
+  },
+  {
+    "name": "lxml",
+    "version": "6.1.3",
+    "filename": "lxml-6.1.3-cp312-cp312-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "909f4e927bb051f7740d6367285fc60cdcfdaf0258c2dba4ff5ba7eadadc250c",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "multidict",
+    "version": "6.9.0",
+    "filename": "multidict-6.9.0-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "6a5111a2bd824c821a3dd09da29680391b0caaa18fea7761358f4001e6898d1c",
+    "license": "Apache License 2.0"
+  },
+  {
+    "name": "mutagen",
+    "version": "1.48.1",
+    "filename": "mutagen-1.48.1-py3-none-any.whl",
+    "sha256": "4f077fe87d3fc7fba259aa63d8c026b18382ca6a42ef37c61e16f1b1b5b82fe7",
+    "license": "GPL-2.0-or-later"
+  },
+  {
+    "name": "propcache",
+    "version": "0.5.4",
+    "filename": "propcache-0.5.4-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "2814ecd8e818f487bee4b0f921bc4d1c176cc5fc71ac0f072d0fa67eda4ac14b",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "pycryptodomex",
+    "version": "3.23.0",
+    "filename": "pycryptodomex-3.23.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+    "sha256": "f489c4765093fb60e2edafdf223397bc716491b2b69fe74367b70d6999257a5c",
+    "license": "BSD, Public Domain"
+  },
+  {
+    "name": "python-didl-lite",
+    "version": "1.5.1",
+    "filename": "python_didl_lite-1.5.1-py3-none-any.whl",
+    "sha256": "ca2e965f3154018a9256caaed80930f89530484354ba62f15f91d2f7e84c4521",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "requests",
+    "version": "2.34.2",
+    "filename": "requests-2.34.2-py3-none-any.whl",
+    "sha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "soco",
+    "version": "0.31.2",
+    "filename": "soco-0.31.2-py3-none-any.whl",
+    "sha256": "edd40ad47bc9ddb843a33021cd29aef3b52cc376b84dd2ffb913a3d15faf977b",
+    "license": "MIT License"
+  },
+  {
+    "name": "typing_extensions",
+    "version": "4.16.0",
+    "filename": "typing_extensions-4.16.0-py3-none-any.whl",
+    "sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+    "license": "PSF-2.0"
+  },
+  {
+    "name": "urllib3",
+    "version": "2.8.0",
+    "filename": "urllib3-2.8.0-py3-none-any.whl",
+    "sha256": "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3",
+    "license": "MIT"
+  },
+  {
+    "name": "voluptuous",
+    "version": "0.16.0",
+    "filename": "voluptuous-0.16.0-py3-none-any.whl",
+    "sha256": "ee342095263e1b5afbd4d418cb5adc92810eebfd07696bb033a261210df33db4",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "websockets",
+    "version": "17.1",
+    "filename": "websockets-17.1-cp312-cp312-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+    "sha256": "0c863507ada5805517ca6dff1c524dcd42942efe6304dacf06700878398d21a6",
+    "license": "BSD-3-Clause"
+  },
+  {
+    "name": "xmltodict",
+    "version": "1.0.4",
+    "filename": "xmltodict-1.0.4-py3-none-any.whl",
+    "sha256": "a4a00d300b0e1c59fc2bfccb53d7b2e88c32f200df138a0dd2229f842497026a",
+    "license": "MIT"
+  },
+  {
+    "name": "yarl",
+    "version": "1.25.1",
+    "filename": "yarl-1.25.1-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "c6f117789d22dce188e5754e8bc65b7e6ebf8cb73963b9fa761f672a5883769d",
+    "license": "Apache-2.0"
+  },
+  {
+    "name": "yt-dlp",
+    "version": "2026.8.19",
+    "filename": "yt_dlp-2026.8.19-py3-none-any.whl",
+    "sha256": "1d57897e94c6665a0a6f9bc54b34e584284e32c034ffab3a7df25d8f7b24eedf",
+    "license": "Unlicense"
+  },
+  {
+    "name": "yt-dlp-ejs",
+    "version": "0.8.0",
+    "filename": "yt_dlp_ejs-0.8.0-py3-none-any.whl",
+    "sha256": "79300e5fca7f937a1eeede11f0456862c1b41107ce1d726871e0207424f4bdb4",
+    "license": "Unlicense AND MIT AND ISC"
+  },
+  {
+    "name": "zeroconf",
+    "version": "0.151.3",
+    "filename": "zeroconf-0.151.3-cp312-cp312-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "bbd2b73902a44426080190d653fa35638a93b6c6725c2be76888b4b614bc0b48",
+    "license": "LGPL-2.1-or-later"
+  }
+]
+

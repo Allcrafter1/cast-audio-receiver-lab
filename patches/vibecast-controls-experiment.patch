@@ -1,0 +1,97 @@
+diff --git a/crates/vibecast-apps-youtube/src/lounge.rs b/crates/vibecast-apps-youtube/src/lounge.rs
+index 5010f8f..c96dc18 100644
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -7,7 +7,7 @@ use serde_json::Value;
+ use thiserror::Error;
+ use tokio::sync::{mpsc, watch};
+ use url::Url;
+-use vibecast_sdk::{PlaybackState, PlayerState, ReceiverContext};
++use vibecast_sdk::{IdleReason, PlaybackState, PlayerState, ReceiverContext};
+ 
+ const LOUNGE_BASE: &str = "https://www.youtube.com/api/lounge";
+ const USER_AGENT: &str =
+@@ -206,8 +206,17 @@ impl LoungeConnection {
+                 }
+                 state = playback_rx.recv() => {
+                     let Some(state) = state else { return Ok(()); };
++                    let ended = state.idle_reason == Some(IdleReason::Finished)
++                        && self.current.state.as_ref().and_then(|s| s.idle_reason)
++                            != Some(IdleReason::Finished);
+                     self.current.state = Some(state.clone());
+                     self.post(Outbound::State(state)).await?;
++                    if ended {
++                        if let Some(outbound) = self.handle_internal(&Incoming::Command(LoungeCommand::Next)) {
++                            self.post(outbound).await?;
++                        }
++                        let _ = command_tx.send(LoungeCommand::Next).await;
++                    }
+                 }
+                 result = poll => {
+                     let batch = match result {
+diff --git a/crates/vibecast-core/src/hub.rs b/crates/vibecast-core/src/hub.rs
+index cb4b63d..52372e7 100644
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -372,8 +372,27 @@ impl DeviceHub {
+                 self.connections.insert(handle.id(), handle);
+             }
+             HubEvent::Server(ServerEvent::Disconnected { id, .. }) => {
++                // A sender can leave without sending an explicit Cast STOP.
++                // Keep sessions that still have another subscribed sender, but
++                // tear down sessions whose last sender connection disappeared;
++                // otherwise receiver status advertises a stale app forever.
++                let affected_sessions: Vec<String> = self
++                    .subscriptions
++                    .iter()
++                    .filter(|((conn, _), _)| *conn == id)
++                    .map(|(_, transport)| transport.clone())
++                    .collect();
+                 self.subscriptions.retain(|(conn, _), _| *conn != id);
+                 self.connections.remove(&id);
++                for session_id in affected_sessions {
++                    let still_subscribed = self
++                        .subscriptions
++                        .values()
++                        .any(|transport| transport == &session_id);
++                    if !still_subscribed {
++                        self.stop_session(&session_id).await;
++                    }
++                }
+             }
+             HubEvent::Server(ServerEvent::Message { handle, message }) => {
+                 self.on_message(&handle, message).await;
+@@ -488,6 +507,14 @@ impl DeviceHub {
+             }
+             ReceiverRequest::SetVolume(r) => {
+                 self.volume.apply_update(&r.volume);
++                for (id, session) in &mut self.sessions {
++                    session.coordinator.volume = self.volume.clone();
++                    self.player.send(PlayerCommand::Volume {
++                        session_id: id.clone(),
++                        level: self.volume.level,
++                        muted: self.volume.muted,
++                    }).await;
++                }
+                 let response = self.receiver_status(r.request_id);
+                 self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
+             }
+@@ -718,7 +745,17 @@ impl DeviceHub {
+                         })
+                         .await;
+                 }
+-                _ => {
++                Ok(ConnectionMessage::Close(_)) => {
++                    self.subscriptions.remove(&(conn_id, source));
++                    let still_subscribed = self
++                        .subscriptions
++                        .values()
++                        .any(|target| target == &transport);
++                    if !still_subscribed {
++                        self.stop_session(&transport).await;
++                    }
++                }
++                Err(_) => {
+                     self.subscriptions.remove(&(conn_id, source));
+                 }
+             },

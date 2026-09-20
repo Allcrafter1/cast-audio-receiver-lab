@@ -1,0 +1,132 @@
+diff --git a/crates/vibecast-apps-youtube/src/resolver.rs b/crates/vibecast-apps-youtube/src/resolver.rs
+index 09f5b3e..84ab444 100644
+--- a/crates/vibecast-apps-youtube/src/resolver.rs
++++ b/crates/vibecast-apps-youtube/src/resolver.rs
+@@ -1,5 +1,7 @@
+ //! YouTube video metadata and progressive-stream resolution.
+ 
++use std::process::Command;
++
+ use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
+ use base64::Engine as _;
+ use prost::Message as _;
+@@ -11,10 +13,12 @@ use vibecast_sdk::{
+     StreamType,
+ };
+ 
+-const CLIENT_NAME: &str = "ANDROID_VR";
+-const CLIENT_VERSION: &str = "1.57";
+-const CLIENT_USER_AGENT: &str =
+-    "com.google.android.apps.youtube.vr.oculus/1.57 (Linux; U; Android 12L; en_US)";
++// The VR client is currently challenged by YouTube for otherwise public
++// videos.  The regular Android client returns the same clear adaptive
++// formats without requiring a browser login or cookies.
++const CLIENT_NAME: &str = "ANDROID";
++const CLIENT_VERSION: &str = "20.10.38";
++const CLIENT_USER_AGENT: &str = "com.google.android.youtube/20.10.38";
+ 
+ pub(crate) const PREFERRED_VIDEO_CODEC_KEY: SettingKey<String> =
+     SettingKey::new("preferred_video_codec");
+@@ -137,10 +141,52 @@ impl Resolver {
+             ));
+         }
+ 
+-        playback_media(response, start_time, capabilities, preferred_video_codec)
++        let mut media = playback_media(response, start_time, capabilities, preferred_video_codec)?;
++
++        // Let the maintained extractor select an audio transport. HLS must
++        // be opened directly by the decoder, not piped as raw audio bytes.
++        let id = video_id.to_owned();
++        let url = tokio::task::spawn_blocking(move || external_audio_url(&id))
++            .await
++            .ok()
++            .flatten()
++            .ok_or(ResolveError::Protocol("external audio resolver failed"))?;
++        let content_type = if url.contains("/manifest/") {
++            "application/vnd.apple.mpegurl"
++        } else {
++            "application/octet-stream"
++        };
++        media.streams = vec![PlaybackStream::url(url, content_type)];
++
++        Ok(media)
+     }
+ }
+ 
++fn external_audio_url(video_id: &str) -> Option<String> {
++    let watch_url = format!("https://www.youtube.com/watch?v={video_id}");
++    let output = Command::new("timeout")
++        .args([
++            "35s",
++            "yt-dlp",
++            "--no-warnings",
++            "--no-playlist",
++            "-f",
++            "ba",
++            "--get-url",
++            &watch_url,
++        ])
++        .output()
++        .ok()?;
++    if !output.status.success() {
++        return None;
++    }
++    String::from_utf8(output.stdout)
++        .ok()?
++        .lines()
++        .find(|line| line.starts_with("https://"))
++        .map(str::to_owned)
++}
++
+ #[derive(Debug, Error)]
+ pub(crate) enum ResolveError {
+     #[error("YouTube HTTP request failed")]
+@@ -396,20 +442,25 @@ fn playback_media(
+         .map(|tracklist| tracklist.caption_tracks)
+         .unwrap_or_default();
+ 
+-    let (manifest, stream_duration) = build_dash_manifest(
+-        &formats,
+-        &caption_tracks,
+-        capabilities,
+-        preferred_video_codec,
+-    )?;
++    // This receiver is primarily an audio endpoint.  Returning the selected
++    // audio rendition directly avoids handing MPV a synthetic DASH document
++    // whose signed Googlevideo BaseURLs require special HTTP headers and are
++    // otherwise intercepted by MPV's yt-dlp hook.  The URL is freshly signed
++    // for every LOAD, so it remains short-lived and is never persisted.
++    let audio = formats
++        .iter()
++        .filter_map(AudioRep::from_format)
++        .filter(|rep| capabilities.audio_codecs.iter().any(|codec| codec == rep.codec.token()))
++        .max_by_key(|rep| rep.bitrate)
++        .ok_or(ResolveError::NoCompatibleStream)?;
++    let audio_url = audio.url.to_owned();
++    let audio_content_type = audio.container.to_owned();
+ 
+-    let duration = stream_duration.or_else(|| {
++    let duration = details.as_ref().and_then(|details| {
+         details
+-            .as_ref()?
+             .length_seconds
+-            .as_deref()?
+-            .parse::<f64>()
+-            .ok()
++            .as_deref()
++            .and_then(|value| value.parse::<f64>().ok())
+     });
+     let images = details
+         .as_ref()
+@@ -430,10 +481,7 @@ fn playback_media(
+ 
+     Ok(PlaybackMedia {
+         session_id: String::new(),
+-        streams: vec![PlaybackStream::inline_manifest(
+-            manifest,
+-            "application/dash+xml",
+-        )],
++        streams: vec![PlaybackStream::url(audio_url, audio_content_type)],
+         stream_type: StreamType::Buffered,
+         content_id: details
+             .as_ref()

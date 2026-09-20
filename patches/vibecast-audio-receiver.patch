@@ -1,0 +1,72 @@
+diff --git a/crates/vibecast-discovery/src/mdns.rs b/crates/vibecast-discovery/src/mdns.rs
+--- a/crates/vibecast-discovery/src/mdns.rs
++++ b/crates/vibecast-discovery/src/mdns.rs
+@@ -57,7 +57,7 @@ impl CastServiceTxt {
+             friendly_name: friendly_name.into(),
+             id: clean_id.into(),
+             cd: cert_digest.to_uppercase(),
+-            ca: "463365".into(),
++            ca: "199428".into(),
+             bs: bs.into(),
+             st: "0".into(),
+             nf: "1".into(),
+@@ -363,7 +363,7 @@ mod tests {
+         assert_eq!(txt.friendly_name, "Living Room");
+         assert_eq!(txt.id, "12345678123412341234123456789abc");
+         assert_eq!(txt.cd, "ABCDEF"); // uppercased
+-        assert_eq!(txt.ca, "463365");
++        assert_eq!(txt.ca, "199428");
+         assert_eq!(txt.st, "0");
+         assert_eq!(txt.ic, "/setup/icon.png");
+         assert_eq!(
+diff --git a/crates/vibecast-messages/src/discovery.rs b/crates/vibecast-messages/src/discovery.rs
+--- a/crates/vibecast-messages/src/discovery.rs
++++ b/crates/vibecast-messages/src/discovery.rs
+@@ -51,7 +51,7 @@ impl DeviceInfoResponse {
+             device_id,
+             device_model,
+             friendly_name,
+-            device_capabilities: 4101,
++            device_capabilities: 199428,
+             device_icon_url: String::new(),
+             control_notifications: 1,
+             receiver_metrics_id: String::new(),
+diff --git a/crates/vibecast-messages/src/tests.rs b/crates/vibecast-messages/src/tests.rs
+--- a/crates/vibecast-messages/src/tests.rs
++++ b/crates/vibecast-messages/src/tests.rs
+@@ -155,7 +155,7 @@ fn device_info_response_has_defaults_and_camel_case() {
+     .unwrap();
+     assert_eq!(value["type"], "DEVICE_INFO");
+     assert_eq!(value["deviceId"], "dev-id");
+-    assert_eq!(value["deviceCapabilities"], 4101);
++    assert_eq!(value["deviceCapabilities"], 199428);
+     assert_eq!(value["controlNotifications"], 1);
+ }
+ 
+diff --git a/crates/vibecast-platform/src/manager.rs b/crates/vibecast-platform/src/manager.rs
+--- a/crates/vibecast-platform/src/manager.rs
++++ b/crates/vibecast-platform/src/manager.rs
+@@ -172,7 +172,7 @@ impl PlayerManager {
+         }
+
+         let device_id = player_device_id(&self.config.installation_id, &player_id);
+-        let friendly_name = format!("{} [vibecast]", registration.name);
++        let friendly_name = registration.name.clone();
+         let eureka_identity = self.eureka_identity(&friendly_name, &device_id);
+
+         let params = ReceiverParams {
+diff --git a/crates/vibecast-platform/src/lib.rs b/crates/vibecast-platform/src/lib.rs
+--- a/crates/vibecast-platform/src/lib.rs
++++ b/crates/vibecast-platform/src/lib.rs
+@@ -260,8 +260,9 @@ pub async fn start(
+     // --- shared HTTP client (User-Agent + CAST-DEVICE-CAPABILITIES + timeout) ---
+     let http = build_http_client(&config)?;
+
+-    // Device-auth CRL: prefer the manifest's embedded CRL, else fetch from Google.
+-    let crl = resolve_crl(&http, bundle.crl.clone()).await;
++    // Replay bundles must reproduce the captured response. Do not attach a
++    // newer Google CRL unless the bundle explicitly contains that exact CRL.
++    let crl = bundle.crl.clone();
+
+     // --- shared player bridge (registration + proxy hosting) ---
+     let (events_tx, events_rx) = mpsc::channel(64);

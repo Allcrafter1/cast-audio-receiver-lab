@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install -e '.[youtube,legacy-research,dlna,sonos]'
+      - run: PYTHONPATH=src:. python -m unittest discover -s tests -v
+      - name: Build and inspect runtime wheel
+        if: matrix.python == '3.12'
+        run: |
+          python -m pip wheel --no-deps --wheel-dir dist .
+          python tools/check_release_wheel.py dist/cast_audio_receiver_lab-*.whl
+
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.1
+          components: rustfmt
+      - name: Reconstruct maintained Vibecast source
+        run: |
+          git clone https://github.com/Allcrafter1/vibecast.git /tmp/vibecast
+          git -C /tmp/vibecast checkout --detach f28befe02fe930db300294d6bf49cdf5fec5a747
+      - name: Test changed frontend crates
+        working-directory: /tmp/vibecast
+        run: >-
+          cargo test --locked
+          -p vibecast-apps-default-media
+          -p vibecast-apps-youtube
+          -p vibecast-bridge
+          -p vibecast-core
+          -p vibecast-player-api
+          -p vibecast-sdk
+          --lib
+      - name: Verify formatting of maintained files
+        working-directory: /tmp/vibecast
+        run: cargo fmt --all -- --check
+
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Containerfile
+          platforms: linux/amd64
+          push: false
+          tags: cast-audio-receiver:ci

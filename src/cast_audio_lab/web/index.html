@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Audio Lab · Speaker</title><link rel="icon" type="image/svg+xml" href="favicon.svg"><link rel="stylesheet" href="style.css"><script src="app.js" defer></script></head>
+<body><main>
+<header><p class="eyebrow">CAST AUDIO RECEIVER LAB</p><h1>Deine Speaker.</h1><p>Ausgaben verwalten. Feste Identitäten behalten.</p><span id="version"></span></header>
+<p id="message" role="status" aria-live="polite"></p>
+<div id="admin">
+<section><div class="heading"><h2>Konfigurierte Ausgaben</h2><button id="refresh" class="secondary">Aktualisieren</button></div><p>Umbenennen oder Deaktivieren startet nur die betroffene Ausgabe neu bzw. beendet sie. Laufende Musik wird dabei unterbrochen.</p><div id="routes"></div></section>
+<section><h2>Lokale Ausgabe</h2><p id="local-hint">Lokale Ausgabe wird geladen …</p><label>Cast-Name <input id="local-name" maxlength="80" value="Linux Speaker"></label><button id="add-local" disabled>Hinzufügen</button></section>
+<section><div class="heading"><h2>AirPlay-Ziele</h2><button id="scan">Netzwerk durchsuchen</button></div><p>Nur ausdrücklich ausgewählte Ziele werden importiert. Wähle den gewünschten Protokoll-Endpunkt; unbekannte Reverse-Bridges können nicht zuverlässig erkannt werden.</p><div id="candidates"></div></section>
+<section><h2>Experimentelle Netzwerk-Ausgaben</h2><p>DLNA und Sonos sind implementiert, aber noch nicht an echter Hardware bestätigt. Neue Ausgaben bleiben zunächst deaktiviert.</p>
+<label>DLNA-Name <input id="dlna-name" maxlength="80" value="DLNA Speaker"></label><label>Gerätebeschreibung (URL) <input id="dlna-url" placeholder="http://192.168.1.20:49152/device.xml"></label><button id="add-dlna">DLNA hinzufügen</button>
+<label>Sonos-Name <input id="sonos-name" maxlength="80" value="Sonos Speaker"></label><label>Sonos-IP/Hostname <input id="sonos-host" placeholder="192.168.1.21"></label><button id="add-sonos">Sonos hinzufügen</button></section>
+<footer>Experimentelle Software · „Prozess läuft“ ist noch keine Bestätigung für eine Cast-Verbindung oder hörbaren Ton. Pairing-Geheimnisse und Logs sind hier nicht abrufbar.</footer>
+</div></main></body></html>

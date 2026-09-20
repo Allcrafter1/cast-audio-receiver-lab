@@ -1,0 +1,1075 @@
+diff --git a/crates/vibecast-apps-youtube/src/lib.rs b/crates/vibecast-apps-youtube/src/lib.rs
+index 253f5d9..15d3af7 100644
+--- a/crates/vibecast-apps-youtube/src/lib.rs
++++ b/crates/vibecast-apps-youtube/src/lib.rs
+@@ -18,7 +18,7 @@ use vibecast_sdk::{
+ use lounge::{LoungeCommand, LoungeConnection, LoungeIdentity};
+ use resolver::{PreferredVideoCodec, ResolveError, Resolver, PREFERRED_VIDEO_CODEC_KEY};
+ 
+-const APP_IDS: &[&str] = &["233637DE"];
++const APP_IDS: &[&str] = &["233637DE", "2DB7CC49"];
+ const MDX_NAMESPACE: &str = "urn:x-cast:com.google.youtube.mdx";
+ const CUSTOM_DATA_NAMESPACE: &str = "urn:x-cast:com.google.cast.customdata";
+ const ICON_URL: &str = "https://www.gstatic.com/youtube/img/branding/favicon/favicon_144x144.png";
+@@ -73,6 +73,7 @@ impl AppProvider for YouTube {
+ 
+         let (command_tx, command_rx) = mpsc::channel(32);
+         let (playback_tx, playback_rx) = mpsc::channel(32);
++        let (volume_tx, volume_rx) = watch::channel((1.0, false));
+         let (identity_tx, identity) = watch::channel(None);
+         let (cancel, _) = watch::channel(false);
+         tokio::spawn(run_commands(
+@@ -89,6 +90,7 @@ impl AppProvider for YouTube {
+             command_tx,
+             playback_rx,
+             identity_tx,
++            volume_rx,
+             cancel.subscribe(),
+         ));
+ 
+@@ -97,6 +99,7 @@ impl AppProvider for YouTube {
+             capabilities: ctx.receiver.capabilities.clone(),
+             identity,
+             playback_tx,
++            volume_tx,
+             cancel,
+         }))
+     }
+@@ -107,6 +110,7 @@ struct YouTubeSession {
+     capabilities: vibecast_sdk::PlayerCapabilities,
+     identity: watch::Receiver<Option<LoungeIdentity>>,
+     playback_tx: mpsc::Sender<PlaybackState>,
++    volume_tx: watch::Sender<(f64, bool)>,
+     cancel: watch::Sender<bool>,
+ }
+ 
+@@ -174,6 +178,14 @@ impl AppSession for YouTubeSession {
+         let _ = self.playback_tx.try_send(state);
+     }
+ 
++    async fn on_volume_update(&self, _ctx: &AppContext, level: f64, muted: bool) {
++        self.volume_tx.send_if_modified(|value| {
++            if *value == (level, muted) { return false; }
++            *value = (level, muted);
++            true
++        });
++    }
++
+     async fn on_stop(&self, _ctx: &AppContext) {
+         let _ = self.cancel.send(true);
+     }
+@@ -185,6 +197,7 @@ async fn run_lounge(
+     command_tx: mpsc::Sender<LoungeCommand>,
+     playback_rx: mpsc::Receiver<PlaybackState>,
+     identity_tx: watch::Sender<Option<LoungeIdentity>>,
++    volume_rx: watch::Receiver<(f64, bool)>,
+     mut cancel: watch::Receiver<bool>,
+ ) {
+     let lounge = loop {
+@@ -213,7 +226,7 @@ async fn run_lounge(
+     };
+ 
+     let _ = identity_tx.send(Some(lounge.identity()));
+-    lounge.run(command_tx, playback_rx, cancel).await;
++    lounge.with_volume(volume_rx).run(command_tx, playback_rx, cancel).await;
+ }
+ 
+ #[derive(Default)]
+@@ -224,6 +237,40 @@ struct QueueState {
+     next_pending: bool,
+ }
+ 
++impl QueueState {
++    fn advances_to_prepared_next(&self, command: &LoungeCommand) -> bool {
++        match command {
++            LoungeCommand::Next => true,
++            LoungeCommand::SetPlaylist { video_ids, current_index, current_time, list_id } => {
++                self.list_id.is_some()
++                    && self.list_id == *list_id
++                    && *current_time == 0.0
++                    && *current_index == self.current_index + 1
++                    && video_ids.get(*current_index).is_some()
++                    && video_ids.get(*current_index) == self.video_ids.get(self.current_index + 1)
++            }
++            _ => false,
++        }
++    }
++}
++
++// One session-local speculative result; never written to disk. Dropping it
++// cancels the async task, so obsolete results cannot start playback.
++struct NextResolution {
++    video_id: String,
++    task: Option<tokio::task::JoinHandle<(Result<PlaybackMedia, ResolveError>, std::time::Instant)>>,
++}
++
++impl Drop for NextResolution {
++    fn drop(&mut self) {
++        if let Some(task) = &self.task { task.abort(); }
++    }
++}
++
++fn prefetched_is_fresh(completed: std::time::Instant) -> bool {
++    completed.elapsed() < std::time::Duration::from_secs(600)
++}
++
+ async fn run_commands(
+     mut commands: mpsc::Receiver<LoungeCommand>,
+     resolver: Resolver,
+@@ -233,6 +280,8 @@ async fn run_commands(
+     mut cancel: watch::Receiver<bool>,
+ ) {
+     let mut queue = QueueState::default();
++    let mut next_resolution: Option<NextResolution> = None;
++    let mut playback_active = false;
+     loop {
+         let command = tokio::select! {
+             result = cancel.changed() => {
+@@ -247,6 +296,14 @@ async fn run_commands(
+             }
+         };
+ 
++        // New-queue selections keep their established load/coalescing path.
++        // Only explicit/automatic Next consumes speculative media.
++        let use_prefetch = queue.advances_to_prepared_next(&command);
++        if let LoungeCommand::SetPlaylist { current_index, video_ids, current_time, list_id } = &command {
++            tracing::info!(index = *current_index, queue_len = video_ids.len(),
++                start = *current_time, same_queue = queue.list_id.is_some() && queue.list_id == *list_id,
++                use_prefetch, "YouTube playlist selection");
++        }
+         let load = match command {
+             LoungeCommand::SetPlaylist {
+                 video_ids,
+@@ -304,22 +361,70 @@ async fn run_commands(
+                 playback.seek(position).await;
+                 None
+             }
++            LoungeCommand::Stop => {
++                queue.next_pending = false;
++                playback_active = false;
++                next_resolution = None;
++                playback.stop().await;
++                None
++            }
+         };
+ 
+         if let Some((video_id, start_time)) = load {
++            tracing::info!(%video_id, start_time, "YouTube queue requests load");
+             let snapshot = settings.snapshot();
+             let preferred_video_codec = PreferredVideoCodec::from_snapshot(&snapshot);
+-            match resolver
+-                .resolve(&video_id, start_time, &capabilities, preferred_video_codec)
+-                .await
+-            {
+-                Ok(media) => playback.load(media).await,
++            let mut prepared = None;
++            if let Some(mut pending) = next_resolution.take() {
++                if use_prefetch && pending.video_id == video_id {
++                    if let Some(task) = pending.task.as_mut() {
++                        if let Ok((Ok(mut media), completed)) = task.await {
++                            if prefetched_is_fresh(completed) {
++                                media.start_time = start_time.max(0.0);
++                                prepared = Some(media);
++                                tracing::info!(%video_id, "using prefetched YouTube media");
++                            }
++                        }
++                    }
++                }
++            }
++            let result = match prepared {
++                Some(media) => Ok(media),
++                None => resolver.resolve(&video_id, start_time, &capabilities, preferred_video_codec).await,
++            };
++            match result {
++                Ok(media) => {
++                    playback_active = true;
++                    playback.load(media).await;
++                }
+                 Err(error) => {
++                    playback_active = false;
+                     tracing::warn!(%video_id, %error, "failed to resolve YouTube video");
+                     playback.stop().await;
+                 }
+             }
+         }
++
++        let candidate = if playback_active {
++            queue.video_ids.get(queue.current_index + 1).cloned()
++        } else { None };
++        if next_resolution.as_ref().map(|p| &p.video_id) != candidate.as_ref() {
++            next_resolution = None;
++            if let Some(video_id) = candidate {
++                let resolver = resolver.clone();
++                let capabilities = capabilities.clone();
++                let codec = PreferredVideoCodec::from_snapshot(&settings.snapshot());
++                let id = video_id.clone();
++                tracing::info!(%video_id, "prefetching next YouTube media");
++                next_resolution = Some(NextResolution {
++                    video_id,
++                    task: Some(tokio::spawn(async move {
++                        let result = resolver.resolve(&id, 0.0, &capabilities, codec).await;
++                        (result, std::time::Instant::now())
++                    })),
++                });
++            }
++        }
+     }
+ }
+ 
+@@ -341,6 +446,38 @@ fn map_resolve_error(error: ResolveError) -> MediaResolveError {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn playlist_advance_can_use_prefetch_but_new_selection_cannot() {
++        let queue = QueueState { video_ids: vec!["a".into(), "b".into()],
++            current_index: 0, list_id: Some("queue".into()), next_pending: false };
++        let selection = |list: &str, index, time| LoungeCommand::SetPlaylist {
++            video_ids: vec!["a".into(), "b".into()], current_index: index,
++            current_time: time, list_id: Some(list.into()),
++        };
++        assert!(queue.advances_to_prepared_next(&selection("queue", 1, 0.0)));
++        assert!(queue.advances_to_prepared_next(&LoungeCommand::Next));
++        assert!(!queue.advances_to_prepared_next(&selection("other", 1, 0.0)));
++        assert!(!queue.advances_to_prepared_next(&selection("queue", 0, 0.0)));
++        assert!(!queue.advances_to_prepared_next(&selection("queue", 1, 42.0)));
++    }
++    #[test]
++    fn prefetch_expires_after_ten_minutes() {
++        let now = std::time::Instant::now();
++        assert!(prefetched_is_fresh(now));
++        assert!(!prefetched_is_fresh(now - std::time::Duration::from_secs(601)));
++    }
++
++    #[tokio::test]
++    async fn dropping_prefetch_aborts_its_task() {
++        let task = tokio::spawn(async {
++            std::future::pending::<()>().await;
++            (Err(ResolveError::Protocol("unused")), std::time::Instant::now())
++        });
++        let handle = task.abort_handle();
++        drop(NextResolution { video_id: "unused".into(), task: Some(task) });
++        tokio::task::yield_now().await;
++        assert!(handle.is_finished());
++    }
+     use std::sync::Mutex;
+ 
+     #[derive(Default)]
+diff --git a/crates/vibecast-apps-youtube/src/lounge.rs b/crates/vibecast-apps-youtube/src/lounge.rs
+index 5010f8f..0332981 100644
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -7,7 +7,7 @@ use serde_json::Value;
+ use thiserror::Error;
+ use tokio::sync::{mpsc, watch};
+ use url::Url;
+-use vibecast_sdk::{PlaybackState, PlayerState, ReceiverContext};
++use vibecast_sdk::{IdleReason, PlaybackState, PlayerState, ReceiverContext};
+ 
+ const LOUNGE_BASE: &str = "https://www.youtube.com/api/lounge";
+ const USER_AGENT: &str =
+@@ -28,11 +28,13 @@ pub(crate) enum LoungeCommand {
+     },
+     Play,
+     Pause,
++    Stop,
+     Seek(f64),
+     Next,
+ }
+ 
+ pub(crate) struct LoungeConnection {
++    volume_rx: Option<watch::Receiver<(f64, bool)>>,
+     http: reqwest::Client,
+     bind_url: Url,
+     bound: BoundSession,
+@@ -59,6 +61,8 @@ struct BoundSession {
+ 
+ #[derive(Default)]
+ struct CurrentMedia {
++    volume: Option<(f64, bool)>,
++    awaiting_load: bool,
+     video_ids: Vec<String>,
+     video_id: Option<String>,
+     list_id: Option<String>,
+@@ -67,6 +71,34 @@ struct CurrentMedia {
+     state: Option<PlaybackState>,
+ }
+ 
++impl CurrentMedia {
++    fn coalesce_pending_selection(&self, incoming: Incoming) -> Incoming {
++        if let Incoming::Command(LoungeCommand::SetPlaylist {
++            ref video_ids, current_index, current_time, ref list_id,
++        }) = incoming {
++            if self.awaiting_load
++                && self.video_id.is_some()
++                && self.video_id.as_ref() == video_ids.get(current_index)
++                && self.current_index == current_index
++                && self.state.as_ref().is_some_and(|s| s.current_time == current_time)
++            {
++                tracing::info!("coalesced pending YouTube selection into queue update");
++                return Incoming::Command(LoungeCommand::UpdatePlaylist {
++                    video_ids: video_ids.clone(), list_id: list_id.clone(),
++                });
++            }
++        }
++        incoming
++    }
++}
++
++async fn volume_change(rx: &mut Option<watch::Receiver<(f64, bool)>>) -> (f64, bool) {
++    if let Some(rx) = rx {
++        if rx.changed().await.is_ok() { return *rx.borrow_and_update(); }
++    }
++    std::future::pending().await
++}
++
+ #[derive(Debug, Error)]
+ pub(crate) enum LoungeError {
+     #[error("YouTube Lounge HTTP request failed")]
+@@ -78,6 +110,12 @@ pub(crate) enum LoungeError {
+ }
+ 
+ impl LoungeConnection {
++    pub(crate) fn with_volume(mut self, rx: watch::Receiver<(f64, bool)>) -> Self {
++        self.current.volume = Some(*rx.borrow());
++        self.volume_rx = Some(rx);
++        self
++    }
++
+     pub(crate) async fn establish(
+         http: reqwest::Client,
+         receiver: &ReceiverContext,
+@@ -134,6 +172,7 @@ impl LoungeConnection {
+         let bound = initial_bind(&http, &bind_url).await?;
+ 
+         Ok(Self {
++            volume_rx: None,
+             http,
+             bind_url,
+             bound,
+@@ -197,8 +236,19 @@ impl LoungeConnection {
+         self.post(Outbound::NowPlaying).await?;
+ 
+         loop {
+-            let poll = poll_commands(&self.http, &self.bind_url, &self.bound);
++            // Keep the long poll alive while playback reports arrive. Dropping
++            // it on every position update starves incoming controls.
++            let http = self.http.clone();
++            let bind_url = self.bind_url.clone();
++            let bound = self.bound.clone();
++            let poll = poll_commands(&http, &bind_url, &bound);
++            tokio::pin!(poll);
++            loop {
+             tokio::select! {
++                volume = volume_change(&mut self.volume_rx) => {
++                    self.current.volume = Some(volume);
++                    self.post(Outbound::Volume).await?;
++                }
+                 result = cancel.changed() => {
+                     if result.is_err() || *cancel.borrow() {
+                         return Ok(());
+@@ -206,28 +256,50 @@ impl LoungeConnection {
+                 }
+                 state = playback_rx.recv() => {
+                     let Some(state) = state else { return Ok(()); };
++                    if self.current.awaiting_load {
++                        if state.player_state != PlayerState::Buffering
++                            && !matches!(state.idle_reason, Some(IdleReason::Error | IdleReason::Cancelled)) {
++                            continue;
++                        }
++                        self.current.awaiting_load = false;
++                    }
++                    let ended = state.idle_reason == Some(IdleReason::Finished)
++                        && self.current.state.as_ref().and_then(|s| s.idle_reason)
++                            != Some(IdleReason::Finished);
+                     self.current.state = Some(state.clone());
+                     self.post(Outbound::State(state)).await?;
++                    if ended {
++                        if let Some(outbound) = self.handle_internal(&Incoming::Command(LoungeCommand::Next)) {
++                            self.post(outbound).await?;
++                        }
++                        let _ = command_tx.send(LoungeCommand::Next).await;
++                    }
+                 }
+-                result = poll => {
++                result = &mut poll => {
+                     let batch = match result {
+                         Ok(batch) => batch,
+-                        Err(LoungeError::Http(error)) if error.is_timeout() => continue,
++                        Err(LoungeError::Http(error)) if error.is_timeout() => break,
+                         Err(error) => return Err(error),
+                     };
+                     self.bound.aid = self.bound.aid.max(batch.aid);
+                     for incoming in batch.messages {
+-                        if let Some(outbound) = self.handle_internal(&incoming) {
+-                            self.post(outbound).await?;
+-                        }
++                        let incoming = self.current.coalesce_pending_selection(incoming);
++                        let outbound = self.handle_internal(&incoming);
+                         if let Incoming::Command(command) = incoming {
+                             if command_tx.send(command).await.is_err() {
+                                 return Ok(());
+                             }
+                         }
++                        // Local playback need not wait for Google's HTTP ACK.
++                        // Internal buffering/queue state was already updated.
++                        if let Some(outbound) = outbound {
++                            self.post(outbound).await?;
++                        }
+                     }
++                    break;
+                 }
+             }
++            }
+         }
+     }
+ 
+@@ -240,6 +312,7 @@ impl LoungeConnection {
+                 list_id,
+             }) => {
+                 self.current.video_ids.clone_from(video_ids);
++                self.current.awaiting_load = true;
+                 self.current.video_id = video_ids.get(*current_index).cloned();
+                 self.current.current_index = *current_index;
+                 self.current.list_id.clone_from(list_id);
+@@ -270,6 +343,13 @@ impl LoungeConnection {
+                 None
+             }
+             Incoming::Command(LoungeCommand::Next) => {
++                self.current.awaiting_load = true;
++                self.current.state = Some(PlaybackState {
++                    player_state: PlayerState::Buffering,
++                    current_time: 0.0,
++                    duration: None,
++                    idle_reason: None,
++                });
+                 if self.current.current_index + 1 < self.current.video_ids.len() {
+                     self.current.current_index += 1;
+                     self.current.video_id = self
+@@ -362,9 +442,10 @@ impl Outbound {
+                     .append_pair("req0_playbackSpeed", "1");
+             }
+             Self::Volume => {
++                let (level, muted) = current.volume.unwrap_or((1.0, false));
+                 form.append_pair("req0__sc", "onVolumeChanged")
+-                    .append_pair("req0_volume", "100")
+-                    .append_pair("req0_muted", "false");
++                    .append_pair("req0_volume", &(level.clamp(0.0, 1.0) * 100.0).round().to_string())
++                    .append_pair("req0_muted", if muted { "true" } else { "false" });
+             }
+             Self::DiscoveryDeviceId => {
+                 form.append_pair("req0__sc", "setDiscoveryDeviceId")
+@@ -523,6 +604,8 @@ fn parse_incoming(bytes: &[u8]) -> Result<IncomingBatch, LoungeError> {
+             let Some(message) = parts.get(1).and_then(Value::as_array) else {
+                 continue;
+             };
++            tracing::info!(sequence = parts.first().and_then(serde_json::Value::as_u64),
++                command = message.first().and_then(serde_json::Value::as_str), "Lounge incoming command");
+             messages.push(parse_message(message));
+         }
+     }
+@@ -539,6 +622,7 @@ fn parse_message(message: &[Value]) -> Incoming {
+         "updatePlaylist" => parse_update_playlist(params),
+         "play" => Some(LoungeCommand::Play),
+         "pause" => Some(LoungeCommand::Pause),
++        "stopVideo" | "stop" => Some(LoungeCommand::Stop),
+         "next" => Some(LoungeCommand::Next),
+         "seekTo" => params
+             .and_then(|value| value.get("newTime"))
+@@ -761,6 +845,38 @@ struct LoungeTokenScreen {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn volume_reply_uses_actual_level_and_mute() {
++        let current = CurrentMedia { volume: Some((0.5, true)), ..Default::default() };
++        let body = Outbound::Volume.form_body(0, &current, "device", "lounge");
++        assert!(body.contains("req0_volume=50"));
++        assert!(body.contains("req0_muted=true"));
++    }
++
++    #[test]
++    fn pending_selection_updates_queue_without_second_load() {
++        let mut current = CurrentMedia {
++            awaiting_load: true,
++            video_id: Some("a".into()),
++            state: Some(PlaybackState { player_state: PlayerState::Buffering,
++                current_time: 0.0, duration: None, idle_reason: None }),
++            ..Default::default()
++        };
++        let selection = |video: &str, position| Incoming::Command(LoungeCommand::SetPlaylist {
++            video_ids: vec![video.into(), "next".into()], current_index: 0,
++            current_time: position, list_id: Some("new-queue".into()),
++        });
++        assert!(matches!(current.coalesce_pending_selection(selection("a", 0.0)),
++            Incoming::Command(LoungeCommand::UpdatePlaylist { video_ids, list_id })
++                if video_ids == ["a", "next"] && list_id.as_deref() == Some("new-queue")));
++        for command in [selection("b", 0.0), selection("a", 42.0)] {
++            assert!(matches!(current.coalesce_pending_selection(command),
++                Incoming::Command(LoungeCommand::SetPlaylist { .. })));
++        }
++        current.awaiting_load = false;
++        assert!(matches!(current.coalesce_pending_selection(selection("a", 0.0)),
++            Incoming::Command(LoungeCommand::SetPlaylist { .. })));
++    }
+     use std::path::PathBuf;
+     use wiremock::matchers::{method, path};
+     use wiremock::{Mock, MockServer, ResponseTemplate};
+@@ -945,6 +1061,7 @@ mod tests {
+             .await;
+ 
+         let mut connection = LoungeConnection {
++            volume_rx: None,
+             http: reqwest::Client::new(),
+             bind_url: Url::parse(&format!("{}/api/lounge/bc/bind", server.uri())).unwrap(),
+             bound: BoundSession {
+diff --git a/crates/vibecast-apps-youtube/src/resolver.rs b/crates/vibecast-apps-youtube/src/resolver.rs
+index 09f5b3e..23785d3 100644
+--- a/crates/vibecast-apps-youtube/src/resolver.rs
++++ b/crates/vibecast-apps-youtube/src/resolver.rs
+@@ -1,5 +1,7 @@
+ //! YouTube video metadata and progressive-stream resolution.
+ 
++use std::process::Command;
++
+ use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
+ use base64::Engine as _;
+ use prost::Message as _;
+@@ -11,10 +13,12 @@ use vibecast_sdk::{
+     StreamType,
+ };
+ 
+-const CLIENT_NAME: &str = "ANDROID_VR";
+-const CLIENT_VERSION: &str = "1.57";
+-const CLIENT_USER_AGENT: &str =
+-    "com.google.android.apps.youtube.vr.oculus/1.57 (Linux; U; Android 12L; en_US)";
++// The VR client is currently challenged by YouTube for otherwise public
++// videos.  The regular Android client returns the same clear adaptive
++// formats without requiring a browser login or cookies.
++const CLIENT_NAME: &str = "ANDROID";
++const CLIENT_VERSION: &str = "20.10.38";
++const CLIENT_USER_AGENT: &str = "com.google.android.youtube/20.10.38";
+ 
+ pub(crate) const PREFERRED_VIDEO_CODEC_KEY: SettingKey<String> =
+     SettingKey::new("preferred_video_codec");
+@@ -95,6 +99,43 @@ impl Resolver {
+         start_time: f64,
+         capabilities: &PlayerCapabilities,
+         preferred_video_codec: PreferredVideoCodec,
++    ) -> Result<PlaybackMedia, ResolveError> {
++        let started = std::time::Instant::now();
++        // Metadata and checked audio extraction are independent network work.
++        // Join both futures rather than waiting for metadata before extraction.
++        let metadata = self.resolve_metadata(video_id, start_time, capabilities, preferred_video_codec);
++        let audio = async {
++            let id = video_id.to_owned();
++            let result = tokio::task::spawn_blocking(move || external_audio_url(&id)).await;
++            let elapsed = started.elapsed().as_millis();
++            (result, elapsed)
++        };
++        let metadata = async {
++            let result = metadata.await;
++            (result, started.elapsed().as_millis())
++        };
++        let ((media, metadata_ms), (audio, audio_ms)) = tokio::join!(metadata, audio);
++        tracing::info!(%video_id, metadata_ms = metadata_ms as u64,
++            audio_ms = audio_ms as u64, total_ms = started.elapsed().as_millis() as u64,
++            "YouTube parallel resolution completed");
++        let mut media = media?;
++        let url = audio.ok().flatten()
++            .ok_or(ResolveError::Protocol("external audio resolver failed"))?;
++        let content_type = if url.contains("/manifest/") {
++            "application/vnd.apple.mpegurl"
++        } else {
++            "application/octet-stream"
++        };
++        media.streams = vec![PlaybackStream::url(url, content_type)];
++        Ok(media)
++    }
++
++    async fn resolve_metadata(
++        &self,
++        video_id: &str,
++        start_time: f64,
++        capabilities: &PlayerCapabilities,
++        preferred_video_codec: PreferredVideoCodec,
+     ) -> Result<PlaybackMedia, ResolveError> {
+         let mut watch_url = Url::parse(&self.endpoints.watch)
+             .map_err(|_| ResolveError::Protocol("invalid watch endpoint"))?;
+@@ -141,6 +182,34 @@ impl Resolver {
+     }
+ }
+ 
++fn external_audio_url(video_id: &str) -> Option<String> {
++    let watch_url = format!("https://www.youtube.com/watch?v={video_id}");
++    let output = Command::new("timeout")
++        .args([
++            "35s",
++            "yt-dlp",
++            "--no-warnings",
++            "--no-playlist",
++            // A listed format may still return HTTP 403. Let the upstream
++            // extractor probe candidates before handing a URL to the player.
++            "--check-formats",
++            "-f",
++            "ba",
++            "--get-url",
++            &watch_url,
++        ])
++        .output()
++        .ok()?;
++    if !output.status.success() {
++        return None;
++    }
++    String::from_utf8(output.stdout)
++        .ok()?
++        .lines()
++        .find(|line| line.starts_with("https://"))
++        .map(str::to_owned)
++}
++
+ #[derive(Debug, Error)]
+ pub(crate) enum ResolveError {
+     #[error("YouTube HTTP request failed")]
+@@ -396,20 +465,25 @@ fn playback_media(
+         .map(|tracklist| tracklist.caption_tracks)
+         .unwrap_or_default();
+ 
+-    let (manifest, stream_duration) = build_dash_manifest(
+-        &formats,
+-        &caption_tracks,
+-        capabilities,
+-        preferred_video_codec,
+-    )?;
++    // This receiver is primarily an audio endpoint.  Returning the selected
++    // audio rendition directly avoids handing MPV a synthetic DASH document
++    // whose signed Googlevideo BaseURLs require special HTTP headers and are
++    // otherwise intercepted by MPV's yt-dlp hook.  The URL is freshly signed
++    // for every LOAD, so it remains short-lived and is never persisted.
++    let audio = formats
++        .iter()
++        .filter_map(AudioRep::from_format)
++        .filter(|rep| capabilities.audio_codecs.iter().any(|codec| codec == rep.codec.token()))
++        .max_by_key(|rep| rep.bitrate)
++        .ok_or(ResolveError::NoCompatibleStream)?;
++    let audio_url = audio.url.to_owned();
++    let audio_content_type = audio.container.to_owned();
+ 
+-    let duration = stream_duration.or_else(|| {
++    let duration = details.as_ref().and_then(|details| {
+         details
+-            .as_ref()?
+             .length_seconds
+-            .as_deref()?
+-            .parse::<f64>()
+-            .ok()
++            .as_deref()
++            .and_then(|value| value.parse::<f64>().ok())
+     });
+     let images = details
+         .as_ref()
+@@ -430,10 +504,7 @@ fn playback_media(
+ 
+     Ok(PlaybackMedia {
+         session_id: String::new(),
+-        streams: vec![PlaybackStream::inline_manifest(
+-            manifest,
+-            "application/dash+xml",
+-        )],
++        streams: vec![PlaybackStream::url(audio_url, audio_content_type)],
+         stream_type: StreamType::Buffered,
+         content_id: details
+             .as_ref()
+@@ -1125,6 +1196,19 @@ fn valid_video_id(value: &str) -> bool {
+ 
+ #[cfg(test)]
+ mod tests {
++    #[tokio::test]
++    #[ignore = "explicit live network probe; requires yt-dlp on PATH"]
++    async fn live_parallel_audio_resolution() {
++        let resolver = super::Resolver::new(reqwest::Client::new());
++        for id in ["b7l31agg58g", "qXCwga3LUO0"] {
++            let started = std::time::Instant::now();
++            let result = resolver.resolve(id, 0.0, &Default::default(),
++                super::PreferredVideoCodec::Auto).await;
++            println!("live probe video={id} elapsed_ms={} success={}",
++                started.elapsed().as_millis(), result.is_ok());
++            assert!(result.is_ok(), "live resolution failed for {id}");
++        }
++    }
+     use super::*;
+     use wiremock::matchers::{method, path};
+     use wiremock::{Mock, MockServer, ResponseTemplate};
+diff --git a/crates/vibecast-core/src/hub.rs b/crates/vibecast-core/src/hub.rs
+index cb4b63d..981ee64 100644
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -212,6 +212,7 @@ impl DeviceHubHandle {
+ /// slow app (HTTP auth, token exchange, ...) never blocks the hub mailbox. Jobs
+ /// for one session run in the order the hub enqueues them.
+ enum AppJob {
++    VolumeUpdate { ctx: AppContext, level: f64, muted: bool },
+     /// A sender connected to the app transport.
+     SenderConnected { ctx: AppContext, sender_id: String },
+     /// A custom-namespace message arrived.
+@@ -233,6 +234,7 @@ enum AppJob {
+ async fn run_app_session(app: Arc<dyn AppSession>, mut jobs: mpsc::Receiver<AppJob>) {
+     while let Some(job) = jobs.recv().await {
+         match job {
++            AppJob::VolumeUpdate { ctx, level, muted } => app.on_volume_update(&ctx, level, muted).await,
+             AppJob::SenderConnected { ctx, sender_id } => {
+                 app.on_sender_connected(&ctx, &sender_id).await;
+             }
+@@ -313,16 +315,33 @@ pub struct DeviceHub {
+     subscriptions: HashMap<(u64, String), String>,
+     /// session id (== transport id) -> session.
+     sessions: HashMap<String, Session>,
++    session_owners: HashMap<String, u64>,
+     self_tx: mpsc::Sender<HubEvent>,
+     events: Option<mpsc::Receiver<HubEvent>>,
+ }
+ 
++fn volume_path(base: &std::path::Path, device_id: &str) -> PathBuf {
++    let key: String = device_id.bytes().map(|b| format!("{b:02x}")).collect();
++    base.join(format!("volume-{key}.json"))
++}
++
++fn prepare_volume_for_session(volume: &mut Volume) {
++    if volume.level == 0.0 {
++        volume.level = 0.1;
++        volume.muted = false;
++    }
++}
++
+ impl DeviceHub {
+     /// Build a hub. Feed it with [`handle`](Self::handle) and drive it with
+     /// [`run`](Self::run).
+     #[must_use]
+     pub fn new(config: HubConfig) -> Self {
+         let (tx, rx) = mpsc::channel(128);
++        let volume = std::fs::read(volume_path(&config.data_dir, &config.identity.device_id))
++            .ok().and_then(|bytes| serde_json::from_slice::<Volume>(&bytes).ok())
++            .filter(|v| v.level.is_finite() && (0.0..=1.0).contains(&v.level))
++            .unwrap_or(config.volume);
+         Self {
+             identity: config.identity,
+             registry: config.registry,
+@@ -330,7 +349,7 @@ impl DeviceHub {
+             proxy: config.proxy,
+             http: config.http,
+             data_dir: config.data_dir,
+-            volume: config.volume,
++            volume,
+             user_agent: config.user_agent,
+             cast_device_capabilities: config.cast_device_capabilities,
+             capabilities: config.capabilities,
+@@ -338,6 +357,7 @@ impl DeviceHub {
+             connections: HashMap::new(),
+             subscriptions: HashMap::new(),
+             sessions: HashMap::new(),
++            session_owners: HashMap::new(),
+             self_tx: tx,
+             events: Some(rx),
+         }
+@@ -372,8 +392,33 @@ impl DeviceHub {
+                 self.connections.insert(handle.id(), handle);
+             }
+             HubEvent::Server(ServerEvent::Disconnected { id, .. }) => {
++                let owned: Vec<String> = self.session_owners.iter()
++                    .filter(|(_, owner)| **owner == id)
++                    .map(|(session, _)| session.clone()).collect();
++                for session in owned {
++                    self.stop_session(&session).await;
++                }
++                // A sender can leave without sending an explicit Cast STOP.
++                // Keep sessions that still have another subscribed sender, but
++                // tear down sessions whose last sender connection disappeared;
++                // otherwise receiver status advertises a stale app forever.
++                let affected_sessions: Vec<String> = self
++                    .subscriptions
++                    .iter()
++                    .filter(|((conn, _), _)| *conn == id)
++                    .map(|(_, transport)| transport.clone())
++                    .collect();
+                 self.subscriptions.retain(|(conn, _), _| *conn != id);
+                 self.connections.remove(&id);
++                for session_id in affected_sessions {
++                    let still_subscribed = self
++                        .subscriptions
++                        .values()
++                        .any(|transport| transport == &session_id);
++                    if !still_subscribed {
++                        self.stop_session(&session_id).await;
++                    }
++                }
+             }
+             HubEvent::Server(ServerEvent::Message { handle, message }) => {
+                 self.on_message(&handle, message).await;
+@@ -488,6 +533,15 @@ impl DeviceHub {
+             }
+             ReceiverRequest::SetVolume(r) => {
+                 self.volume.apply_update(&r.volume);
++                for (id, session) in &mut self.sessions {
++                    session.coordinator.volume = self.volume.clone();
++                    self.player.send(PlayerCommand::Volume {
++                        session_id: id.clone(),
++                        level: self.volume.level,
++                        muted: self.volume.muted,
++                    }).await;
++                }
++                self.publish_volume().await;
+                 let response = self.receiver_status(r.request_id);
+                 self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
+             }
+@@ -495,6 +549,7 @@ impl DeviceHub {
+     }
+ 
+     async fn handle_launch(&mut self, conn_id: u64, source: &str, request: LaunchRequest) {
++        prepare_volume_for_session(&mut self.volume);
+         tracing::info!(
+             app_id = %request.app_id,
+             request_id = request.request_id,
+@@ -532,6 +587,7 @@ impl DeviceHub {
+         }
+ 
+         let session_id = Uuid::new_v4().to_string();
++        self.session_owners.insert(session_id.clone(), conn_id);
+         let (credentials, credentials_type) = request.resolved_credentials();
+         let app_key = manifest.app_key;
+         let data_dir = self.data_dir.join("apps").join(app_key);
+@@ -591,6 +647,11 @@ impl DeviceHub {
+             }
+         };
+ 
++        app.on_volume_update(&ctx, self.volume.level, self.volume.muted).await;
++        self.player.send(PlayerCommand::Volume {
++            session_id: session_id.clone(), level: self.volume.level, muted: self.volume.muted,
++        }).await;
++
+         let mut namespaces: Vec<String> = manifest
+             .namespaces
+             .iter()
+@@ -618,12 +679,14 @@ impl DeviceHub {
+             jobs: jobs_tx,
+         };
+         self.sessions.insert(session_id, session);
++        self.publish_volume().await;
+ 
+         let response = self.receiver_status(request.request_id);
+         self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
+     }
+ 
+     async fn stop_session(&mut self, session_id: &str) {
++        self.session_owners.remove(session_id);
+         let Some(session) = self.sessions.remove(session_id) else {
+             return;
+         };
+@@ -718,7 +781,17 @@ impl DeviceHub {
+                         })
+                         .await;
+                 }
+-                _ => {
++                Ok(ConnectionMessage::Close(_)) => {
++                    self.subscriptions.remove(&(conn_id, source));
++                    let still_subscribed = self
++                        .subscriptions
++                        .values()
++                        .any(|target| target == &transport);
++                    if !still_subscribed {
++                        self.stop_session(&transport).await;
++                    }
++                }
++                Err(_) => {
+                     self.subscriptions.remove(&(conn_id, source));
+                 }
+             },
+@@ -808,6 +881,9 @@ impl DeviceHub {
+                     })
+                     .await;
+                 self.notify_app(transport).await;
++                self.volume.level = level;
++                self.volume.muted = muted;
++                self.publish_volume().await;
+             }
+             MediaRequest::GetStatus(r) => {
+                 if let Some(session) = self.sessions.get(transport) {
+@@ -1151,6 +1227,22 @@ impl DeviceHub {
+ 
+     // -- player reports ---------------------------------------------------
+ 
++    async fn publish_volume(&mut self) {
++        let path = volume_path(&self.data_dir, &self.identity.device_id);
++        let tmp = path.with_extension("tmp");
++        let result = std::fs::create_dir_all(&self.data_dir).and_then(|_| {
++            std::fs::write(&tmp, serde_json::to_vec(&self.volume).expect("finite volume"))?;
++            std::fs::rename(&tmp, &path)
++        });
++        if let Err(error) = result { tracing::warn!(%error, "cannot persist receiver volume"); }
++        for session in self.sessions.values_mut() {
++            session.coordinator.volume = self.volume.clone();
++            let _ = session.jobs.send(AppJob::VolumeUpdate {
++                ctx: session.ctx.clone(), level: self.volume.level, muted: self.volume.muted,
++            }).await;
++        }
++    }
++
+     async fn on_report(&mut self, report: PlayerReport) {
+         let session_id = report.session_id().to_string();
+         if !self.sessions.contains_key(&session_id) {
+@@ -1162,8 +1254,20 @@ impl DeviceHub {
+                 current_time,
+                 duration,
+                 idle_reason,
++                volume,
++                muted,
+                 ..
+             } => {
++                let before = self.volume.clone();
++                if let Some(level) = volume.filter(|v| v.is_finite()) {
++                    self.volume.level = level.clamp(0.0, 1.0);
++                }
++                if let Some(muted) = muted { self.volume.muted = muted; }
++                if self.volume != before {
++                    self.publish_volume().await;
++                    let response = self.receiver_status(0);
++                    self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
++                }
+                 tracing::debug!(
+                     session_id = %session_id,
+                     state = ?player_state,
+@@ -1347,3 +1451,28 @@ fn parse_payload(message: &CastMessage) -> Option<serde_json::Value> {
+     let text = message.payload_utf8.as_deref()?;
+     serde_json::from_str(text).ok()
+ }
++
++#[cfg(test)]
++mod volume_tests {
++    use super::*;
++    #[test]
++    fn zero_promotes_only_at_session_start() {
++        let mut volume = Volume { level: 0.0, muted: true, ..Default::default() };
++        prepare_volume_for_session(&mut volume);
++        assert_eq!(volume.level, 0.1);
++        assert!(!volume.muted);
++        volume.level = 0.5;
++        prepare_volume_for_session(&mut volume);
++        assert_eq!(volume.level, 0.5);
++    }
++    #[test]
++    fn device_volume_paths_are_distinct_and_safe() {
++        let base = std::path::Path::new("/tmp");
++        let a = volume_path(base, "../a");
++        assert_eq!(a.parent(), Some(base));
++        assert_ne!(a, volume_path(base, "other"));
++        let volume = Volume { level: 0.5, muted: true, ..Default::default() };
++        let restored: Volume = serde_json::from_slice(&serde_json::to_vec(&volume).unwrap()).unwrap();
++        assert_eq!(restored, volume);
++    }
++}
+diff --git a/crates/vibecast-core/src/tests.rs b/crates/vibecast-core/src/tests.rs
+index 495457b..b834a67 100644
+--- a/crates/vibecast-core/src/tests.rs
++++ b/crates/vibecast-core/src/tests.rs
+@@ -462,11 +462,11 @@ async fn launch_load_and_play_end_to_end() {
+     assert_eq!(playing["status"][0]["playerState"], "PLAYING");
+     assert_eq!(playing["status"][0]["supportedMediaCommands"], 15);
+ 
+-    // The player received Load then Play; the manifest proxy was registered.
++    // Restore receiver volume before Load/Play; register the manifest proxy.
+     let commands = harness.player.commands();
+-    assert!(matches!(commands.first(), Some(PlayerCommand::Load { .. })));
++    assert!(matches!(commands.first(), Some(PlayerCommand::Volume { .. })));
+     assert!(matches!(commands.last(), Some(PlayerCommand::Play { .. })));
+-    if let Some(PlayerCommand::Load { media, .. }) = commands.first() {
++    if let Some(PlayerCommand::Load { media, .. }) = commands.get(1) {
+         assert!(media.streams[0].url.contains("/manifest/"));
+     }
+     assert!(harness
+@@ -542,6 +542,8 @@ async fn primary_player_report_broadcasts_status() {
+             current_time: 33.5,
+             duration: Some(120.0),
+             idle_reason: None,
++            volume: None,
++            muted: None,
+         })
+         .await
+         .unwrap();
+@@ -628,14 +630,15 @@ async fn app_driven_playback_uses_canonical_media_path() {
+     assert_eq!(stopped["status"][0]["idleReason"], "CANCELLED");
+ 
+     let commands = harness.player.commands();
+-    assert!(matches!(commands[0], PlayerCommand::Load { .. }));
+-    assert!(matches!(commands[1], PlayerCommand::Pause { .. }));
++    assert!(matches!(commands[0], PlayerCommand::Volume { .. }));
++    assert!(matches!(commands[1], PlayerCommand::Load { .. }));
++    assert!(matches!(commands[2], PlayerCommand::Pause { .. }));
+     assert!(matches!(
+-        commands[2],
++        commands[3],
+         PlayerCommand::Seek { position: 33.0, .. }
+     ));
+-    assert!(matches!(commands[3], PlayerCommand::Play { .. }));
+-    assert!(matches!(commands[4], PlayerCommand::Stop { .. }));
++    assert!(matches!(commands[4], PlayerCommand::Play { .. }));
++    assert!(matches!(commands[5], PlayerCommand::Stop { .. }));
+ }
+ 
+ /// An app session whose `resolve_license` reverses the challenge instead of
+diff --git a/crates/vibecast-player-api/src/protocol.rs b/crates/vibecast-player-api/src/protocol.rs
+index 771669a..3f153e3 100644
+--- a/crates/vibecast-player-api/src/protocol.rs
++++ b/crates/vibecast-player-api/src/protocol.rs
+@@ -196,6 +196,10 @@ pub enum PlayerReport {
+         /// Reason for entering IDLE, if applicable.
+         #[serde(default)]
+         idle_reason: Option<IdleReason>,
++        #[serde(default)]
++        volume: Option<f64>,
++        #[serde(default)]
++        muted: Option<bool>,
+     },
+     /// Player error.
+     Error {
+@@ -308,6 +312,10 @@ pub enum ClientMessage {
+         duration: Option<f64>,
+         #[serde(default)]
+         idle_reason: Option<IdleReason>,
++        #[serde(default)]
++        volume: Option<f64>,
++        #[serde(default)]
++        muted: Option<bool>,
+     },
+     #[serde(rename = "error")]
+     Error {
+@@ -333,12 +341,16 @@ impl ClientMessage {
+                 current_time,
+                 duration,
+                 idle_reason,
++                volume,
++                muted,
+             } => Some(PlayerReport::State {
+                 session_id,
+                 player_state,
+                 current_time,
+                 duration,
+                 idle_reason,
++                volume,
++                muted,
+             }),
+             Self::Error {
+                 session_id,
+diff --git a/crates/vibecast-sdk/src/lib.rs b/crates/vibecast-sdk/src/lib.rs
+index b50979a..041476f 100644
+--- a/crates/vibecast-sdk/src/lib.rs
++++ b/crates/vibecast-sdk/src/lib.rs
+@@ -250,6 +250,9 @@ pub trait AppSession: Send + Sync {
+     /// Called when canonical playback state changes.
+     async fn on_playback_update(&self, _ctx: &AppContext, _state: PlaybackState) {}
+ 
++    /// Output volume, including changes made directly at the player.
++    async fn on_volume_update(&self, _ctx: &AppContext, _level: f64, _muted: bool) {}
++
+     /// Called before the session is torn down.
+     async fn on_stop(&self, _ctx: &AppContext) {}
+ }
+

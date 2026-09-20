@@ -1,0 +1,518 @@
+diff --git a/crates/vibecast-apps-youtube/src/lounge.rs b/crates/vibecast-apps-youtube/src/lounge.rs
+index 5010f8f..a39ba01 100644
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -7,7 +7,7 @@ use serde_json::Value;
+ use thiserror::Error;
+ use tokio::sync::{mpsc, watch};
+ use url::Url;
+-use vibecast_sdk::{PlaybackState, PlayerState, ReceiverContext};
++use vibecast_sdk::{IdleReason, PlaybackState, PlayerState, ReceiverContext};
+ 
+ const LOUNGE_BASE: &str = "https://www.youtube.com/api/lounge";
+ const USER_AGENT: &str =
+@@ -28,11 +28,13 @@ pub(crate) enum LoungeCommand {
+     },
+     Play,
+     Pause,
++    Stop,
+     Seek(f64),
+     Next,
+ }
+ 
+ pub(crate) struct LoungeConnection {
++    volume_rx: Option<watch::Receiver<(f64, bool)>>,
+     http: reqwest::Client,
+     bind_url: Url,
+     bound: BoundSession,
+@@ -59,6 +61,8 @@ struct BoundSession {
+ 
+ #[derive(Default)]
+ struct CurrentMedia {
++    volume: Option<(f64, bool)>,
++    awaiting_load: bool,
+     video_ids: Vec<String>,
+     video_id: Option<String>,
+     list_id: Option<String>,
+@@ -67,6 +71,53 @@ struct CurrentMedia {
+     state: Option<PlaybackState>,
+ }
+ 
++impl CurrentMedia {
++    fn coalesce_pending_selection(&self, incoming: Incoming) -> Incoming {
++        let incoming = match incoming {
++            Incoming::QueueAddition(command) => {
++                if let LoungeCommand::SetPlaylist { ref video_ids, ref list_id, .. } = command {
++                    if self.video_id.is_some()
++                        && self.video_id.as_ref() == video_ids.get(self.current_index)
++                        && self.list_id.is_some() && self.list_id == *list_id
++                    {
++                        tracing::info!(video_id = ?self.video_id, index = self.current_index,
++                            "preserving selection across VIDEO_ADDED queue enrichment");
++                        return Incoming::Command(LoungeCommand::UpdatePlaylist {
++                            video_ids: video_ids.clone(), list_id: list_id.clone(),
++                        });
++                    }
++                }
++                // No proven unchanged active slot: retain prior semantics.
++                Incoming::Command(command)
++            }
++            other => other,
++        };
++        if let Incoming::Command(LoungeCommand::SetPlaylist {
++            ref video_ids, current_index, current_time, ref list_id,
++        }) = incoming {
++            if self.awaiting_load
++                && self.video_id.is_some()
++                && self.video_id.as_ref() == video_ids.get(current_index)
++                && self.current_index == current_index
++                && self.state.as_ref().is_some_and(|s| s.current_time == current_time)
++            {
++                tracing::info!("coalesced pending YouTube selection into queue update");
++                return Incoming::Command(LoungeCommand::UpdatePlaylist {
++                    video_ids: video_ids.clone(), list_id: list_id.clone(),
++                });
++            }
++        }
++        incoming
++    }
++}
++
++async fn volume_change(rx: &mut Option<watch::Receiver<(f64, bool)>>) -> (f64, bool) {
++    if let Some(rx) = rx {
++        if rx.changed().await.is_ok() { return *rx.borrow_and_update(); }
++    }
++    std::future::pending().await
++}
++
+ #[derive(Debug, Error)]
+ pub(crate) enum LoungeError {
+     #[error("YouTube Lounge HTTP request failed")]
+@@ -78,6 +129,12 @@ pub(crate) enum LoungeError {
+ }
+ 
+ impl LoungeConnection {
++    pub(crate) fn with_volume(mut self, rx: watch::Receiver<(f64, bool)>) -> Self {
++        self.current.volume = Some(*rx.borrow());
++        self.volume_rx = Some(rx);
++        self
++    }
++
+     pub(crate) async fn establish(
+         http: reqwest::Client,
+         receiver: &ReceiverContext,
+@@ -134,6 +191,7 @@ impl LoungeConnection {
+         let bound = initial_bind(&http, &bind_url).await?;
+ 
+         Ok(Self {
++            volume_rx: None,
+             http,
+             bind_url,
+             bound,
+@@ -197,8 +255,19 @@ impl LoungeConnection {
+         self.post(Outbound::NowPlaying).await?;
+ 
+         loop {
+-            let poll = poll_commands(&self.http, &self.bind_url, &self.bound);
++            // Keep the long poll alive while playback reports arrive. Dropping
++            // it on every position update starves incoming controls.
++            let http = self.http.clone();
++            let bind_url = self.bind_url.clone();
++            let bound = self.bound.clone();
++            let poll = poll_commands(&http, &bind_url, &bound);
++            tokio::pin!(poll);
++            loop {
+             tokio::select! {
++                volume = volume_change(&mut self.volume_rx) => {
++                    self.current.volume = Some(volume);
++                    self.post(Outbound::Volume).await?;
++                }
+                 result = cancel.changed() => {
+                     if result.is_err() || *cancel.borrow() {
+                         return Ok(());
+@@ -206,28 +275,52 @@ impl LoungeConnection {
+                 }
+                 state = playback_rx.recv() => {
+                     let Some(state) = state else { return Ok(()); };
++                    if self.current.awaiting_load {
++                        if state.player_state != PlayerState::Buffering
++                            && !matches!(state.idle_reason, Some(IdleReason::Error | IdleReason::Cancelled)) {
++                            continue;
++                        }
++                        self.current.awaiting_load = false;
++                    }
++                    let ended = state.idle_reason == Some(IdleReason::Finished)
++                        && self.current.state.as_ref().and_then(|s| s.idle_reason)
++                            != Some(IdleReason::Finished);
+                     self.current.state = Some(state.clone());
+                     self.post(Outbound::State(state)).await?;
++                    if ended {
++                        if let Some(outbound) = self.handle_internal(&Incoming::Command(LoungeCommand::Next)) {
++                            self.post(outbound).await?;
++                        }
++                        let _ = command_tx.send(LoungeCommand::Next).await;
++                    }
+                 }
+-                result = poll => {
++                result = &mut poll => {
+                     let batch = match result {
+                         Ok(batch) => batch,
+-                        Err(LoungeError::Http(error)) if error.is_timeout() => continue,
++                        Err(LoungeError::Http(error)) if error.is_timeout() => break,
+                         Err(error) => return Err(error),
+                     };
+                     self.bound.aid = self.bound.aid.max(batch.aid);
+                     for incoming in batch.messages {
+-                        if let Some(outbound) = self.handle_internal(&incoming) {
+-                            self.post(outbound).await?;
+-                        }
++                        let queue_addition = matches!(&incoming, Incoming::QueueAddition(_));
++                        let incoming = self.current.coalesce_pending_selection(incoming);
++                        let outbound = self.handle_internal(&incoming)
++                            .or_else(|| queue_addition.then_some(Outbound::NowPlaying));
+                         if let Incoming::Command(command) = incoming {
+                             if command_tx.send(command).await.is_err() {
+                                 return Ok(());
+                             }
+                         }
++                        // Local playback need not wait for Google's HTTP ACK.
++                        // Internal buffering/queue state was already updated.
++                        if let Some(outbound) = outbound {
++                            self.post(outbound).await?;
++                        }
+                     }
++                    break;
+                 }
+             }
++            }
+         }
+     }
+ 
+@@ -240,6 +333,7 @@ impl LoungeConnection {
+                 list_id,
+             }) => {
+                 self.current.video_ids.clone_from(video_ids);
++                self.current.awaiting_load = true;
+                 self.current.video_id = video_ids.get(*current_index).cloned();
+                 self.current.current_index = *current_index;
+                 self.current.list_id.clone_from(list_id);
+@@ -270,6 +364,13 @@ impl LoungeConnection {
+                 None
+             }
+             Incoming::Command(LoungeCommand::Next) => {
++                self.current.awaiting_load = true;
++                self.current.state = Some(PlaybackState {
++                    player_state: PlayerState::Buffering,
++                    current_time: 0.0,
++                    duration: None,
++                    idle_reason: None,
++                });
+                 if self.current.current_index + 1 < self.current.video_ids.len() {
+                     self.current.current_index += 1;
+                     self.current.video_id = self
+@@ -287,11 +388,19 @@ impl LoungeConnection {
+             Incoming::GetPlaybackSpeed => Some(Outbound::PlaybackSpeed),
+             Incoming::GetVolume => Some(Outbound::Volume),
+             Incoming::SetDiscoveryDeviceId => Some(Outbound::DiscoveryDeviceId),
+-            Incoming::Command(_) | Incoming::Ignored => None,
++            Incoming::Command(_) | Incoming::QueueAddition(_) | Incoming::Ignored => None,
+         }
+     }
+ 
+     async fn post(&mut self, outbound: Outbound) -> Result<(), LoungeError> {
++        let started = std::time::Instant::now();
++        let report_selection = matches!(&outbound, Outbound::NowPlaying);
++        if report_selection {
++            tracing::info!(video_id = ?self.current.video_id,
++                index = self.current.current_index, queue_length = self.current.video_ids.len(),
++                awaiting_load = self.current.awaiting_load,
++                "Lounge reporting selection");
++        }
+         self.bound.rid += 1;
+         let mut url = self.bind_url.clone();
+         append_bound_query(&mut url, &self.bound, self.bound.rid.to_string().as_str());
+@@ -315,6 +424,10 @@ impl LoungeConnection {
+             .error_for_status()?
+             .bytes()
+             .await?;
++        if report_selection {
++            tracing::info!(elapsed_ms = started.elapsed().as_millis() as u64,
++                "Lounge selection report acknowledged");
++        }
+         Ok(())
+     }
+ }
+@@ -362,9 +475,10 @@ impl Outbound {
+                     .append_pair("req0_playbackSpeed", "1");
+             }
+             Self::Volume => {
++                let (level, muted) = current.volume.unwrap_or((1.0, false));
+                 form.append_pair("req0__sc", "onVolumeChanged")
+-                    .append_pair("req0_volume", "100")
+-                    .append_pair("req0_muted", "false");
++                    .append_pair("req0_volume", &(level.clamp(0.0, 1.0) * 100.0).round().to_string())
++                    .append_pair("req0_muted", if muted { "true" } else { "false" });
+             }
+             Self::DiscoveryDeviceId => {
+                 form.append_pair("req0__sc", "setDiscoveryDeviceId")
+@@ -500,6 +614,7 @@ struct IncomingBatch {
+ }
+ 
+ enum Incoming {
++    QueueAddition(LoungeCommand),
+     Command(LoungeCommand),
+     GetNowPlaying,
+     GetPlaybackSpeed,
+@@ -523,12 +638,184 @@ fn parse_incoming(bytes: &[u8]) -> Result<IncomingBatch, LoungeError> {
+             let Some(message) = parts.get(1).and_then(Value::as_array) else {
+                 continue;
+             };
+-            messages.push(parse_message(message));
++            tracing::info!(sequence = parts.first().and_then(serde_json::Value::as_u64),
++                command = message.first().and_then(serde_json::Value::as_str), "Lounge incoming command");
++            let incoming = parse_message(message);
++            if message.first().and_then(Value::as_str) == Some("setPlaylist") {
++                let details = selection_diagnostics(message, &incoming);
++                tracing::info!(sequence = parts.first().and_then(serde_json::Value::as_u64),
++                    selection = %details, "Lounge selection interpretation");
++            }
++            messages.push(incoming);
+         }
+     }
+     Ok(IncomingBatch { aid, messages })
+ }
+ 
++// Allowlisted selection fields only: never log full params/eventDetails, which
++// may carry account/session material. This does not change selection semantics.
++fn selection_diagnostics(message: &[Value], incoming: &Incoming) -> Value {
++    let params = message.get(1).unwrap_or(&Value::Null);
++    let event = params.get("eventDetails").and_then(Value::as_str)
++        .and_then(|s| serde_json::from_str::<Value>(s).ok());
++    let event_id = event.as_ref()
++        .and_then(|v| v.get("videoId").and_then(Value::as_str));
++    // Do not dump unknown event values: eventDetails can contain account data.
++    let event_type = event.as_ref().and_then(|v| v.get("eventType"))
++        .and_then(Value::as_str).map(|kind| match kind {
++            "PLAYLIST_SET" | "PLAYLIST_UPDATED" | "VIDEO_ADDED" | "VIDEOS_ADDED"
++            | "VIDEO_REMOVED" | "VIDEO_SELECTED" | "QUEUE_UPDATED" => kind,
++            _ => "OTHER",
++        });
++    let (selected, index, len) = match incoming {
++        Incoming::Command(LoungeCommand::SetPlaylist { video_ids, current_index, .. })
++        | Incoming::QueueAddition(LoungeCommand::SetPlaylist { video_ids, current_index, .. }) =>
++            (video_ids.get(*current_index).cloned(), Some(*current_index), video_ids.len()),
++        _ => (None, None, 0),
++    };
++    serde_json::json!({
++        "videoId": params.get("videoId").and_then(Value::as_str),
++        "eventVideoId": event_id,
++        "eventType": event_type,
++        "eventVideoCount": event.as_ref().and_then(|v| v.get("videoIds"))
++            .and_then(Value::as_array).map(Vec::len),
++        "currentIndex": params.get("currentIndex").and_then(value_as_usize),
++        "parsedIndex": index, "selectedVideoId": selected, "queueLength": len,
++        "currentTime": params.get("currentTime").and_then(value_as_f64),
++    })
++}
++
++#[cfg(test)]
++mod selection_diagnostic_tests {
++    use super::*;
++    #[test]
++    fn reproduced_additions_preserve_state_and_feedback_until_explicit_selection() {
++        let mut connection = LoungeConnection {
++            volume_rx: None, http: reqwest::Client::new(),
++            bind_url: Url::parse("http://127.0.0.1:9/").unwrap(),
++            bound: BoundSession {sid:"test".into(), gsession_id:"test".into(),
++                aid:0, rid:0, ofs:0},
++            screen_id:"test".into(), device_id:"test".into(),
++            discovery_device_id:"test".into(), current:CurrentMedia::default(),
++        };
++        // Sanitized reconstruction of Controls-16: each addition inserts at
++        // index 1. It is not a complete raw-wire capture of the full queues.
++        connection.handle_internal(&event("PLAYLIST_SET","z,next",0,"queue"));
++        for (n,videos) in ["z,b,next", "z,c,b,next", "z,d,c,b,next"].iter().enumerate() {
++            if n == 2 {
++                // The last addition arrives after actual playback began.
++                connection.current.awaiting_load = false;
++                connection.current.state = Some(PlaybackState {
++                    player_state:PlayerState::Playing, current_time:0.4,
++                    duration:Some(180.0), idle_reason:None,
++                });
++            }
++            let incoming = connection.current.coalesce_pending_selection(
++                event("VIDEO_ADDED", videos, 1, "queue"));
++            assert!(matches!(&incoming, Incoming::Command(LoungeCommand::UpdatePlaylist {..})));
++            connection.handle_internal(&incoming);
++            assert_eq!(connection.current.video_id.as_deref(), Some("z"));
++            assert_eq!(connection.current.current_index, 0);
++            let fields: std::collections::HashMap<String,String> = url::form_urlencoded::parse(
++                Outbound::NowPlaying.form_body(0,&connection.current,"test","test").as_bytes())
++                .into_owned().collect();
++            assert_eq!(fields["req0_videoId"], "z");
++            assert_eq!(fields["req0_currentIndex"], "0");
++            if n == 2 {
++                assert_eq!(fields["req0_state"], "1");
++                assert_eq!(fields["req0_currentTime"], "0.4");
++            }
++        }
++        // Known boundary: this also describes a legitimate explicit user tap.
++        // A recent VIDEO_ADDED must not blacklist this selection.
++        let explicit = connection.current.coalesce_pending_selection(
++            event("VIDEO_SELECTED","z,d,c,b,next",1,"queue"));
++        assert!(matches!(&explicit, Incoming::Command(LoungeCommand::SetPlaylist {..})));
++        connection.handle_internal(&explicit);
++        assert_eq!(connection.current.video_id.as_deref(), Some("d"));
++        assert_eq!(connection.current.current_index, 1);
++    }
++
++    fn event(kind: &str, videos: &str, index: usize, list: &str) -> Incoming {
++        parse_message(&[serde_json::json!("setPlaylist"), serde_json::json!({
++            "videoIds":videos, "currentIndex":index, "listId":list,
++            "eventDetails":serde_json::json!({"eventType":kind}).to_string()
++        })])
++    }
++
++    #[test]
++    fn delayed_additions_preserve_last_selection_but_real_reselection_wins() {
++        let mut current = CurrentMedia {
++            video_id:Some("z".into()), video_ids:vec!["z".into()],
++            list_id:Some("queue".into()), ..Default::default()
++        };
++        // Captured pattern: final PLAYLIST_SET, then four VIDEO_ADDED messages
++        // whose currentIndex points at the newly inserted (older requested) item.
++        for (videos,index) in [("z,a",1),("z,a,b",2),("z,a,b,c",3),("z,a,b,c,d",4)] {
++            let result = current.coalesce_pending_selection(event("VIDEO_ADDED",videos,index,"queue"));
++            let Incoming::Command(LoungeCommand::UpdatePlaylist {video_ids,..}) = result else {
++                panic!("addition must not start another title");
++            };
++            current.video_ids = video_ids;
++            assert_eq!(current.video_ids[current.current_index], "z");
++        }
++        for kind in ["VIDEO_SELECTED", "PLAYLIST_SET"] {
++            assert!(matches!(current.coalesce_pending_selection(event(kind,"z,a,b,c,d",1,"queue")),
++                Incoming::Command(LoungeCommand::SetPlaylist {current_index:1,..})));
++        }
++        current.awaiting_load = true;
++        assert!(matches!(current.coalesce_pending_selection(event("VIDEO_ADDED","z,a,b,c,d,e",5,"queue")),
++            Incoming::Command(LoungeCommand::UpdatePlaylist {..})));
++    }
++
++    #[test]
++    fn additions_without_matching_active_queue_keep_previous_semantics() {
++        let current = CurrentMedia {video_id:Some("z".into()),list_id:Some("queue".into()),
++            ..Default::default()};
++        for incoming in [event("VIDEO_ADDED","z,a",1,"other"),
++            event("VIDEO_ADDED","a,z",0,"queue")] {
++            assert!(matches!(current.coalesce_pending_selection(incoming),
++                Incoming::Command(LoungeCommand::SetPlaylist {..})));
++        }
++        assert!(matches!(CurrentMedia::default().coalesce_pending_selection(
++            event("VIDEO_ADDED","a",0,"queue")),
++            Incoming::Command(LoungeCommand::SetPlaylist {..})));
++    }
++
++    #[test]
++    fn exposes_mismatch_without_logging_private_params() {
++        let message = vec![serde_json::json!("setPlaylist"), serde_json::json!({
++            "videoId":"explicit", "videoIds":"first,indexed", "currentIndex":"1",
++            "currentTime":"0", "token":"secret-do-not-log",
++            "eventDetails":"{\"videoId\":\"event\",\"credential\":\"hidden\"}"
++        })];
++        let incoming = parse_message(&message);
++        let details = selection_diagnostics(&message, &incoming);
++        assert_eq!(details["videoId"], "explicit");
++        assert_eq!(details["eventVideoId"], "event");
++        assert_eq!(details["selectedVideoId"], "indexed");
++        assert_eq!(details["parsedIndex"], 1);
++        assert!(!details.to_string().contains("secret-do-not-log"));
++        assert!(!details.to_string().contains("hidden"));
++    }
++
++    #[test]
++    fn exposes_event_kind_but_redacts_unknown_values() {
++        for (kind, expected) in [("PLAYLIST_SET", "PLAYLIST_SET"),
++            ("VIDEO_ADDED", "VIDEO_ADDED"), ("private-value", "OTHER")] {
++            let message = vec![serde_json::json!("setPlaylist"), serde_json::json!({
++                "videoIds":"a,b", "currentIndex":"1",
++                "eventDetails": serde_json::json!({"eventType":kind,
++                    "videoIds":["b"], "user":"private-user"}).to_string()
++            })];
++            let details = selection_diagnostics(&message, &parse_message(&message));
++            assert_eq!(details["eventType"], expected);
++            assert_eq!(details["eventVideoCount"], 1);
++            assert!(!details.to_string().contains("private-"));
++        }
++    }
++}
++
+ fn parse_message(message: &[Value]) -> Incoming {
+     let Some(name) = message.first().and_then(Value::as_str) else {
+         return Incoming::Ignored;
+@@ -539,6 +826,7 @@ fn parse_message(message: &[Value]) -> Incoming {
+         "updatePlaylist" => parse_update_playlist(params),
+         "play" => Some(LoungeCommand::Play),
+         "pause" => Some(LoungeCommand::Pause),
++        "stopVideo" | "stop" => Some(LoungeCommand::Stop),
+         "next" => Some(LoungeCommand::Next),
+         "seekTo" => params
+             .and_then(|value| value.get("newTime"))
+@@ -547,6 +835,11 @@ fn parse_message(message: &[Value]) -> Incoming {
+         _ => None,
+     };
+     if let Some(command) = command {
++        let is_addition = name == "setPlaylist" && params
++            .and_then(|p| p.get("eventDetails")).and_then(Value::as_str)
++            .and_then(|s| serde_json::from_str::<Value>(s).ok())
++            .is_some_and(|e| e.get("eventType").and_then(Value::as_str) == Some("VIDEO_ADDED"));
++        if is_addition { return Incoming::QueueAddition(command); }
+         return Incoming::Command(command);
+     }
+     match name {
+@@ -761,6 +1054,38 @@ struct LoungeTokenScreen {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn volume_reply_uses_actual_level_and_mute() {
++        let current = CurrentMedia { volume: Some((0.5, true)), ..Default::default() };
++        let body = Outbound::Volume.form_body(0, &current, "device", "lounge");
++        assert!(body.contains("req0_volume=50"));
++        assert!(body.contains("req0_muted=true"));
++    }
++
++    #[test]
++    fn pending_selection_updates_queue_without_second_load() {
++        let mut current = CurrentMedia {
++            awaiting_load: true,
++            video_id: Some("a".into()),
++            state: Some(PlaybackState { player_state: PlayerState::Buffering,
++                current_time: 0.0, duration: None, idle_reason: None }),
++            ..Default::default()
++        };
++        let selection = |video: &str, position| Incoming::Command(LoungeCommand::SetPlaylist {
++            video_ids: vec![video.into(), "next".into()], current_index: 0,
++            current_time: position, list_id: Some("new-queue".into()),
++        });
++        assert!(matches!(current.coalesce_pending_selection(selection("a", 0.0)),
++            Incoming::Command(LoungeCommand::UpdatePlaylist { video_ids, list_id })
++                if video_ids == ["a", "next"] && list_id.as_deref() == Some("new-queue")));
++        for command in [selection("b", 0.0), selection("a", 42.0)] {
++            assert!(matches!(current.coalesce_pending_selection(command),
++                Incoming::Command(LoungeCommand::SetPlaylist { .. })));
++        }
++        current.awaiting_load = false;
++        assert!(matches!(current.coalesce_pending_selection(selection("a", 0.0)),
++            Incoming::Command(LoungeCommand::SetPlaylist { .. })));
++    }
+     use std::path::PathBuf;
+     use wiremock::matchers::{method, path};
+     use wiremock::{Mock, MockServer, ResponseTemplate};
+@@ -945,6 +1270,7 @@ mod tests {
+             .await;
+ 
+         let mut connection = LoungeConnection {
++            volume_rx: None,
+             http: reqwest::Client::new(),
+             bind_url: Url::parse(&format!("{}/api/lounge/bc/bind", server.uri())).unwrap(),
+             bound: BoundSession {

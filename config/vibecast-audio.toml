@@ -1,0 +1,14 @@
+[device]
+model = "Audio Speaker"
+locale = "de-DE"
+country_code = "DE"
+
+[device.capabilities]
+display_supported = false
+multizone_supported = false
+
+[cast.device_capabilities]
+display_supported = false
+hi_res_audio_supported = true
+remote_control_input_supported = true
+touch_input_supported = false

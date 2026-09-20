@@ -1,0 +1,221 @@
+diff --git a/crates/vibecast-apps-youtube/src/lounge.rs b/crates/vibecast-apps-youtube/src/lounge.rs
+index 5010f8f..3e28958 100644
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -7,7 +7,7 @@ use serde_json::Value;
+ use thiserror::Error;
+ use tokio::sync::{mpsc, watch};
+ use url::Url;
+-use vibecast_sdk::{PlaybackState, PlayerState, ReceiverContext};
++use vibecast_sdk::{IdleReason, PlaybackState, PlayerState, ReceiverContext};
+ 
+ const LOUNGE_BASE: &str = "https://www.youtube.com/api/lounge";
+ const USER_AGENT: &str =
+@@ -28,6 +28,7 @@ pub(crate) enum LoungeCommand {
+     },
+     Play,
+     Pause,
++    Stop,
+     Seek(f64),
+     Next,
+ }
+@@ -59,6 +60,7 @@ struct BoundSession {
+ 
+ #[derive(Default)]
+ struct CurrentMedia {
++    awaiting_load: bool,
+     video_ids: Vec<String>,
+     video_id: Option<String>,
+     list_id: Option<String>,
+@@ -197,7 +199,14 @@ impl LoungeConnection {
+         self.post(Outbound::NowPlaying).await?;
+ 
+         loop {
+-            let poll = poll_commands(&self.http, &self.bind_url, &self.bound);
++            // Keep the long poll alive while playback reports arrive. Dropping
++            // it on every position update starves incoming controls.
++            let http = self.http.clone();
++            let bind_url = self.bind_url.clone();
++            let bound = self.bound.clone();
++            let poll = poll_commands(&http, &bind_url, &bound);
++            tokio::pin!(poll);
++            loop {
+             tokio::select! {
+                 result = cancel.changed() => {
+                     if result.is_err() || *cancel.borrow() {
+@@ -206,13 +215,28 @@ impl LoungeConnection {
+                 }
+                 state = playback_rx.recv() => {
+                     let Some(state) = state else { return Ok(()); };
++                    if self.current.awaiting_load {
++                        if state.player_state != PlayerState::Buffering {
++                            continue;
++                        }
++                        self.current.awaiting_load = false;
++                    }
++                    let ended = state.idle_reason == Some(IdleReason::Finished)
++                        && self.current.state.as_ref().and_then(|s| s.idle_reason)
++                            != Some(IdleReason::Finished);
+                     self.current.state = Some(state.clone());
+                     self.post(Outbound::State(state)).await?;
++                    if ended {
++                        if let Some(outbound) = self.handle_internal(&Incoming::Command(LoungeCommand::Next)) {
++                            self.post(outbound).await?;
++                        }
++                        let _ = command_tx.send(LoungeCommand::Next).await;
++                    }
+                 }
+-                result = poll => {
++                result = &mut poll => {
+                     let batch = match result {
+                         Ok(batch) => batch,
+-                        Err(LoungeError::Http(error)) if error.is_timeout() => continue,
++                        Err(LoungeError::Http(error)) if error.is_timeout() => break,
+                         Err(error) => return Err(error),
+                     };
+                     self.bound.aid = self.bound.aid.max(batch.aid);
+@@ -226,8 +250,10 @@ impl LoungeConnection {
+                             }
+                         }
+                     }
++                    break;
+                 }
+             }
++            }
+         }
+     }
+ 
+@@ -240,6 +266,7 @@ impl LoungeConnection {
+                 list_id,
+             }) => {
+                 self.current.video_ids.clone_from(video_ids);
++                self.current.awaiting_load = true;
+                 self.current.video_id = video_ids.get(*current_index).cloned();
+                 self.current.current_index = *current_index;
+                 self.current.list_id.clone_from(list_id);
+@@ -270,6 +297,13 @@ impl LoungeConnection {
+                 None
+             }
+             Incoming::Command(LoungeCommand::Next) => {
++                self.current.awaiting_load = true;
++                self.current.state = Some(PlaybackState {
++                    player_state: PlayerState::Buffering,
++                    current_time: 0.0,
++                    duration: None,
++                    idle_reason: None,
++                });
+                 if self.current.current_index + 1 < self.current.video_ids.len() {
+                     self.current.current_index += 1;
+                     self.current.video_id = self
+@@ -539,6 +573,7 @@ fn parse_message(message: &[Value]) -> Incoming {
+         "updatePlaylist" => parse_update_playlist(params),
+         "play" => Some(LoungeCommand::Play),
+         "pause" => Some(LoungeCommand::Pause),
++        "stopVideo" | "stop" => Some(LoungeCommand::Stop),
+         "next" => Some(LoungeCommand::Next),
+         "seekTo" => params
+             .and_then(|value| value.get("newTime"))
+diff --git a/crates/vibecast-core/src/hub.rs b/crates/vibecast-core/src/hub.rs
+index cb4b63d..6490f7f 100644
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -313,6 +313,7 @@ pub struct DeviceHub {
+     subscriptions: HashMap<(u64, String), String>,
+     /// session id (== transport id) -> session.
+     sessions: HashMap<String, Session>,
++    session_owners: HashMap<String, u64>,
+     self_tx: mpsc::Sender<HubEvent>,
+     events: Option<mpsc::Receiver<HubEvent>>,
+ }
+@@ -338,6 +339,7 @@ impl DeviceHub {
+             connections: HashMap::new(),
+             subscriptions: HashMap::new(),
+             sessions: HashMap::new(),
++            session_owners: HashMap::new(),
+             self_tx: tx,
+             events: Some(rx),
+         }
+@@ -372,8 +374,33 @@ impl DeviceHub {
+                 self.connections.insert(handle.id(), handle);
+             }
+             HubEvent::Server(ServerEvent::Disconnected { id, .. }) => {
++                let owned: Vec<String> = self.session_owners.iter()
++                    .filter(|(_, owner)| **owner == id)
++                    .map(|(session, _)| session.clone()).collect();
++                for session in owned {
++                    self.stop_session(&session).await;
++                }
++                // A sender can leave without sending an explicit Cast STOP.
++                // Keep sessions that still have another subscribed sender, but
++                // tear down sessions whose last sender connection disappeared;
++                // otherwise receiver status advertises a stale app forever.
++                let affected_sessions: Vec<String> = self
++                    .subscriptions
++                    .iter()
++                    .filter(|((conn, _), _)| *conn == id)
++                    .map(|(_, transport)| transport.clone())
++                    .collect();
+                 self.subscriptions.retain(|(conn, _), _| *conn != id);
+                 self.connections.remove(&id);
++                for session_id in affected_sessions {
++                    let still_subscribed = self
++                        .subscriptions
++                        .values()
++                        .any(|transport| transport == &session_id);
++                    if !still_subscribed {
++                        self.stop_session(&session_id).await;
++                    }
++                }
+             }
+             HubEvent::Server(ServerEvent::Message { handle, message }) => {
+                 self.on_message(&handle, message).await;
+@@ -488,6 +515,14 @@ impl DeviceHub {
+             }
+             ReceiverRequest::SetVolume(r) => {
+                 self.volume.apply_update(&r.volume);
++                for (id, session) in &mut self.sessions {
++                    session.coordinator.volume = self.volume.clone();
++                    self.player.send(PlayerCommand::Volume {
++                        session_id: id.clone(),
++                        level: self.volume.level,
++                        muted: self.volume.muted,
++                    }).await;
++                }
+                 let response = self.receiver_status(r.request_id);
+                 self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
+             }
+@@ -532,6 +567,7 @@ impl DeviceHub {
+         }
+ 
+         let session_id = Uuid::new_v4().to_string();
++        self.session_owners.insert(session_id.clone(), conn_id);
+         let (credentials, credentials_type) = request.resolved_credentials();
+         let app_key = manifest.app_key;
+         let data_dir = self.data_dir.join("apps").join(app_key);
+@@ -624,6 +660,7 @@ impl DeviceHub {
+     }
+ 
+     async fn stop_session(&mut self, session_id: &str) {
++        self.session_owners.remove(session_id);
+         let Some(session) = self.sessions.remove(session_id) else {
+             return;
+         };
+@@ -718,7 +755,17 @@ impl DeviceHub {
+                         })
+                         .await;
+                 }
+-                _ => {
++                Ok(ConnectionMessage::Close(_)) => {
++                    self.subscriptions.remove(&(conn_id, source));
++                    let still_subscribed = self
++                        .subscriptions
++                        .values()
++                        .any(|target| target == &transport);
++                    if !still_subscribed {
++                        self.stop_session(&transport).await;
++                    }
++                }
++                Err(_) => {
+                     self.subscriptions.remove(&(conn_id, source));
+                 }
+             },

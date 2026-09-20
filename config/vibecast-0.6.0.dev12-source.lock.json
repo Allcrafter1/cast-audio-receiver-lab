@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "lab_version": "0.6.0.dev12",
+  "source_repository": "https://github.com/Allcrafter1/vibecast.git",
+  "source_commit": "f28befe02fe930db300294d6bf49cdf5fec5a747",
+  "upstream_commit": "b4616f8f399be706a1409ed21922aa2df892e303",
+  "patch": "patches/vibecast-0.6.0.dev12-complete.patch",
+  "patch_sha256": "4812a4d1542ee214bb268e1cef7abfa5e8180630ea77d5297e3a9e2f2f7184a0",
+  "build_input_file_count": 109,
+  "build_input_hash_map_sha256": "24e8314a840f5f6c54a9a440ef3228a62ac80a554c2bb0078755115ae4dc1f97",
+  "hash_map_encoding": "UTF-8 JSON files object, sorted keys, separators comma/colon, no trailing newline",
+  "observed_rustc": "1.98.1 (48a229cea 2026-09-01)",
+  "observed_host": "x86_64-unknown-linux-gnu",
+  "built_frontend_sha256": "85840f62a96f599311b3770b2aee921fc67a56e300cb7b3a31785f1ad2d56d8e",
+  "scope": "Verified maintained-fork commit plus fallback patch reconstruction, targeted Rust tests and one Linux x86_64 release build; not a bit-identical environment guarantee"
+}

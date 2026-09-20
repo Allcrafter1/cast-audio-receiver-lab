@@ -1,0 +1,9 @@
+{
+  "repository": "https://github.com/music-assistant/airplay-cli",
+  "version": "v0.5.3",
+  "asset": "cliairplay-linux-x86_64",
+  "sha256": "fd6fa451cdfd0c83c502e8cdfc7e73b24a9553e7058508b5e8c69cdd1dd621dd",
+  "checksums_sha256": "fdbc76b0ac9fe0020ddcc5939cd62e4af5e7d78422337fecbaf912d9ff0131b0",
+  "license": "GPL-3.0",
+  "scope": "Linux x86_64 development test; other architectures not provisioned"
+}

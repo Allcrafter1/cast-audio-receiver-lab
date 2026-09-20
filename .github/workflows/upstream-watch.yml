@@ -1,0 +1,42 @@
+name: Upstream watch
+
+on:
+  schedule:
+    - cron: "23 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check pinned upstreams
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          pinned_vibecast=$(python -c 'import json; print(json.load(open("config/vibecast-0.6.0.dev12-source.lock.json"))["upstream_commit"])')
+          latest_vibecast=$(git ls-remote https://github.com/emilsvennesson/vibecast.git refs/heads/main | cut -f1)
+          pinned_airplay=$(python -c 'import json; print(json.load(open("config/cliairplay-linux-x86_64.lock.json"))["version"])')
+          latest_airplay=$(gh api repos/music-assistant/airplay-cli/releases/latest --jq .tag_name)
+          notes=""
+          if [ "$pinned_vibecast" != "$latest_vibecast" ]; then
+            notes="$notes\n- Vibecast: pinned $pinned_vibecast, upstream main $latest_vibecast"
+          fi
+          if [ "$pinned_airplay" != "$latest_airplay" ]; then
+            notes="$notes\n- airplay-cli: pinned $pinned_airplay, latest release $latest_airplay"
+          fi
+          if [ -z "$notes" ]; then
+            echo "Pinned upstreams are current." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          printf 'Upstream review requested:%b\n' "$notes" >> "$GITHUB_STEP_SUMMARY"
+          title="Automated upstream review needed"
+          if ! gh issue list --state open --search "$title in:title" --json title --jq '.[].title' | grep -Fxq "$title"; then
+            printf 'The weekly watcher found:%b\n\nReview changelogs, rebuild locks, run CI and hardware acceptance. Do not auto-merge protocol updates.\n' "$notes" \
+              | gh issue create --title "$title" --body-file -
+          fi

@@ -1,0 +1,1022 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 8891c96..97f2073 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -3152,6 +3152,16 @@ version = "0.9.5"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+ 
++[[package]]
++name = "vibecast-apps-default-media"
++version = "0.1.0"
++dependencies = [
++ "async-trait",
++ "serde_json",
++ "url",
++ "vibecast-sdk",
++]
++
+ [[package]]
+ name = "vibecast-apps-primevideo"
+ version = "0.1.0"
+@@ -3369,6 +3379,7 @@ dependencies = [
+  "toml 0.8.23",
+  "tracing",
+  "uuid",
++ "vibecast-apps-default-media",
+  "vibecast-apps-primevideo",
+  "vibecast-apps-svtplay",
+  "vibecast-apps-tv4play",
+diff --git a/Cargo.toml b/Cargo.toml
+index 38f371c..08b34aa 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -17,6 +17,7 @@ members = [
+     "crates/vibecast-apps-viaplay",
+     "crates/vibecast-apps-primevideo",
+     "crates/vibecast-apps-youtube",
++    "crates/vibecast-apps-default-media",
+     "crates/vibecast-core",
+     "crates/vibecast-receiver",
+     "crates/vibecast-platform",
+diff --git a/crates/vibecast-core/src/coordinator.rs b/crates/vibecast-core/src/coordinator.rs
+index 159f8f0..b3a926d 100644
+--- a/crates/vibecast-core/src/coordinator.rs
++++ b/crates/vibecast-core/src/coordinator.rs
+@@ -70,11 +70,19 @@ impl Coordinator {
+             self.player_state,
+             PlayerState::Playing | PlayerState::Paused | PlayerState::Buffering
+         );
+-        let commands = if is_active {
++        let mut commands = if is_active {
+             media_command::ACTIVE
+         } else {
+             media_command::IDLE
+         };
++        // No seekable/DVR range is modeled for live sources yet.
++        if self
++            .current_media
++            .as_ref()
++            .is_some_and(|media| media.stream_type == StreamType::Live)
++        {
++            commands &= !media_command::SEEK;
++        }
+         let playback_rate = if self.player_state == PlayerState::Playing {
+             1.0
+         } else {
+@@ -199,3 +207,31 @@ pub(crate) fn media_info(media: &PlaybackMedia) -> MediaInfo {
+ fn is_non_empty_object(value: &Value) -> bool {
+     !matches!(value, Value::Object(map) if map.is_empty())
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn live_status_does_not_advertise_seek() {
++        let mut coordinator = Coordinator::new(Volume::default());
++        coordinator.player_state = PlayerState::Playing;
++        let media: MediaInfo = serde_json::from_value(serde_json::json!({
++            "contentId": "https://example.test/radio", "contentType": "audio/mpeg",
++            "streamType": "LIVE"
++        }))
++        .unwrap();
++        coordinator.current_media = Some(media);
++        let status = coordinator.media_status().unwrap();
++        assert_eq!(status.supported_media_commands & media_command::SEEK, 0);
++        assert_ne!(
++            status.supported_media_commands & media_command::STREAM_VOLUME,
++            0
++        );
++        coordinator.current_media.as_mut().unwrap().stream_type = StreamType::Buffered;
++        assert_ne!(
++            coordinator.media_status().unwrap().supported_media_commands & media_command::SEEK,
++            0
++        );
++    }
++}
+diff --git a/crates/vibecast-core/src/hub.rs b/crates/vibecast-core/src/hub.rs
+index cb4b63d..c01ab0f 100644
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -212,6 +212,11 @@ impl DeviceHubHandle {
+ /// slow app (HTTP auth, token exchange, ...) never blocks the hub mailbox. Jobs
+ /// for one session run in the order the hub enqueues them.
+ enum AppJob {
++    VolumeUpdate {
++        ctx: AppContext,
++        level: f64,
++        muted: bool,
++    },
+     /// A sender connected to the app transport.
+     SenderConnected { ctx: AppContext, sender_id: String },
+     /// A custom-namespace message arrived.
+@@ -233,6 +238,9 @@ enum AppJob {
+ async fn run_app_session(app: Arc<dyn AppSession>, mut jobs: mpsc::Receiver<AppJob>) {
+     while let Some(job) = jobs.recv().await {
+         match job {
++            AppJob::VolumeUpdate { ctx, level, muted } => {
++                app.on_volume_update(&ctx, level, muted).await
++            }
+             AppJob::SenderConnected { ctx, sender_id } => {
+                 app.on_sender_connected(&ctx, &sender_id).await;
+             }
+@@ -311,18 +319,38 @@ pub struct DeviceHub {
+     connections: HashMap<u64, ConnectionHandle>,
+     /// `(connection, sender)` -> transport id.
+     subscriptions: HashMap<(u64, String), String>,
++    // Platform and app channels coexist for the same Cast sender ID.
++    platform_subscriptions: HashSet<(u64, String)>,
+     /// session id (== transport id) -> session.
+     sessions: HashMap<String, Session>,
++    session_owners: HashMap<String, u64>,
+     self_tx: mpsc::Sender<HubEvent>,
+     events: Option<mpsc::Receiver<HubEvent>>,
+ }
+ 
++fn volume_path(base: &std::path::Path, device_id: &str) -> PathBuf {
++    let key: String = device_id.bytes().map(|b| format!("{b:02x}")).collect();
++    base.join(format!("volume-{key}.json"))
++}
++
++fn prepare_volume_for_session(volume: &mut Volume) {
++    if volume.level == 0.0 {
++        volume.level = 0.1;
++        volume.muted = false;
++    }
++}
++
+ impl DeviceHub {
+     /// Build a hub. Feed it with [`handle`](Self::handle) and drive it with
+     /// [`run`](Self::run).
+     #[must_use]
+     pub fn new(config: HubConfig) -> Self {
+         let (tx, rx) = mpsc::channel(128);
++        let volume = std::fs::read(volume_path(&config.data_dir, &config.identity.device_id))
++            .ok()
++            .and_then(|bytes| serde_json::from_slice::<Volume>(&bytes).ok())
++            .filter(|v| v.level.is_finite() && (0.0..=1.0).contains(&v.level))
++            .unwrap_or(config.volume);
+         Self {
+             identity: config.identity,
+             registry: config.registry,
+@@ -330,14 +358,16 @@ impl DeviceHub {
+             proxy: config.proxy,
+             http: config.http,
+             data_dir: config.data_dir,
+-            volume: config.volume,
++            volume,
+             user_agent: config.user_agent,
+             cast_device_capabilities: config.cast_device_capabilities,
+             capabilities: config.capabilities,
+             player_settings: config.player_settings,
+             connections: HashMap::new(),
+             subscriptions: HashMap::new(),
++            platform_subscriptions: HashSet::new(),
+             sessions: HashMap::new(),
++            session_owners: HashMap::new(),
+             self_tx: tx,
+             events: Some(rx),
+         }
+@@ -372,8 +402,37 @@ impl DeviceHub {
+                 self.connections.insert(handle.id(), handle);
+             }
+             HubEvent::Server(ServerEvent::Disconnected { id, .. }) => {
++                let owned: Vec<String> = self
++                    .session_owners
++                    .iter()
++                    .filter(|(_, owner)| **owner == id)
++                    .map(|(session, _)| session.clone())
++                    .collect();
++                for session in owned {
++                    self.stop_session(&session).await;
++                }
++                // A sender can leave without sending an explicit Cast STOP.
++                // Keep sessions that still have another subscribed sender, but
++                // tear down sessions whose last sender connection disappeared;
++                // otherwise receiver status advertises a stale app forever.
++                let affected_sessions: Vec<String> = self
++                    .subscriptions
++                    .iter()
++                    .filter(|((conn, _), _)| *conn == id)
++                    .map(|(_, transport)| transport.clone())
++                    .collect();
+                 self.subscriptions.retain(|(conn, _), _| *conn != id);
++                self.platform_subscriptions.retain(|(conn, _)| *conn != id);
+                 self.connections.remove(&id);
++                for session_id in affected_sessions {
++                    let still_subscribed = self
++                        .subscriptions
++                        .values()
++                        .any(|transport| transport == &session_id);
++                    if !still_subscribed {
++                        self.stop_session(&session_id).await;
++                    }
++                }
+             }
+             HubEvent::Server(ServerEvent::Message { handle, message }) => {
+                 self.on_message(&handle, message).await;
+@@ -412,11 +471,10 @@ impl DeviceHub {
+         match message.namespace.as_str() {
+             ns::CONNECTION => match serde_json::from_value::<ConnectionMessage>(payload) {
+                 Ok(ConnectionMessage::Connect(_)) => {
+-                    self.subscriptions
+-                        .insert((conn_id, source), RECEIVER_0.to_string());
++                    self.platform_subscriptions.insert((conn_id, source));
+                 }
+                 _ => {
+-                    self.subscriptions.remove(&(conn_id, source));
++                    self.platform_subscriptions.remove(&(conn_id, source));
+                 }
+             },
+             ns::RECEIVER => self.handle_receiver(conn_id, &source, payload).await,
+@@ -488,6 +546,17 @@ impl DeviceHub {
+             }
+             ReceiverRequest::SetVolume(r) => {
+                 self.volume.apply_update(&r.volume);
++                for (id, session) in &mut self.sessions {
++                    session.coordinator.volume = self.volume.clone();
++                    self.player
++                        .send(PlayerCommand::Volume {
++                            session_id: id.clone(),
++                            level: self.volume.level,
++                            muted: self.volume.muted,
++                        })
++                        .await;
++                }
++                self.publish_volume().await;
+                 let response = self.receiver_status(r.request_id);
+                 self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
+             }
+@@ -495,6 +564,7 @@ impl DeviceHub {
+     }
+ 
+     async fn handle_launch(&mut self, conn_id: u64, source: &str, request: LaunchRequest) {
++        prepare_volume_for_session(&mut self.volume);
+         tracing::info!(
+             app_id = %request.app_id,
+             request_id = request.request_id,
+@@ -532,6 +602,7 @@ impl DeviceHub {
+         }
+ 
+         let session_id = Uuid::new_v4().to_string();
++        self.session_owners.insert(session_id.clone(), conn_id);
+         let (credentials, credentials_type) = request.resolved_credentials();
+         let app_key = manifest.app_key;
+         let data_dir = self.data_dir.join("apps").join(app_key);
+@@ -591,6 +662,16 @@ impl DeviceHub {
+             }
+         };
+ 
++        app.on_volume_update(&ctx, self.volume.level, self.volume.muted)
++            .await;
++        self.player
++            .send(PlayerCommand::Volume {
++                session_id: session_id.clone(),
++                level: self.volume.level,
++                muted: self.volume.muted,
++            })
++            .await;
++
+         let mut namespaces: Vec<String> = manifest
+             .namespaces
+             .iter()
+@@ -618,12 +699,14 @@ impl DeviceHub {
+             jobs: jobs_tx,
+         };
+         self.sessions.insert(session_id, session);
++        self.publish_volume().await;
+ 
+         let response = self.receiver_status(request.request_id);
+         self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
+     }
+ 
+     async fn stop_session(&mut self, session_id: &str) {
++        self.session_owners.remove(session_id);
+         let Some(session) = self.sessions.remove(session_id) else {
+             return;
+         };
+@@ -718,7 +801,17 @@ impl DeviceHub {
+                         })
+                         .await;
+                 }
+-                _ => {
++                Ok(ConnectionMessage::Close(_)) => {
++                    self.subscriptions.remove(&(conn_id, source));
++                    let still_subscribed = self
++                        .subscriptions
++                        .values()
++                        .any(|target| target == &transport);
++                    if !still_subscribed {
++                        self.stop_session(&transport).await;
++                    }
++                }
++                Err(_) => {
+                     self.subscriptions.remove(&(conn_id, source));
+                 }
+             },
+@@ -777,6 +870,22 @@ impl DeviceHub {
+             }
+             MediaRequest::Seek(r) => {
+                 let position = r.current_time;
++                let live = self.sessions.get(transport).is_some_and(|session| {
++                    session
++                        .coordinator
++                        .current_media
++                        .as_ref()
++                        .is_some_and(|media| {
++                            media.stream_type == vibecast_messages::StreamType::Live
++                        })
++                });
++                if live || !position.is_finite() || position < 0.0 {
++                    let response =
++                        MediaInvalidRequestResponse::new(r.request_id, "Seek position unavailable");
++                    self.send_to(conn_id, transport, source, ns::MEDIA, &response)
++                        .await;
++                    return;
++                }
+                 tracing::debug!(session_id = %transport, request_id = r.request_id, position, "SEEK");
+                 self.seek(transport, r.request_id, position).await;
+             }
+@@ -808,6 +917,12 @@ impl DeviceHub {
+                     })
+                     .await;
+                 self.notify_app(transport).await;
++                self.volume.level = level;
++                self.volume.muted = muted;
++                self.publish_volume().await;
++                let receiver_status = self.receiver_status(0);
++                self.broadcast(RECEIVER_0, ns::RECEIVER, &receiver_status)
++                    .await;
+             }
+             MediaRequest::GetStatus(r) => {
+                 if let Some(session) = self.sessions.get(transport) {
+@@ -831,6 +946,19 @@ impl DeviceHub {
+                     .await;
+             }
+             MediaRequest::QueueLoad(r) => {
++                if self
++                    .sessions
++                    .get(transport)
++                    .is_some_and(|session| session.app_id == "CC1AD845")
++                {
++                    let response = MediaInvalidRequestResponse::new(
++                        r.request_id,
++                        "QUEUE_LOAD is not supported; use a single-item LOAD",
++                    );
++                    self.send_to(conn_id, transport, source, ns::MEDIA, &response)
++                        .await;
++                    return;
++                }
+                 let response =
+                     vibecast_messages::MediaStatusResponse::new(r.request_id, Vec::new());
+                 self.send_to(conn_id, transport, source, ns::MEDIA, &response)
+@@ -1151,6 +1279,32 @@ impl DeviceHub {
+ 
+     // -- player reports ---------------------------------------------------
+ 
++    async fn publish_volume(&mut self) {
++        let path = volume_path(&self.data_dir, &self.identity.device_id);
++        let tmp = path.with_extension("tmp");
++        let result = std::fs::create_dir_all(&self.data_dir).and_then(|_| {
++            std::fs::write(
++                &tmp,
++                serde_json::to_vec(&self.volume).expect("finite volume"),
++            )?;
++            std::fs::rename(&tmp, &path)
++        });
++        if let Err(error) = result {
++            tracing::warn!(%error, "cannot persist receiver volume");
++        }
++        for session in self.sessions.values_mut() {
++            session.coordinator.volume = self.volume.clone();
++            let _ = session
++                .jobs
++                .send(AppJob::VolumeUpdate {
++                    ctx: session.ctx.clone(),
++                    level: self.volume.level,
++                    muted: self.volume.muted,
++                })
++                .await;
++        }
++    }
++
+     async fn on_report(&mut self, report: PlayerReport) {
+         let session_id = report.session_id().to_string();
+         if !self.sessions.contains_key(&session_id) {
+@@ -1162,8 +1316,22 @@ impl DeviceHub {
+                 current_time,
+                 duration,
+                 idle_reason,
++                volume,
++                muted,
+                 ..
+             } => {
++                let before = self.volume.clone();
++                if let Some(level) = volume.filter(|v| v.is_finite()) {
++                    self.volume.level = level.clamp(0.0, 1.0);
++                }
++                if let Some(muted) = muted {
++                    self.volume.muted = muted;
++                }
++                if self.volume != before {
++                    self.publish_volume().await;
++                    let response = self.receiver_status(0);
++                    self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
++                }
+                 tracing::debug!(
+                     session_id = %session_id,
+                     state = ?player_state,
+@@ -1329,12 +1497,18 @@ impl DeviceHub {
+         let Ok(value) = serde_json::to_value(message) else {
+             return;
+         };
+-        let connection_ids: HashSet<u64> = self
+-            .subscriptions
+-            .iter()
+-            .filter(|(_, target)| target.as_str() == transport)
+-            .map(|((conn, _), _)| *conn)
+-            .collect();
++        let connection_ids: HashSet<u64> = if transport == RECEIVER_0 {
++            self.platform_subscriptions
++                .iter()
++                .map(|(conn, _)| *conn)
++                .collect()
++        } else {
++            self.subscriptions
++                .iter()
++                .filter(|(_, target)| target.as_str() == transport)
++                .map(|((conn, _), _)| *conn)
++                .collect()
++        };
+         for conn_id in connection_ids {
+             if let Some(handle) = self.connections.get(&conn_id) {
+                 let _ = handle.send_json(transport, "*", namespace, &value).await;
+@@ -1347,3 +1521,37 @@ fn parse_payload(message: &CastMessage) -> Option<serde_json::Value> {
+     let text = message.payload_utf8.as_deref()?;
+     serde_json::from_str(text).ok()
+ }
++
++#[cfg(test)]
++mod volume_tests {
++    use super::*;
++    #[test]
++    fn zero_promotes_only_at_session_start() {
++        let mut volume = Volume {
++            level: 0.0,
++            muted: true,
++            ..Default::default()
++        };
++        prepare_volume_for_session(&mut volume);
++        assert_eq!(volume.level, 0.1);
++        assert!(!volume.muted);
++        volume.level = 0.5;
++        prepare_volume_for_session(&mut volume);
++        assert_eq!(volume.level, 0.5);
++    }
++    #[test]
++    fn device_volume_paths_are_distinct_and_safe() {
++        let base = std::path::Path::new("/tmp");
++        let a = volume_path(base, "../a");
++        assert_eq!(a.parent(), Some(base));
++        assert_ne!(a, volume_path(base, "other"));
++        let volume = Volume {
++            level: 0.5,
++            muted: true,
++            ..Default::default()
++        };
++        let restored: Volume =
++            serde_json::from_slice(&serde_json::to_vec(&volume).unwrap()).unwrap();
++        assert_eq!(restored, volume);
++    }
++}
+diff --git a/crates/vibecast-core/src/tests.rs b/crates/vibecast-core/src/tests.rs
+index 495457b..65efc72 100644
+--- a/crates/vibecast-core/src/tests.rs
++++ b/crates/vibecast-core/src/tests.rs
+@@ -101,7 +101,7 @@ fn fake_manifest() -> AppManifest {
+         }],
+     )
+     .expect("fake settings schema");
+-    AppManifest::new("fake", &["APP1"], "Fake App", settings)
++    AppManifest::new("fake", &["APP1", "CC1AD845"], "Fake App", settings)
+         .with_icon_url("https://example.test/fake.png")
+         .with_namespaces(&[FAKE_NS])
+ }
+@@ -146,7 +146,7 @@ impl AppSession for FakeSession {
+                 "https://cdn.example/manifest.mpd",
+                 "application/dash+xml",
+             )],
+-            StreamType::Buffered,
++            request.media.stream_type,
+         );
+         media.title = Some("Fake Title".into());
+         media.duration = Some(120.0);
+@@ -330,6 +330,10 @@ async fn next_json(client: &mut Framed<DuplexStream, CastCodec>) -> Value {
+ }
+ 
+ async fn launch(client: &mut Framed<DuplexStream, CastCodec>) -> String {
++    launch_id(client, "APP1").await
++}
++
++async fn launch_id(client: &mut Framed<DuplexStream, CastCodec>, app_id: &str) -> String {
+     send(
+         client,
+         ns::CONNECTION,
+@@ -341,13 +345,13 @@ async fn launch(client: &mut Framed<DuplexStream, CastCodec>) -> String {
+         client,
+         ns::RECEIVER,
+         "receiver-0",
+-        r#"{"type":"LAUNCH","requestId":1,"appId":"APP1"}"#,
++        &serde_json::json!({"type":"LAUNCH","requestId":1,"appId":app_id}).to_string(),
+     )
+     .await;
+     let status = next_json(client).await;
+     assert_eq!(status["type"], "RECEIVER_STATUS");
+     let app = &status["status"]["applications"][0];
+-    assert_eq!(app["appId"], "APP1");
++    assert_eq!(app["appId"], app_id);
+     assert_eq!(app["displayName"], "Fake App");
+     assert_eq!(app["iconUrl"], "https://example.test/fake.png");
+     assert_eq!(
+@@ -462,11 +466,14 @@ async fn launch_load_and_play_end_to_end() {
+     assert_eq!(playing["status"][0]["playerState"], "PLAYING");
+     assert_eq!(playing["status"][0]["supportedMediaCommands"], 15);
+ 
+-    // The player received Load then Play; the manifest proxy was registered.
++    // Restore receiver volume before Load/Play; register the manifest proxy.
+     let commands = harness.player.commands();
+-    assert!(matches!(commands.first(), Some(PlayerCommand::Load { .. })));
++    assert!(matches!(
++        commands.first(),
++        Some(PlayerCommand::Volume { .. })
++    ));
+     assert!(matches!(commands.last(), Some(PlayerCommand::Play { .. })));
+-    if let Some(PlayerCommand::Load { media, .. }) = commands.first() {
++    if let Some(PlayerCommand::Load { media, .. }) = commands.get(1) {
+         assert!(media.streams[0].url.contains("/manifest/"));
+     }
+     assert!(harness
+@@ -478,6 +485,78 @@ async fn launch_load_and_play_end_to_end() {
+         .any(|event| event.starts_with("+manifest:")));
+ }
+ 
++#[tokio::test]
++async fn default_media_rejects_queue_load_without_poisoning_next_load() {
++    let mut harness = setup().await;
++    let transport = launch_id(&mut harness.client, "CC1AD845").await;
++    send(
++        &mut harness.client,
++        ns::CONNECTION,
++        &transport,
++        r#"{"type":"CONNECT"}"#,
++    )
++    .await;
++    let _ = next_json(&mut harness.client).await;
++    let before = harness.player.commands().len();
++    send(
++        &mut harness.client,
++        ns::MEDIA,
++        &transport,
++        r#"{"type":"QUEUE_LOAD","requestId":71,"items":[]}"#,
++    )
++    .await;
++    let rejected = next_json(&mut harness.client).await;
++    assert_eq!(rejected["type"], "INVALID_REQUEST");
++    assert_eq!(rejected["requestId"], 71);
++    assert_eq!(harness.player.commands().len(), before);
++    send(
++        &mut harness.client,
++        ns::MEDIA,
++        &transport,
++        r#"{"type":"LOAD","requestId":72,"media":{"contentId":"abc","contentType":"audio/mpeg"}}"#,
++    )
++    .await;
++    for _ in 0..3 {
++        let _ = next_json(&mut harness.client).await;
++    }
++    assert!(harness
++        .player
++        .commands()
++        .iter()
++        .any(|c| matches!(c, PlayerCommand::Load { .. })));
++}
++
++#[tokio::test]
++async fn live_seek_is_rejected_without_player_command() {
++    let mut harness = setup().await;
++    let transport = launch(&mut harness.client).await;
++    send(
++        &mut harness.client,
++        ns::CONNECTION,
++        &transport,
++        r#"{"type":"CONNECT"}"#,
++    )
++    .await;
++    let _ = next_json(&mut harness.client).await;
++    send(&mut harness.client, ns::MEDIA, &transport,
++        r#"{"type":"LOAD","requestId":72,"media":{"contentId":"abc","contentType":"audio/mpeg","streamType":"LIVE"}}"#).await;
++    for _ in 0..3 {
++        let _ = next_json(&mut harness.client).await;
++    }
++    let before = harness.player.commands().len();
++    send(
++        &mut harness.client,
++        ns::MEDIA,
++        &transport,
++        r#"{"type":"SEEK","requestId":73,"mediaSessionId":1,"currentTime":5}"#,
++    )
++    .await;
++    let rejected = next_json(&mut harness.client).await;
++    assert_eq!(rejected["type"], "INVALID_REQUEST");
++    assert_eq!(rejected["reason"], "Seek position unavailable");
++    assert_eq!(harness.player.commands().len(), before);
++}
++
+ #[tokio::test]
+ async fn load_failure_sends_load_failed() {
+     let mut harness = setup().await;
+@@ -542,6 +621,8 @@ async fn primary_player_report_broadcasts_status() {
+             current_time: 33.5,
+             duration: Some(120.0),
+             idle_reason: None,
++            volume: None,
++            muted: None,
+         })
+         .await
+         .unwrap();
+@@ -628,14 +709,15 @@ async fn app_driven_playback_uses_canonical_media_path() {
+     assert_eq!(stopped["status"][0]["idleReason"], "CANCELLED");
+ 
+     let commands = harness.player.commands();
+-    assert!(matches!(commands[0], PlayerCommand::Load { .. }));
+-    assert!(matches!(commands[1], PlayerCommand::Pause { .. }));
++    assert!(matches!(commands[0], PlayerCommand::Volume { .. }));
++    assert!(matches!(commands[1], PlayerCommand::Load { .. }));
++    assert!(matches!(commands[2], PlayerCommand::Pause { .. }));
+     assert!(matches!(
+-        commands[2],
++        commands[3],
+         PlayerCommand::Seek { position: 33.0, .. }
+     ));
+-    assert!(matches!(commands[3], PlayerCommand::Play { .. }));
+-    assert!(matches!(commands[4], PlayerCommand::Stop { .. }));
++    assert!(matches!(commands[4], PlayerCommand::Play { .. }));
++    assert!(matches!(commands[5], PlayerCommand::Stop { .. }));
+ }
+ 
+ /// An app session whose `resolve_license` reverses the challenge instead of
+@@ -805,3 +887,60 @@ async fn platform_set_volume_broadcasts_receiver_status() {
+     // muted was omitted, so it stays at its prior value.
+     assert_eq!(reply["status"]["volume"]["muted"], false);
+ }
++
++#[tokio::test]
++async fn platform_volume_subscription_survives_app_connect() {
++    let mut harness = setup().await;
++    let client = &mut harness.client;
++    let transport = launch(client).await;
++    send(client, ns::CONNECTION, &transport, r#"{"type":"CONNECT"}"#).await;
++    // CONNECT generates no reply. Barrier through GET_STATUS drains prior work.
++    send(
++        client,
++        ns::RECEIVER,
++        "receiver-0",
++        r#"{"type":"GET_STATUS","requestId":50}"#,
++    )
++    .await;
++    loop {
++        if next_json(client).await["requestId"] == 50 {
++            break;
++        }
++    }
++    send(
++        client,
++        ns::RECEIVER,
++        "receiver-0",
++        r#"{"type":"SET_VOLUME","requestId":51,"volume":{"level":0.42}}"#,
++    )
++    .await;
++    let reply = tokio::time::timeout(std::time::Duration::from_secs(2), async {
++        loop {
++            let reply = next_json(client).await;
++            if reply["type"] == "RECEIVER_STATUS" && reply["requestId"] == 51 {
++                break reply;
++            }
++        }
++    })
++    .await
++    .expect("platform status must arrive during an app session");
++    assert_eq!(reply["status"]["volume"]["level"], 0.42);
++    send(
++        client,
++        ns::MEDIA,
++        &transport,
++        r#"{"type":"SET_VOLUME","requestId":52,"mediaSessionId":1,"volume":{"level":0.43}}"#,
++    )
++    .await;
++    let reply = tokio::time::timeout(std::time::Duration::from_secs(2), async {
++        loop {
++            let reply = next_json(client).await;
++            if reply["type"] == "RECEIVER_STATUS" {
++                break reply;
++            }
++        }
++    })
++    .await
++    .expect("media volume changes must update platform observers too");
++    assert_eq!(reply["status"]["volume"]["level"], 0.43);
++}
+diff --git a/crates/vibecast-platform/Cargo.toml b/crates/vibecast-platform/Cargo.toml
+index dca9ecf..9ffbddf 100644
+--- a/crates/vibecast-platform/Cargo.toml
++++ b/crates/vibecast-platform/Cargo.toml
+@@ -30,6 +30,7 @@ vibecast-apps-tv4play = { path = "../vibecast-apps-tv4play" }
+ vibecast-apps-viaplay = { path = "../vibecast-apps-viaplay" }
+ vibecast-apps-primevideo = { path = "../vibecast-apps-primevideo" }
+ vibecast-apps-youtube = { path = "../vibecast-apps-youtube" }
++vibecast-apps-default-media = { path = "../vibecast-apps-default-media" }
+ 
+ tokio = { workspace = true }
+ tokio-util = { workspace = true, features = ["rt"] }
+diff --git a/crates/vibecast-platform/src/lib.rs b/crates/vibecast-platform/src/lib.rs
+index 9ea50fd..bfa1e01 100644
+--- a/crates/vibecast-platform/src/lib.rs
++++ b/crates/vibecast-platform/src/lib.rs
+@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
+ use tokio::sync::mpsc;
+ use tokio_util::sync::CancellationToken;
+ 
++use vibecast_apps_default_media::DefaultMedia;
+ use vibecast_apps_primevideo::PrimeVideo;
+ use vibecast_apps_svtplay::SvtPlay;
+ use vibecast_apps_tv4play::Tv4Play;
+@@ -390,6 +391,7 @@ fn build_app_providers() -> Vec<Arc<dyn AppProvider>> {
+         Arc::new(Viaplay::new()),
+         Arc::new(PrimeVideo::new()),
+         Arc::new(YouTube::new()),
++        Arc::new(DefaultMedia),
+     ]
+ }
+ 
+@@ -687,6 +689,7 @@ mod tests {
+         assert!(keys.contains(&"viaplay"));
+         assert!(keys.contains(&"primevideo"));
+         assert!(keys.contains(&"youtube"));
++        assert!(keys.contains(&"default_media"));
+     }
+ 
+     #[tokio::test]
+diff --git a/crates/vibecast-apps-default-media/Cargo.toml b/crates/vibecast-apps-default-media/Cargo.toml
+new file mode 100644
+index 0000000..4028bc2
+--- /dev/null
++++ b/crates/vibecast-apps-default-media/Cargo.toml
+@@ -0,0 +1,17 @@
++[package]
++name = "vibecast-apps-default-media"
++description = "URL-based Default Media Receiver Cast application"
++version.workspace = true
++edition.workspace = true
++rust-version.workspace = true
++license.workspace = true
++repository.workspace = true
++publish.workspace = true
++
++[dependencies]
++vibecast-sdk = { path = "../vibecast-sdk" }
++async-trait = { workspace = true }
++url = { workspace = true }
++
++[dev-dependencies]
++serde_json = { workspace = true }
+diff --git a/crates/vibecast-apps-default-media/src/lib.rs b/crates/vibecast-apps-default-media/src/lib.rs
+new file mode 100644
+index 0000000..b46048a
+--- /dev/null
++++ b/crates/vibecast-apps-default-media/src/lib.rs
+@@ -0,0 +1,223 @@
++//! Single-item HTTP(S) Default Media Receiver application.
++
++#![forbid(unsafe_code)]
++
++use std::sync::Arc;
++
++use async_trait::async_trait;
++use url::Url;
++use vibecast_sdk::{
++    normalize_stream_type, AppContext, AppManifest, AppProvider, AppSession, LaunchCredentials,
++    LaunchError, LoadRequest, MediaResolveError, PlaybackMedia, PlaybackStream, StreamSource,
++    StreamType,
++};
++
++/// Direct-media application, without service-specific extraction or DRM.
++#[derive(Debug, Default)]
++pub struct DefaultMedia;
++
++#[async_trait]
++impl AppProvider for DefaultMedia {
++    fn manifest(&self) -> AppManifest {
++        AppManifest::without_settings("default_media", &["CC1AD845"], "Default Media Receiver")
++    }
++
++    async fn launch(
++        &self,
++        _ctx: &AppContext,
++        _credentials: LaunchCredentials,
++    ) -> Result<Arc<dyn AppSession>, LaunchError> {
++        Ok(Arc::new(DefaultMediaSession))
++    }
++}
++
++struct DefaultMediaSession;
++
++#[async_trait]
++impl AppSession for DefaultMediaSession {
++    async fn resolve_media(
++        &self,
++        ctx: &AppContext,
++        request: &LoadRequest,
++    ) -> Result<PlaybackMedia, MediaResolveError> {
++        resolve(&ctx.session_id, request)
++    }
++}
++
++fn resolve(session_id: &str, request: &LoadRequest) -> Result<PlaybackMedia, MediaResolveError> {
++    let media = &request.media;
++    let source = media.content_url.as_deref().unwrap_or(&media.content_id);
++    let url =
++        Url::parse(source).map_err(|_| MediaResolveError::invalid_request("INVALID_MEDIA_URL"))?;
++    // Keep LAN URLs: this is how local media and TTS reach a Cast receiver.
++    // Do not allow arbitrary decoder protocols, local paths or URL credentials.
++    if !matches!(url.scheme(), "http" | "https")
++        || url.host_str().is_none()
++        || !url.username().is_empty()
++        || url.password().is_some()
++        || source.chars().any(char::is_control)
++    {
++        return Err(MediaResolveError::invalid_request("INVALID_MEDIA_URL"));
++    }
++    if !request.current_time.is_finite()
++        || request.current_time < 0.0
++        || media
++            .duration
++            .is_some_and(|value| !value.is_finite() || value < 0.0)
++    {
++        return Err(MediaResolveError::invalid_request("INVALID_MEDIA_TIME"));
++    }
++    if media.content_type.trim().is_empty() || media.content_type.chars().any(char::is_control) {
++        return Err(MediaResolveError::invalid_request("INVALID_CONTENT_TYPE"));
++    }
++    let stream_type = if media.is_live_media == Some(true) {
++        StreamType::Live
++    } else {
++        normalize_stream_type(media.stream_type)
++    };
++    if stream_type == StreamType::Live && request.current_time > 0.0 {
++        return Err(MediaResolveError::invalid_request("LIVE_SEEK_UNSUPPORTED"));
++    }
++    let metadata = media.metadata.as_ref();
++    Ok(PlaybackMedia {
++        session_id: session_id.to_owned(),
++        streams: vec![PlaybackStream {
++            // Preserve original escaping and signatures rather than reserializing Url.
++            source: StreamSource::Url(source.to_owned()),
++            content_type: media.content_type.clone(),
++            drm: None,
++        }],
++        stream_type,
++        content_id: Some(media.content_id.clone()),
++        title: metadata.and_then(|value| value.title.clone()),
++        subtitle: metadata.and_then(|value| value.subtitle.clone()),
++        images: metadata
++            .map(|value| value.images.clone())
++            .unwrap_or_default(),
++        duration: media.duration,
++        autoplay: request.autoplay,
++        start_time: request.current_time,
++        custom_data: media.custom_data.clone(),
++    })
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use serde_json::json;
++
++    fn request() -> LoadRequest {
++        serde_json::from_value(json!({
++            "requestId": 1,
++            "media": {
++                "contentId": "http://192.168.1.2/audio.mp3",
++                "contentType": "audio/mpeg",
++                "duration": 42.0,
++                "metadata": {"title": "Track", "subtitle": "Artist",
++                    "images": [{"url": "https://example.test/cover.jpg"}]}
++            },
++            "autoplay": false,
++            "currentTime": 12.5
++        }))
++        .unwrap()
++    }
++
++    #[test]
++    fn manifest_advertises_only_default_id() {
++        let manifest = DefaultMedia.manifest();
++        assert_eq!(manifest.app_ids, &["CC1AD845"]);
++        assert!(manifest.namespaces.is_empty());
++    }
++
++    #[test]
++    fn preserves_direct_media_and_controls_without_network_resolution() {
++        let playback = resolve("session", &request()).unwrap();
++        assert_eq!(
++            playback.streams[0].source.as_url(),
++            Some("http://192.168.1.2/audio.mp3")
++        );
++        assert_eq!(playback.title.as_deref(), Some("Track"));
++        assert_eq!(playback.subtitle.as_deref(), Some("Artist"));
++        assert_eq!(playback.images.len(), 1);
++        assert_eq!(playback.duration, Some(42.0));
++        assert_eq!(playback.start_time, 12.5);
++        assert!(!playback.autoplay);
++        assert_eq!(playback.stream_type, StreamType::Buffered);
++    }
++
++    #[test]
++    fn content_url_overrides_logical_id_without_rewriting_signature() {
++        let mut load = request();
++        load.media.content_id = "logical-id".into();
++        let source = "https://example.test/a%2fb?token=a%2Bb&x=1";
++        load.media.content_url = Some(source.into());
++        let playback = resolve("session", &load).unwrap();
++        assert_eq!(playback.streams[0].source.as_url(), Some(source));
++        assert_eq!(playback.content_id.as_deref(), Some("logical-id"));
++    }
++
++    #[test]
++    fn invalid_explicit_url_does_not_fall_back_to_content_id() {
++        let mut load = request();
++        load.media.content_url = Some("file:///tmp/audio".into());
++        assert!(resolve("session", &load).is_err());
++    }
++
++    #[test]
++    fn rejects_non_web_sources_and_credentials() {
++        for source in [
++            "file:///tmp/audio",
++            "pipe:0",
++            "concat:a|b",
++            "/tmp/audio",
++            "https://user:password@example.test/a",
++            "https://example.test/a\n",
++        ] {
++            let mut load = request();
++            load.media.content_id = source.into();
++            assert!(
++                resolve("session", &load).is_err(),
++                "accepted invalid source"
++            );
++        }
++    }
++
++    #[test]
++    fn rejects_invalid_timing_and_content_type() {
++        for value in [-1.0, f64::NAN, f64::INFINITY] {
++            let mut load = request();
++            load.current_time = value;
++            assert!(resolve("session", &load).is_err());
++            load.current_time = 0.0;
++            load.media.duration = Some(value);
++            assert!(resolve("session", &load).is_err());
++        }
++        for mime in ["", "audio/mpeg\r\nx: y"] {
++            let mut load = request();
++            load.media.content_type = mime.into();
++            assert!(resolve("session", &load).is_err());
++        }
++    }
++
++    #[test]
++    fn live_source_preserves_unknown_duration() {
++        let mut load = request();
++        load.current_time = 0.0;
++        load.media.duration = None;
++        load.media.stream_type = StreamType::Live;
++        assert_eq!(
++            resolve("session", &load).unwrap().stream_type,
++            StreamType::Live
++        );
++        load.current_time = 1.0;
++        assert!(resolve("session", &load).is_err());
++        load.current_time = 0.0;
++        assert_eq!(resolve("session", &load).unwrap().duration, None);
++        load.media.stream_type = StreamType::Buffered;
++        load.media.is_live_media = Some(true);
++        assert_eq!(
++            resolve("session", &load).unwrap().stream_type,
++            StreamType::Live
++        );
++    }
++}

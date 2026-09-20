@@ -1,0 +1,394 @@
+diff --git a/crates/vibecast-apps-youtube/src/lib.rs b/crates/vibecast-apps-youtube/src/lib.rs
+index 253f5d9..aab3498 100644
+--- a/crates/vibecast-apps-youtube/src/lib.rs
++++ b/crates/vibecast-apps-youtube/src/lib.rs
+@@ -18,7 +18,7 @@ use vibecast_sdk::{
+ use lounge::{LoungeCommand, LoungeConnection, LoungeIdentity};
+ use resolver::{PreferredVideoCodec, ResolveError, Resolver, PREFERRED_VIDEO_CODEC_KEY};
+ 
+-const APP_IDS: &[&str] = &["233637DE"];
++const APP_IDS: &[&str] = &["233637DE", "2DB7CC49"];
+ const MDX_NAMESPACE: &str = "urn:x-cast:com.google.youtube.mdx";
+ const CUSTOM_DATA_NAMESPACE: &str = "urn:x-cast:com.google.cast.customdata";
+ const ICON_URL: &str = "https://www.gstatic.com/youtube/img/branding/favicon/favicon_144x144.png";
+@@ -224,6 +224,40 @@ struct QueueState {
+     next_pending: bool,
+ }
+ 
++impl QueueState {
++    fn advances_to_prepared_next(&self, command: &LoungeCommand) -> bool {
++        match command {
++            LoungeCommand::Next => true,
++            LoungeCommand::SetPlaylist { video_ids, current_index, current_time, list_id } => {
++                self.list_id.is_some()
++                    && self.list_id == *list_id
++                    && *current_time == 0.0
++                    && *current_index == self.current_index + 1
++                    && video_ids.get(*current_index).is_some()
++                    && video_ids.get(*current_index) == self.video_ids.get(self.current_index + 1)
++            }
++            _ => false,
++        }
++    }
++}
++
++// One session-local speculative result; never written to disk. Dropping it
++// cancels the async task, so obsolete results cannot start playback.
++struct NextResolution {
++    video_id: String,
++    task: Option<tokio::task::JoinHandle<(Result<PlaybackMedia, ResolveError>, std::time::Instant)>>,
++}
++
++impl Drop for NextResolution {
++    fn drop(&mut self) {
++        if let Some(task) = &self.task { task.abort(); }
++    }
++}
++
++fn prefetched_is_fresh(completed: std::time::Instant) -> bool {
++    completed.elapsed() < std::time::Duration::from_secs(600)
++}
++
+ async fn run_commands(
+     mut commands: mpsc::Receiver<LoungeCommand>,
+     resolver: Resolver,
+@@ -233,6 +267,8 @@ async fn run_commands(
+     mut cancel: watch::Receiver<bool>,
+ ) {
+     let mut queue = QueueState::default();
++    let mut next_resolution: Option<NextResolution> = None;
++    let mut playback_active = false;
+     loop {
+         let command = tokio::select! {
+             result = cancel.changed() => {
+@@ -247,6 +283,14 @@ async fn run_commands(
+             }
+         };
+ 
++        // New-queue selections keep their established load/coalescing path.
++        // Only explicit/automatic Next consumes speculative media.
++        let use_prefetch = queue.advances_to_prepared_next(&command);
++        if let LoungeCommand::SetPlaylist { current_index, video_ids, current_time, list_id } = &command {
++            tracing::info!(index = *current_index, queue_len = video_ids.len(),
++                start = *current_time, same_queue = queue.list_id.is_some() && queue.list_id == *list_id,
++                use_prefetch, "YouTube playlist selection");
++        }
+         let load = match command {
+             LoungeCommand::SetPlaylist {
+                 video_ids,
+@@ -304,22 +348,70 @@ async fn run_commands(
+                 playback.seek(position).await;
+                 None
+             }
++            LoungeCommand::Stop => {
++                queue.next_pending = false;
++                playback_active = false;
++                next_resolution = None;
++                playback.stop().await;
++                None
++            }
+         };
+ 
+         if let Some((video_id, start_time)) = load {
++            tracing::info!(%video_id, start_time, "YouTube queue requests load");
+             let snapshot = settings.snapshot();
+             let preferred_video_codec = PreferredVideoCodec::from_snapshot(&snapshot);
+-            match resolver
+-                .resolve(&video_id, start_time, &capabilities, preferred_video_codec)
+-                .await
+-            {
+-                Ok(media) => playback.load(media).await,
++            let mut prepared = None;
++            if let Some(mut pending) = next_resolution.take() {
++                if use_prefetch && pending.video_id == video_id {
++                    if let Some(task) = pending.task.as_mut() {
++                        if let Ok((Ok(mut media), completed)) = task.await {
++                            if prefetched_is_fresh(completed) {
++                                media.start_time = start_time.max(0.0);
++                                prepared = Some(media);
++                                tracing::info!(%video_id, "using prefetched YouTube media");
++                            }
++                        }
++                    }
++                }
++            }
++            let result = match prepared {
++                Some(media) => Ok(media),
++                None => resolver.resolve(&video_id, start_time, &capabilities, preferred_video_codec).await,
++            };
++            match result {
++                Ok(media) => {
++                    playback_active = true;
++                    playback.load(media).await;
++                }
+                 Err(error) => {
++                    playback_active = false;
+                     tracing::warn!(%video_id, %error, "failed to resolve YouTube video");
+                     playback.stop().await;
+                 }
+             }
+         }
++
++        let candidate = if playback_active {
++            queue.video_ids.get(queue.current_index + 1).cloned()
++        } else { None };
++        if next_resolution.as_ref().map(|p| &p.video_id) != candidate.as_ref() {
++            next_resolution = None;
++            if let Some(video_id) = candidate {
++                let resolver = resolver.clone();
++                let capabilities = capabilities.clone();
++                let codec = PreferredVideoCodec::from_snapshot(&settings.snapshot());
++                let id = video_id.clone();
++                tracing::info!(%video_id, "prefetching next YouTube media");
++                next_resolution = Some(NextResolution {
++                    video_id,
++                    task: Some(tokio::spawn(async move {
++                        let result = resolver.resolve(&id, 0.0, &capabilities, codec).await;
++                        (result, std::time::Instant::now())
++                    })),
++                });
++            }
++        }
+     }
+ }
+ 
+@@ -341,6 +433,38 @@ fn map_resolve_error(error: ResolveError) -> MediaResolveError {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn playlist_advance_can_use_prefetch_but_new_selection_cannot() {
++        let queue = QueueState { video_ids: vec!["a".into(), "b".into()],
++            current_index: 0, list_id: Some("queue".into()), next_pending: false };
++        let selection = |list: &str, index, time| LoungeCommand::SetPlaylist {
++            video_ids: vec!["a".into(), "b".into()], current_index: index,
++            current_time: time, list_id: Some(list.into()),
++        };
++        assert!(queue.advances_to_prepared_next(&selection("queue", 1, 0.0)));
++        assert!(queue.advances_to_prepared_next(&LoungeCommand::Next));
++        assert!(!queue.advances_to_prepared_next(&selection("other", 1, 0.0)));
++        assert!(!queue.advances_to_prepared_next(&selection("queue", 0, 0.0)));
++        assert!(!queue.advances_to_prepared_next(&selection("queue", 1, 42.0)));
++    }
++    #[test]
++    fn prefetch_expires_after_ten_minutes() {
++        let now = std::time::Instant::now();
++        assert!(prefetched_is_fresh(now));
++        assert!(!prefetched_is_fresh(now - std::time::Duration::from_secs(601)));
++    }
++
++    #[tokio::test]
++    async fn dropping_prefetch_aborts_its_task() {
++        let task = tokio::spawn(async {
++            std::future::pending::<()>().await;
++            (Err(ResolveError::Protocol("unused")), std::time::Instant::now())
++        });
++        let handle = task.abort_handle();
++        drop(NextResolution { video_id: "unused".into(), task: Some(task) });
++        tokio::task::yield_now().await;
++        assert!(handle.is_finished());
++    }
+     use std::sync::Mutex;
+ 
+     #[derive(Default)]
+diff --git a/crates/vibecast-apps-youtube/src/lounge.rs b/crates/vibecast-apps-youtube/src/lounge.rs
+index 5010f8f..b96485a 100644
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -7,7 +7,7 @@ use serde_json::Value;
+ use thiserror::Error;
+ use tokio::sync::{mpsc, watch};
+ use url::Url;
+-use vibecast_sdk::{PlaybackState, PlayerState, ReceiverContext};
++use vibecast_sdk::{IdleReason, PlaybackState, PlayerState, ReceiverContext};
+ 
+ const LOUNGE_BASE: &str = "https://www.youtube.com/api/lounge";
+ const USER_AGENT: &str =
+@@ -28,6 +28,7 @@ pub(crate) enum LoungeCommand {
+     },
+     Play,
+     Pause,
++    Stop,
+     Seek(f64),
+     Next,
+ }
+@@ -59,6 +60,7 @@ struct BoundSession {
+ 
+ #[derive(Default)]
+ struct CurrentMedia {
++    awaiting_load: bool,
+     video_ids: Vec<String>,
+     video_id: Option<String>,
+     list_id: Option<String>,
+@@ -67,6 +69,27 @@ struct CurrentMedia {
+     state: Option<PlaybackState>,
+ }
+ 
++impl CurrentMedia {
++    fn coalesce_pending_selection(&self, incoming: Incoming) -> Incoming {
++        if let Incoming::Command(LoungeCommand::SetPlaylist {
++            ref video_ids, current_index, current_time, ref list_id,
++        }) = incoming {
++            if self.awaiting_load
++                && self.video_id.is_some()
++                && self.video_id.as_ref() == video_ids.get(current_index)
++                && self.current_index == current_index
++                && self.state.as_ref().is_some_and(|s| s.current_time == current_time)
++            {
++                tracing::info!("coalesced pending YouTube selection into queue update");
++                return Incoming::Command(LoungeCommand::UpdatePlaylist {
++                    video_ids: video_ids.clone(), list_id: list_id.clone(),
++                });
++            }
++        }
++        incoming
++    }
++}
++
+ #[derive(Debug, Error)]
+ pub(crate) enum LoungeError {
+     #[error("YouTube Lounge HTTP request failed")]
+@@ -197,7 +220,14 @@ impl LoungeConnection {
+         self.post(Outbound::NowPlaying).await?;
+ 
+         loop {
+-            let poll = poll_commands(&self.http, &self.bind_url, &self.bound);
++            // Keep the long poll alive while playback reports arrive. Dropping
++            // it on every position update starves incoming controls.
++            let http = self.http.clone();
++            let bind_url = self.bind_url.clone();
++            let bound = self.bound.clone();
++            let poll = poll_commands(&http, &bind_url, &bound);
++            tokio::pin!(poll);
++            loop {
+             tokio::select! {
+                 result = cancel.changed() => {
+                     if result.is_err() || *cancel.borrow() {
+@@ -206,28 +236,50 @@ impl LoungeConnection {
+                 }
+                 state = playback_rx.recv() => {
+                     let Some(state) = state else { return Ok(()); };
++                    if self.current.awaiting_load {
++                        if state.player_state != PlayerState::Buffering
++                            && !matches!(state.idle_reason, Some(IdleReason::Error | IdleReason::Cancelled)) {
++                            continue;
++                        }
++                        self.current.awaiting_load = false;
++                    }
++                    let ended = state.idle_reason == Some(IdleReason::Finished)
++                        && self.current.state.as_ref().and_then(|s| s.idle_reason)
++                            != Some(IdleReason::Finished);
+                     self.current.state = Some(state.clone());
+                     self.post(Outbound::State(state)).await?;
++                    if ended {
++                        if let Some(outbound) = self.handle_internal(&Incoming::Command(LoungeCommand::Next)) {
++                            self.post(outbound).await?;
++                        }
++                        let _ = command_tx.send(LoungeCommand::Next).await;
++                    }
+                 }
+-                result = poll => {
++                result = &mut poll => {
+                     let batch = match result {
+                         Ok(batch) => batch,
+-                        Err(LoungeError::Http(error)) if error.is_timeout() => continue,
++                        Err(LoungeError::Http(error)) if error.is_timeout() => break,
+                         Err(error) => return Err(error),
+                     };
+                     self.bound.aid = self.bound.aid.max(batch.aid);
+                     for incoming in batch.messages {
+-                        if let Some(outbound) = self.handle_internal(&incoming) {
+-                            self.post(outbound).await?;
+-                        }
++                        let incoming = self.current.coalesce_pending_selection(incoming);
++                        let outbound = self.handle_internal(&incoming);
+                         if let Incoming::Command(command) = incoming {
+                             if command_tx.send(command).await.is_err() {
+                                 return Ok(());
+                             }
+                         }
++                        // Local playback need not wait for Google's HTTP ACK.
++                        // Internal buffering/queue state was already updated.
++                        if let Some(outbound) = outbound {
++                            self.post(outbound).await?;
++                        }
+                     }
++                    break;
+                 }
+             }
++            }
+         }
+     }
+ 
+@@ -240,6 +292,7 @@ impl LoungeConnection {
+                 list_id,
+             }) => {
+                 self.current.video_ids.clone_from(video_ids);
++                self.current.awaiting_load = true;
+                 self.current.video_id = video_ids.get(*current_index).cloned();
+                 self.current.current_index = *current_index;
+                 self.current.list_id.clone_from(list_id);
+@@ -270,6 +323,13 @@ impl LoungeConnection {
+                 None
+             }
+             Incoming::Command(LoungeCommand::Next) => {
++                self.current.awaiting_load = true;
++                self.current.state = Some(PlaybackState {
++                    player_state: PlayerState::Buffering,
++                    current_time: 0.0,
++                    duration: None,
++                    idle_reason: None,
++                });
+                 if self.current.current_index + 1 < self.current.video_ids.len() {
+                     self.current.current_index += 1;
+                     self.current.video_id = self
+@@ -523,6 +583,8 @@ fn parse_incoming(bytes: &[u8]) -> Result<IncomingBatch, LoungeError> {
+             let Some(message) = parts.get(1).and_then(Value::as_array) else {
+                 continue;
+             };
++            tracing::info!(sequence = parts.first().and_then(serde_json::Value::as_u64),
++                command = message.first().and_then(serde_json::Value::as_str), "Lounge incoming command");
+             messages.push(parse_message(message));
+         }
+     }
+@@ -539,6 +601,7 @@ fn parse_message(message: &[Value]) -> Incoming {
+         "updatePlaylist" => parse_update_playlist(params),
+         "play" => Some(LoungeCommand::Play),
+         "pause" => Some(LoungeCommand::Pause),
++        "stopVideo" | "stop" => Some(LoungeCommand::Stop),
+         "next" => Some(LoungeCommand::Next),
+         "seekTo" => params
+             .and_then(|value| value.get("newTime"))
+@@ -761,6 +824,31 @@ struct LoungeTokenScreen {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++
++    #[test]
++    fn pending_selection_updates_queue_without_second_load() {
++        let mut current = CurrentMedia {
++            awaiting_load: true,
++            video_id: Some("a".into()),
++            state: Some(PlaybackState { player_state: PlayerState::Buffering,
++                current_time: 0.0, duration: None, idle_reason: None }),
++            ..Default::default()
++        };
++        let selection = |video: &str, position| Incoming::Command(LoungeCommand::SetPlaylist {
++            video_ids: vec![video.into(), "next".into()], current_index: 0,
++            current_time: position, list_id: Some("new-queue".into()),
++        });
++        assert!(matches!(current.coalesce_pending_selection(selection("a", 0.0)),
++            Incoming::Command(LoungeCommand::UpdatePlaylist { video_ids, list_id })
++                if video_ids == ["a", "next"] && list_id.as_deref() == Some("new-queue")));
++        for command in [selection("b", 0.0), selection("a", 42.0)] {
++            assert!(matches!(current.coalesce_pending_selection(command),
++                Incoming::Command(LoungeCommand::SetPlaylist { .. })));
++        }
++        current.awaiting_load = false;
++        assert!(matches!(current.coalesce_pending_selection(selection("a", 0.0)),
++            Incoming::Command(LoungeCommand::SetPlaylist { .. })));
++    }
+     use std::path::PathBuf;
+     use wiremock::matchers::{method, path};
+     use wiremock::{Mock, MockServer, ResponseTemplate};
+

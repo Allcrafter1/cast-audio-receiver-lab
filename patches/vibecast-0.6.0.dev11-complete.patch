@@ -1,0 +1,3061 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 8891c96..97f2073 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -3152,6 +3152,16 @@ version = "0.9.5"
+ source = "registry+https://github.com/rust-lang/crates.io-index"
+ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
+ 
++[[package]]
++name = "vibecast-apps-default-media"
++version = "0.1.0"
++dependencies = [
++ "async-trait",
++ "serde_json",
++ "url",
++ "vibecast-sdk",
++]
++
+ [[package]]
+ name = "vibecast-apps-primevideo"
+ version = "0.1.0"
+@@ -3369,6 +3379,7 @@ dependencies = [
+  "toml 0.8.23",
+  "tracing",
+  "uuid",
++ "vibecast-apps-default-media",
+  "vibecast-apps-primevideo",
+  "vibecast-apps-svtplay",
+  "vibecast-apps-tv4play",
+diff --git a/Cargo.toml b/Cargo.toml
+index 38f371c..08b34aa 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -17,6 +17,7 @@ members = [
+     "crates/vibecast-apps-viaplay",
+     "crates/vibecast-apps-primevideo",
+     "crates/vibecast-apps-youtube",
++    "crates/vibecast-apps-default-media",
+     "crates/vibecast-core",
+     "crates/vibecast-receiver",
+     "crates/vibecast-platform",
+diff --git a/crates/vibecast-apps-primevideo/src/lib.rs b/crates/vibecast-apps-primevideo/src/lib.rs
+index 8202c68..657de24 100644
+--- a/crates/vibecast-apps-primevideo/src/lib.rs
++++ b/crates/vibecast-apps-primevideo/src/lib.rs
+@@ -342,6 +342,7 @@ impl AppSession for PrimeSession {
+             streams,
+             stream_type,
+             content_id: Some(title_id.to_string()),
++            metadata: None,
+             title,
+             subtitle,
+             images: metadata.map(|m| m.images.clone()).unwrap_or_default(),
+diff --git a/crates/vibecast-apps-svtplay/src/lib.rs b/crates/vibecast-apps-svtplay/src/lib.rs
+index 82fc170..dd67d63 100644
+--- a/crates/vibecast-apps-svtplay/src/lib.rs
++++ b/crates/vibecast-apps-svtplay/src/lib.rs
+@@ -115,6 +115,7 @@ impl AppSession for SvtSession {
+             streams,
+             stream_type: normalize_stream_type(media.stream_type),
+             content_id: None,
++            metadata: None,
+             title: resolved.title.or_else(|| metadata_title(metadata)),
+             subtitle: resolved.subtitle.or_else(|| metadata_subtitle(metadata)),
+             images: metadata.map(|m| m.images.clone()).unwrap_or_default(),
+diff --git a/crates/vibecast-apps-tv4play/src/lib.rs b/crates/vibecast-apps-tv4play/src/lib.rs
+index ded44c0..97b1604 100644
+--- a/crates/vibecast-apps-tv4play/src/lib.rs
++++ b/crates/vibecast-apps-tv4play/src/lib.rs
+@@ -288,6 +288,7 @@ fn direct_media(ctx: &AppContext, request: &LoadRequest, content_id: &str) -> Pl
+         }],
+         stream_type: normalize_stream_type(media.stream_type),
+         content_id: Some(content_id.to_string()),
++        metadata: None,
+         title: metadata.and_then(|m| m.title.clone()),
+         subtitle: metadata.and_then(|m| m.subtitle.clone()),
+         images: metadata.map(|m| m.images.clone()).unwrap_or_default(),
+@@ -347,6 +348,7 @@ fn playback_media_from_resolved(
+         }],
+         stream_type: stream_type(playback),
+         content_id: Some(asset_id.to_string()),
++        metadata: None,
+         title: title(metadata, playback_metadata.and_then(|m| m.title.clone())),
+         subtitle: subtitle(metadata, request.media.metadata.as_ref()),
+         images: images(metadata, playback_metadata.and_then(|m| m.image.as_deref())),
+diff --git a/crates/vibecast-apps-viaplay/src/lib.rs b/crates/vibecast-apps-viaplay/src/lib.rs
+index eb92456..10e682b 100644
+--- a/crates/vibecast-apps-viaplay/src/lib.rs
++++ b/crates/vibecast-apps-viaplay/src/lib.rs
+@@ -33,7 +33,7 @@ use crate::models::{
+ };
+ 
+ const NS_VIAPLAY: &str = "urn:x-cast:tv.viaplay.chromecast";
+-const APP_IDS: &[&str] = &["6313CF39", "2DB7CC49"];
++const APP_IDS: &[&str] = &["6313CF39"];
+ const ICON_URL: &str = "https://lh3.googleusercontent.com/qXqoFPVkEZBwm7f1Yo8_7Xjv8wVeqbBeI-HfbD_KHjt0aOJf5dP_kbyQKMB1stIc0HIywc__C_Qq2CKjsg";
+ 
+ // ---------------------------------------------------------------------------
+@@ -299,6 +299,7 @@ impl AppSession for ViaplaySession {
+             streams,
+             stream_type: resolved_stream_type,
+             content_id: Some(request.media.content_id.clone()),
++            metadata: None,
+             title,
+             subtitle,
+             images,
+diff --git a/crates/vibecast-apps-youtube/Cargo.toml b/crates/vibecast-apps-youtube/Cargo.toml
+index 91fc775..a73634d 100644
+--- a/crates/vibecast-apps-youtube/Cargo.toml
++++ b/crates/vibecast-apps-youtube/Cargo.toml
+@@ -18,7 +18,7 @@ reqwest = { workspace = true }
+ serde = { workspace = true }
+ serde_json = { workspace = true }
+ thiserror = { workspace = true }
+-tokio = { workspace = true, features = ["sync", "time"] }
++tokio = { workspace = true, features = ["sync", "time", "process"] }
+ tracing = { workspace = true }
+ url = { workspace = true }
+ uuid = { workspace = true }
+diff --git a/crates/vibecast-apps-youtube/src/lib.rs b/crates/vibecast-apps-youtube/src/lib.rs
+index 253f5d9..268eba8 100644
+--- a/crates/vibecast-apps-youtube/src/lib.rs
++++ b/crates/vibecast-apps-youtube/src/lib.rs
+@@ -18,7 +18,7 @@ use vibecast_sdk::{
+ use lounge::{LoungeCommand, LoungeConnection, LoungeIdentity};
+ use resolver::{PreferredVideoCodec, ResolveError, Resolver, PREFERRED_VIDEO_CODEC_KEY};
+ 
+-const APP_IDS: &[&str] = &["233637DE"];
++const APP_IDS: &[&str] = &["233637DE", "2DB7CC49"];
+ const MDX_NAMESPACE: &str = "urn:x-cast:com.google.youtube.mdx";
+ const CUSTOM_DATA_NAMESPACE: &str = "urn:x-cast:com.google.cast.customdata";
+ const ICON_URL: &str = "https://www.gstatic.com/youtube/img/branding/favicon/favicon_144x144.png";
+@@ -73,6 +73,7 @@ impl AppProvider for YouTube {
+ 
+         let (command_tx, command_rx) = mpsc::channel(32);
+         let (playback_tx, playback_rx) = mpsc::channel(32);
++        let (volume_tx, volume_rx) = watch::channel((1.0, false));
+         let (identity_tx, identity) = watch::channel(None);
+         let (cancel, _) = watch::channel(false);
+         tokio::spawn(run_commands(
+@@ -89,6 +90,7 @@ impl AppProvider for YouTube {
+             command_tx,
+             playback_rx,
+             identity_tx,
++            volume_rx,
+             cancel.subscribe(),
+         ));
+ 
+@@ -97,6 +99,7 @@ impl AppProvider for YouTube {
+             capabilities: ctx.receiver.capabilities.clone(),
+             identity,
+             playback_tx,
++            volume_tx,
+             cancel,
+         }))
+     }
+@@ -107,6 +110,7 @@ struct YouTubeSession {
+     capabilities: vibecast_sdk::PlayerCapabilities,
+     identity: watch::Receiver<Option<LoungeIdentity>>,
+     playback_tx: mpsc::Sender<PlaybackState>,
++    volume_tx: watch::Sender<(f64, bool)>,
+     cancel: watch::Sender<bool>,
+ }
+ 
+@@ -174,6 +178,14 @@ impl AppSession for YouTubeSession {
+         let _ = self.playback_tx.try_send(state);
+     }
+ 
++    async fn on_volume_update(&self, _ctx: &AppContext, level: f64, muted: bool) {
++        self.volume_tx.send_if_modified(|value| {
++            if *value == (level, muted) { return false; }
++            *value = (level, muted);
++            true
++        });
++    }
++
+     async fn on_stop(&self, _ctx: &AppContext) {
+         let _ = self.cancel.send(true);
+     }
+@@ -185,6 +197,7 @@ async fn run_lounge(
+     command_tx: mpsc::Sender<LoungeCommand>,
+     playback_rx: mpsc::Receiver<PlaybackState>,
+     identity_tx: watch::Sender<Option<LoungeIdentity>>,
++    volume_rx: watch::Receiver<(f64, bool)>,
+     mut cancel: watch::Receiver<bool>,
+ ) {
+     let lounge = loop {
+@@ -213,7 +226,7 @@ async fn run_lounge(
+     };
+ 
+     let _ = identity_tx.send(Some(lounge.identity()));
+-    lounge.run(command_tx, playback_rx, cancel).await;
++    lounge.with_volume(volume_rx).run(command_tx, playback_rx, cancel).await;
+ }
+ 
+ #[derive(Default)]
+@@ -224,6 +237,40 @@ struct QueueState {
+     next_pending: bool,
+ }
+ 
++impl QueueState {
++    fn advances_to_prepared_next(&self, command: &LoungeCommand) -> bool {
++        match command {
++            LoungeCommand::Next => true,
++            LoungeCommand::SetPlaylist { video_ids, current_index, current_time, list_id } => {
++                self.list_id.is_some()
++                    && self.list_id == *list_id
++                    && *current_time == 0.0
++                    && *current_index == self.current_index + 1
++                    && video_ids.get(*current_index).is_some()
++                    && video_ids.get(*current_index) == self.video_ids.get(self.current_index + 1)
++            }
++            _ => false,
++        }
++    }
++}
++
++// One session-local speculative result; never written to disk. Dropping it
++// cancels the async task, so obsolete results cannot start playback.
++struct NextResolution {
++    video_id: String,
++    task: Option<tokio::task::JoinHandle<(Result<PlaybackMedia, ResolveError>, std::time::Instant)>>,
++}
++
++impl Drop for NextResolution {
++    fn drop(&mut self) {
++        if let Some(task) = &self.task { task.abort(); }
++    }
++}
++
++fn prefetched_is_fresh(completed: std::time::Instant) -> bool {
++    completed.elapsed() < std::time::Duration::from_secs(600)
++}
++
+ async fn run_commands(
+     mut commands: mpsc::Receiver<LoungeCommand>,
+     resolver: Resolver,
+@@ -233,8 +280,12 @@ async fn run_commands(
+     mut cancel: watch::Receiver<bool>,
+ ) {
+     let mut queue = QueueState::default();
+-    loop {
+-        let command = tokio::select! {
++    let mut next_resolution: Option<NextResolution> = None;
++    let mut playback_active = false;
++    let mut deferred = None;
++    'commands: loop {
++        let command = if let Some(command) = deferred.take() { command } else { tokio::select! {
++            biased;
+             result = cancel.changed() => {
+                 if result.is_err() || *cancel.borrow() {
+                     return;
+@@ -245,8 +296,16 @@ async fn run_commands(
+                 let Some(command) = command else { return; };
+                 command
+             }
+-        };
+-
++        }};
++
++        // New-queue selections keep their established load/coalescing path.
++        // Only explicit/automatic Next consumes speculative media.
++        let use_prefetch = queue.advances_to_prepared_next(&command);
++        if let LoungeCommand::SetPlaylist { current_index, video_ids, current_time, list_id } = &command {
++            tracing::info!(index = *current_index, queue_len = video_ids.len(),
++                start = *current_time, same_queue = queue.list_id.is_some() && queue.list_id == *list_id,
++                use_prefetch, "YouTube playlist selection");
++        }
+         let load = match command {
+             LoungeCommand::SetPlaylist {
+                 video_ids,
+@@ -304,22 +363,118 @@ async fn run_commands(
+                 playback.seek(position).await;
+                 None
+             }
++            LoungeCommand::Stop => {
++                queue.next_pending = false;
++                playback_active = false;
++                next_resolution = None;
++                playback.stop().await;
++                None
++            }
+         };
+ 
+         if let Some((video_id, start_time)) = load {
++            tracing::info!(%video_id, start_time, "YouTube queue requests load");
+             let snapshot = settings.snapshot();
+             let preferred_video_codec = PreferredVideoCodec::from_snapshot(&snapshot);
+-            match resolver
+-                .resolve(&video_id, start_time, &capabilities, preferred_video_codec)
+-                .await
+-            {
+-                Ok(media) => playback.load(media).await,
++            let pending = next_resolution.take();
++            let resolution = async {
++            let mut prepared = None;
++            if let Some(mut pending) = pending {
++                if use_prefetch && pending.video_id == video_id {
++                    if let Some(task) = pending.task.as_mut() {
++                        if let Ok((Ok(mut media), completed)) = task.await {
++                            if prefetched_is_fresh(completed) {
++                                media.start_time = start_time.max(0.0);
++                                prepared = Some(media);
++                                tracing::info!(%video_id, "using prefetched YouTube media");
++                            }
++                        }
++                    }
++                }
++            }
++            match prepared {
++                Some(media) => Ok(media),
++                None => resolver.resolve(&video_id, start_time, &capabilities, preferred_video_codec).await,
++            }
++            };
++            tokio::pin!(resolution);
++            let mut requested_position = start_time;
++            let mut autoplay = true;
++            let result = loop {
++                tokio::select! {
++                    biased;
++                    changed = cancel.changed() => {
++                        if changed.is_err() || *cancel.borrow() { return; }
++                    }
++                    command = commands.recv() => {
++                        match command {
++                            None => return,
++                            Some(LoungeCommand::Pause) => {
++                                autoplay = false;
++                                playback.pause().await;
++                            }
++                            Some(LoungeCommand::Play) => { autoplay = true; }
++                            Some(LoungeCommand::Seek(position)) => {
++                                requested_position = position.max(0.0);
++                            }
++                            Some(LoungeCommand::UpdatePlaylist { video_ids, list_id }) => {
++                                queue.video_ids = video_ids;
++                                queue.list_id = list_id;
++                            }
++                            Some(LoungeCommand::SetPlaylist { video_ids, current_index, current_time, list_id })
++                                if video_ids.get(current_index) == Some(&video_id)
++                                    && current_index == queue.current_index && current_time == start_time => {
++                                queue.video_ids = video_ids;
++                                queue.list_id = list_id;
++                            }
++                            Some(command) => {
++                                tracing::info!(%video_id, "superseding pending YouTube load");
++                                deferred = Some(command);
++                                // Dropping resolution also cancels its owned extractor.
++                                continue 'commands;
++                            }
++                        }
++                    }
++                    result = &mut resolution => break result,
++                }
++            };
++            match result {
++                Ok(mut media) => {
++                    media.start_time = requested_position;
++                    media.autoplay = autoplay;
++                    playback_active = true;
++                    tracing::info!(%video_id, start_time = requested_position,
++                        autoplay, "committing resolved YouTube selection");
++                    playback.load(media).await;
++                }
+                 Err(error) => {
++                    playback_active = false;
+                     tracing::warn!(%video_id, %error, "failed to resolve YouTube video");
+                     playback.stop().await;
+                 }
+             }
+         }
++
++        let candidate = if playback_active {
++            queue.video_ids.get(queue.current_index + 1).cloned()
++        } else { None };
++        if next_resolution.as_ref().map(|p| &p.video_id) != candidate.as_ref() {
++            next_resolution = None;
++            if let Some(video_id) = candidate {
++                let resolver = resolver.clone();
++                let capabilities = capabilities.clone();
++                let codec = PreferredVideoCodec::from_snapshot(&settings.snapshot());
++                let id = video_id.clone();
++                tracing::info!(%video_id, "prefetching next YouTube media");
++                next_resolution = Some(NextResolution {
++                    video_id,
++                    task: Some(tokio::spawn(async move {
++                        let result = resolver.resolve(&id, 0.0, &capabilities, codec).await;
++                        (result, std::time::Instant::now())
++                    })),
++                });
++            }
++        }
+     }
+ }
+ 
+@@ -341,11 +496,44 @@ fn map_resolve_error(error: ResolveError) -> MediaResolveError {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn playlist_advance_can_use_prefetch_but_new_selection_cannot() {
++        let queue = QueueState { video_ids: vec!["a".into(), "b".into()],
++            current_index: 0, list_id: Some("queue".into()), next_pending: false };
++        let selection = |list: &str, index, time| LoungeCommand::SetPlaylist {
++            video_ids: vec!["a".into(), "b".into()], current_index: index,
++            current_time: time, list_id: Some(list.into()),
++        };
++        assert!(queue.advances_to_prepared_next(&selection("queue", 1, 0.0)));
++        assert!(queue.advances_to_prepared_next(&LoungeCommand::Next));
++        assert!(!queue.advances_to_prepared_next(&selection("other", 1, 0.0)));
++        assert!(!queue.advances_to_prepared_next(&selection("queue", 0, 0.0)));
++        assert!(!queue.advances_to_prepared_next(&selection("queue", 1, 42.0)));
++    }
++    #[test]
++    fn prefetch_expires_after_ten_minutes() {
++        let now = std::time::Instant::now();
++        assert!(prefetched_is_fresh(now));
++        assert!(!prefetched_is_fresh(now - std::time::Duration::from_secs(601)));
++    }
++
++    #[tokio::test]
++    async fn dropping_prefetch_aborts_its_task() {
++        let task = tokio::spawn(async {
++            std::future::pending::<()>().await;
++            (Err(ResolveError::Protocol("unused")), std::time::Instant::now())
++        });
++        let handle = task.abort_handle();
++        drop(NextResolution { video_id: "unused".into(), task: Some(task) });
++        tokio::task::yield_now().await;
++        assert!(handle.is_finished());
++    }
+     use std::sync::Mutex;
+ 
+     #[derive(Default)]
+     struct RecordingPlayback {
+         operations: Mutex<Vec<String>>,
++        loaded: Mutex<Vec<PlaybackMedia>>,
+     }
+ 
+     #[async_trait]
+@@ -354,7 +542,8 @@ mod tests {
+             self.operations
+                 .lock()
+                 .unwrap()
+-                .push(format!("load:{}", media.content_id.unwrap_or_default()));
++                .push(format!("load:{}", media.content_id.clone().unwrap_or_default()));
++            self.loaded.lock().unwrap().push(media);
+         }
+         async fn play(&self) {
+             self.operations.lock().unwrap().push("play".into());
+@@ -441,4 +630,81 @@ mod tests {
+             ["pause", "seek:42", "play"]
+         );
+     }
++
++    fn test_settings() -> AppSettingsReader {
++        vibecast_sdk::AppContext::new("session", "transport", APP_IDS[0],
++            reqwest::Client::new(), vibecast_sdk::ReceiverContext::new(
++                "test", "test", "test", std::path::PathBuf::new()),
++            Arc::new(vibecast_sdk::NoopSenderChannel)).settings
++    }
++
++    fn selection(ids: &[&str], index: usize) -> LoungeCommand {
++        LoungeCommand::SetPlaylist { video_ids: ids.iter().map(|s| s.to_string()).collect(),
++            current_index: index, current_time: 0.0, list_id: Some("test-queue".into()) }
++    }
++
++    fn test_media(id: &str) -> PlaybackMedia {
++        let mut media = PlaybackMedia::new("session", vec![], vibecast_sdk::StreamType::Buffered);
++        media.content_id = Some(id.into());
++        media
++    }
++
++    async fn wait_loads(player: &RecordingPlayback, count: usize) {
++        tokio::time::timeout(std::time::Duration::from_secs(2), async {
++            while player.loaded.lock().unwrap().len() < count { tokio::task::yield_now().await; }
++        }).await.unwrap();
++    }
++
++    #[tokio::test]
++    async fn latest_selection_preserves_controls_and_prepared_next() {
++        let (resolver, mut requests) = Resolver::controlled();
++        let player = Arc::new(RecordingPlayback::default());
++        let (tx, rx) = mpsc::channel(16);
++        let (cancel, cancelled) = watch::channel(false);
++        let worker = tokio::spawn(run_commands(rx, resolver, player.clone(),
++            vibecast_sdk::PlayerCapabilities::default(), test_settings(), cancelled));
++        tx.send(selection(&["A"], 0)).await.unwrap();
++        let (id, old) = requests.recv().await.unwrap(); assert_eq!(id, "A");
++        tx.send(selection(&["B"], 0)).await.unwrap();
++        let (id, middle) = requests.recv().await.unwrap(); assert_eq!(id, "B");
++        assert!(old.is_closed());
++        tx.send(selection(&["C", "D"], 0)).await.unwrap();
++        let (id, latest) = requests.recv().await.unwrap(); assert_eq!(id, "C");
++        assert!(middle.is_closed());
++        tx.send(selection(&["C", "D"], 0)).await.unwrap(); // duplicate, no restart
++        tx.send(LoungeCommand::Pause).await.unwrap();
++        tx.send(LoungeCommand::Seek(42.0)).await.unwrap();
++        latest.send(Ok(test_media("C"))).unwrap();
++        wait_loads(&player, 1).await;
++        { let loaded = player.loaded.lock().unwrap();
++          assert_eq!(loaded[0].content_id.as_deref(), Some("C"));
++          assert_eq!(loaded[0].start_time, 42.0); assert!(!loaded[0].autoplay); }
++        let (id, prepared) = requests.recv().await.unwrap(); assert_eq!(id, "D");
++        prepared.send(Ok(test_media("D"))).unwrap();
++        tx.send(selection(&["C", "D"], 1)).await.unwrap();
++        wait_loads(&player, 2).await;
++        assert!(requests.try_recv().is_err(), "Next must reuse preparation");
++        assert_eq!(player.loaded.lock().unwrap()[1].content_id.as_deref(), Some("D"));
++        cancel.send(true).unwrap(); worker.await.unwrap();
++    }
++
++    #[tokio::test]
++    async fn stop_and_disconnect_cancel_pending_resolution() {
++        let (resolver, mut requests) = Resolver::controlled();
++        let player = Arc::new(RecordingPlayback::default());
++        let (tx, rx) = mpsc::channel(8);
++        let (cancel, cancelled) = watch::channel(false);
++        let worker = tokio::spawn(run_commands(rx, resolver, player.clone(),
++            vibecast_sdk::PlayerCapabilities::default(), test_settings(), cancelled));
++        tx.send(selection(&["A"], 0)).await.unwrap();
++        let (_, old) = requests.recv().await.unwrap();
++        tx.send(LoungeCommand::Stop).await.unwrap();
++        tx.send(selection(&["B"], 0)).await.unwrap();
++        let (_, latest) = requests.recv().await.unwrap();
++        assert!(old.send(Err(ResolveError::Protocol("late failure"))).is_err());
++        cancel.send(true).unwrap(); worker.await.unwrap();
++        assert!(latest.is_closed());
++        assert!(player.loaded.lock().unwrap().is_empty());
++        assert_eq!(*player.operations.lock().unwrap(), ["stop"]);
++    }
+ }
+diff --git a/crates/vibecast-apps-youtube/src/lounge.rs b/crates/vibecast-apps-youtube/src/lounge.rs
+index 5010f8f..84e91e9 100644
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -7,7 +7,7 @@ use serde_json::Value;
+ use thiserror::Error;
+ use tokio::sync::{mpsc, watch};
+ use url::Url;
+-use vibecast_sdk::{PlaybackState, PlayerState, ReceiverContext};
++use vibecast_sdk::{IdleReason, PlaybackState, PlayerState, ReceiverContext};
+ 
+ const LOUNGE_BASE: &str = "https://www.youtube.com/api/lounge";
+ const USER_AGENT: &str =
+@@ -28,11 +28,13 @@ pub(crate) enum LoungeCommand {
+     },
+     Play,
+     Pause,
++    Stop,
+     Seek(f64),
+     Next,
+ }
+ 
+ pub(crate) struct LoungeConnection {
++    volume_rx: Option<watch::Receiver<(f64, bool)>>,
+     http: reqwest::Client,
+     bind_url: Url,
+     bound: BoundSession,
+@@ -59,6 +61,8 @@ struct BoundSession {
+ 
+ #[derive(Default)]
+ struct CurrentMedia {
++    volume: Option<(f64, bool)>,
++    awaiting_load: bool,
+     video_ids: Vec<String>,
+     video_id: Option<String>,
+     list_id: Option<String>,
+@@ -67,6 +71,53 @@ struct CurrentMedia {
+     state: Option<PlaybackState>,
+ }
+ 
++impl CurrentMedia {
++    fn coalesce_pending_selection(&self, incoming: Incoming) -> Incoming {
++        let incoming = match incoming {
++            Incoming::QueueAddition(command) => {
++                if let LoungeCommand::SetPlaylist { ref video_ids, ref list_id, .. } = command {
++                    if self.video_id.is_some()
++                        && self.video_id.as_ref() == video_ids.get(self.current_index)
++                        && self.list_id.is_some() && self.list_id == *list_id
++                    {
++                        tracing::debug!(video_id = ?self.video_id, index = self.current_index,
++                            "preserving selection across VIDEO_ADDED queue enrichment");
++                        return Incoming::Command(LoungeCommand::UpdatePlaylist {
++                            video_ids: video_ids.clone(), list_id: list_id.clone(),
++                        });
++                    }
++                }
++                // No proven unchanged active slot: retain prior semantics.
++                Incoming::Command(command)
++            }
++            other => other,
++        };
++        if let Incoming::Command(LoungeCommand::SetPlaylist {
++            ref video_ids, current_index, current_time, ref list_id,
++        }) = incoming {
++            if self.awaiting_load
++                && self.video_id.is_some()
++                && self.video_id.as_ref() == video_ids.get(current_index)
++                && self.current_index == current_index
++                && self.state.as_ref().is_some_and(|s| s.current_time == current_time)
++            {
++                tracing::debug!("coalesced pending YouTube selection into queue update");
++                return Incoming::Command(LoungeCommand::UpdatePlaylist {
++                    video_ids: video_ids.clone(), list_id: list_id.clone(),
++                });
++            }
++        }
++        incoming
++    }
++}
++
++async fn volume_change(rx: &mut Option<watch::Receiver<(f64, bool)>>) -> (f64, bool) {
++    if let Some(rx) = rx {
++        if rx.changed().await.is_ok() { return *rx.borrow_and_update(); }
++    }
++    std::future::pending().await
++}
++
+ #[derive(Debug, Error)]
+ pub(crate) enum LoungeError {
+     #[error("YouTube Lounge HTTP request failed")]
+@@ -78,6 +129,12 @@ pub(crate) enum LoungeError {
+ }
+ 
+ impl LoungeConnection {
++    pub(crate) fn with_volume(mut self, rx: watch::Receiver<(f64, bool)>) -> Self {
++        self.current.volume = Some(*rx.borrow());
++        self.volume_rx = Some(rx);
++        self
++    }
++
+     pub(crate) async fn establish(
+         http: reqwest::Client,
+         receiver: &ReceiverContext,
+@@ -134,6 +191,7 @@ impl LoungeConnection {
+         let bound = initial_bind(&http, &bind_url).await?;
+ 
+         Ok(Self {
++            volume_rx: None,
+             http,
+             bind_url,
+             bound,
+@@ -197,8 +255,19 @@ impl LoungeConnection {
+         self.post(Outbound::NowPlaying).await?;
+ 
+         loop {
+-            let poll = poll_commands(&self.http, &self.bind_url, &self.bound);
++            // Keep the long poll alive while playback reports arrive. Dropping
++            // it on every position update starves incoming controls.
++            let http = self.http.clone();
++            let bind_url = self.bind_url.clone();
++            let bound = self.bound.clone();
++            let poll = poll_commands(&http, &bind_url, &bound);
++            tokio::pin!(poll);
++            loop {
+             tokio::select! {
++                volume = volume_change(&mut self.volume_rx) => {
++                    self.current.volume = Some(volume);
++                    self.post(Outbound::Volume).await?;
++                }
+                 result = cancel.changed() => {
+                     if result.is_err() || *cancel.borrow() {
+                         return Ok(());
+@@ -206,28 +275,52 @@ impl LoungeConnection {
+                 }
+                 state = playback_rx.recv() => {
+                     let Some(state) = state else { return Ok(()); };
++                    if self.current.awaiting_load {
++                        if state.player_state != PlayerState::Buffering
++                            && !matches!(state.idle_reason, Some(IdleReason::Error | IdleReason::Cancelled)) {
++                            continue;
++                        }
++                        self.current.awaiting_load = false;
++                    }
++                    let ended = state.idle_reason == Some(IdleReason::Finished)
++                        && self.current.state.as_ref().and_then(|s| s.idle_reason)
++                            != Some(IdleReason::Finished);
+                     self.current.state = Some(state.clone());
+                     self.post(Outbound::State(state)).await?;
++                    if ended {
++                        if let Some(outbound) = self.handle_internal(&Incoming::Command(LoungeCommand::Next)) {
++                            self.post(outbound).await?;
++                        }
++                        let _ = command_tx.send(LoungeCommand::Next).await;
++                    }
+                 }
+-                result = poll => {
++                result = &mut poll => {
+                     let batch = match result {
+                         Ok(batch) => batch,
+-                        Err(LoungeError::Http(error)) if error.is_timeout() => continue,
++                        Err(LoungeError::Http(error)) if error.is_timeout() => break,
+                         Err(error) => return Err(error),
+                     };
+                     self.bound.aid = self.bound.aid.max(batch.aid);
+                     for incoming in batch.messages {
+-                        if let Some(outbound) = self.handle_internal(&incoming) {
+-                            self.post(outbound).await?;
+-                        }
++                        let queue_addition = matches!(&incoming, Incoming::QueueAddition(_));
++                        let incoming = self.current.coalesce_pending_selection(incoming);
++                        let outbound = self.handle_internal(&incoming)
++                            .or_else(|| queue_addition.then_some(Outbound::NowPlaying));
+                         if let Incoming::Command(command) = incoming {
+                             if command_tx.send(command).await.is_err() {
+                                 return Ok(());
+                             }
+                         }
++                        // Local playback need not wait for Google's HTTP ACK.
++                        // Internal buffering/queue state was already updated.
++                        if let Some(outbound) = outbound {
++                            self.post(outbound).await?;
++                        }
+                     }
++                    break;
+                 }
+             }
++            }
+         }
+     }
+ 
+@@ -240,6 +333,7 @@ impl LoungeConnection {
+                 list_id,
+             }) => {
+                 self.current.video_ids.clone_from(video_ids);
++                self.current.awaiting_load = true;
+                 self.current.video_id = video_ids.get(*current_index).cloned();
+                 self.current.current_index = *current_index;
+                 self.current.list_id.clone_from(list_id);
+@@ -270,6 +364,13 @@ impl LoungeConnection {
+                 None
+             }
+             Incoming::Command(LoungeCommand::Next) => {
++                self.current.awaiting_load = true;
++                self.current.state = Some(PlaybackState {
++                    player_state: PlayerState::Buffering,
++                    current_time: 0.0,
++                    duration: None,
++                    idle_reason: None,
++                });
+                 if self.current.current_index + 1 < self.current.video_ids.len() {
+                     self.current.current_index += 1;
+                     self.current.video_id = self
+@@ -287,7 +388,7 @@ impl LoungeConnection {
+             Incoming::GetPlaybackSpeed => Some(Outbound::PlaybackSpeed),
+             Incoming::GetVolume => Some(Outbound::Volume),
+             Incoming::SetDiscoveryDeviceId => Some(Outbound::DiscoveryDeviceId),
+-            Incoming::Command(_) | Incoming::Ignored => None,
++            Incoming::Command(_) | Incoming::QueueAddition(_) | Incoming::Ignored => None,
+         }
+     }
+ 
+@@ -362,9 +463,10 @@ impl Outbound {
+                     .append_pair("req0_playbackSpeed", "1");
+             }
+             Self::Volume => {
++                let (level, muted) = current.volume.unwrap_or((1.0, false));
+                 form.append_pair("req0__sc", "onVolumeChanged")
+-                    .append_pair("req0_volume", "100")
+-                    .append_pair("req0_muted", "false");
++                    .append_pair("req0_volume", &(level.clamp(0.0, 1.0) * 100.0).round().to_string())
++                    .append_pair("req0_muted", if muted { "true" } else { "false" });
+             }
+             Self::DiscoveryDeviceId => {
+                 form.append_pair("req0__sc", "setDiscoveryDeviceId")
+@@ -500,6 +602,7 @@ struct IncomingBatch {
+ }
+ 
+ enum Incoming {
++    QueueAddition(LoungeCommand),
+     Command(LoungeCommand),
+     GetNowPlaying,
+     GetPlaybackSpeed,
+@@ -523,12 +626,185 @@ fn parse_incoming(bytes: &[u8]) -> Result<IncomingBatch, LoungeError> {
+             let Some(message) = parts.get(1).and_then(Value::as_array) else {
+                 continue;
+             };
+-            messages.push(parse_message(message));
++            tracing::debug!(sequence = parts.first().and_then(serde_json::Value::as_u64),
++                command = message.first().and_then(serde_json::Value::as_str), "Lounge incoming command");
++            let incoming = parse_message(message);
++            if tracing::enabled!(tracing::Level::DEBUG)
++                && message.first().and_then(Value::as_str) == Some("setPlaylist") {
++                let details = selection_diagnostics(message, &incoming);
++                tracing::debug!(sequence = parts.first().and_then(serde_json::Value::as_u64),
++                    selection = %details, "Lounge selection interpretation");
++            }
++            messages.push(incoming);
+         }
+     }
+     Ok(IncomingBatch { aid, messages })
+ }
+ 
++// Allowlisted selection fields only: never log full params/eventDetails, which
++// may carry account/session material. This does not change selection semantics.
++fn selection_diagnostics(message: &[Value], incoming: &Incoming) -> Value {
++    let params = message.get(1).unwrap_or(&Value::Null);
++    let event = params.get("eventDetails").and_then(Value::as_str)
++        .and_then(|s| serde_json::from_str::<Value>(s).ok());
++    let event_id = event.as_ref()
++        .and_then(|v| v.get("videoId").and_then(Value::as_str));
++    // Do not dump unknown event values: eventDetails can contain account data.
++    let event_type = event.as_ref().and_then(|v| v.get("eventType"))
++        .and_then(Value::as_str).map(|kind| match kind {
++            "PLAYLIST_SET" | "PLAYLIST_UPDATED" | "VIDEO_ADDED" | "VIDEOS_ADDED"
++            | "VIDEO_REMOVED" | "VIDEO_SELECTED" | "QUEUE_UPDATED" => kind,
++            _ => "OTHER",
++        });
++    let (selected, index, len) = match incoming {
++        Incoming::Command(LoungeCommand::SetPlaylist { video_ids, current_index, .. })
++        | Incoming::QueueAddition(LoungeCommand::SetPlaylist { video_ids, current_index, .. }) =>
++            (video_ids.get(*current_index).cloned(), Some(*current_index), video_ids.len()),
++        _ => (None, None, 0),
++    };
++    serde_json::json!({
++        "videoId": params.get("videoId").and_then(Value::as_str),
++        "eventVideoId": event_id,
++        "eventType": event_type,
++        "eventVideoCount": event.as_ref().and_then(|v| v.get("videoIds"))
++            .and_then(Value::as_array).map(Vec::len),
++        "currentIndex": params.get("currentIndex").and_then(value_as_usize),
++        "parsedIndex": index, "selectedVideoId": selected, "queueLength": len,
++        "currentTime": params.get("currentTime").and_then(value_as_f64),
++    })
++}
++
++#[cfg(test)]
++mod selection_diagnostic_tests {
++    use super::*;
++    #[test]
++    fn reproduced_additions_preserve_state_and_feedback_until_explicit_selection() {
++        let mut connection = LoungeConnection {
++            volume_rx: None, http: reqwest::Client::new(),
++            bind_url: Url::parse("http://127.0.0.1:9/").unwrap(),
++            bound: BoundSession {sid:"test".into(), gsession_id:"test".into(),
++                aid:0, rid:0, ofs:0},
++            screen_id:"test".into(), device_id:"test".into(),
++            discovery_device_id:"test".into(), current:CurrentMedia::default(),
++        };
++        // Sanitized reconstruction of Controls-16: each addition inserts at
++        // index 1. It is not a complete raw-wire capture of the full queues.
++        connection.handle_internal(&event("PLAYLIST_SET","z,next",0,"queue"));
++        for (n,videos) in ["z,b,next", "z,c,b,next", "z,d,c,b,next"].iter().enumerate() {
++            if n == 2 {
++                // The last addition arrives after actual playback began.
++                connection.current.awaiting_load = false;
++                connection.current.state = Some(PlaybackState {
++                    player_state:PlayerState::Playing, current_time:0.4,
++                    duration:Some(180.0), idle_reason:None,
++                });
++            }
++            let incoming = connection.current.coalesce_pending_selection(
++                event("VIDEO_ADDED", videos, 1, "queue"));
++            assert!(matches!(&incoming, Incoming::Command(LoungeCommand::UpdatePlaylist {..})));
++            connection.handle_internal(&incoming);
++            assert_eq!(connection.current.video_id.as_deref(), Some("z"));
++            assert_eq!(connection.current.current_index, 0);
++            let fields: std::collections::HashMap<String,String> = url::form_urlencoded::parse(
++                Outbound::NowPlaying.form_body(0,&connection.current,"test","test").as_bytes())
++                .into_owned().collect();
++            assert_eq!(fields["req0_videoId"], "z");
++            assert_eq!(fields["req0_currentIndex"], "0");
++            if n == 2 {
++                assert_eq!(fields["req0_state"], "1");
++                assert_eq!(fields["req0_currentTime"], "0.4");
++            }
++        }
++        // Known boundary: this also describes a legitimate explicit user tap.
++        // A recent VIDEO_ADDED must not blacklist this selection.
++        let explicit = connection.current.coalesce_pending_selection(
++            event("VIDEO_SELECTED","z,d,c,b,next",1,"queue"));
++        assert!(matches!(&explicit, Incoming::Command(LoungeCommand::SetPlaylist {..})));
++        connection.handle_internal(&explicit);
++        assert_eq!(connection.current.video_id.as_deref(), Some("d"));
++        assert_eq!(connection.current.current_index, 1);
++    }
++
++    fn event(kind: &str, videos: &str, index: usize, list: &str) -> Incoming {
++        parse_message(&[serde_json::json!("setPlaylist"), serde_json::json!({
++            "videoIds":videos, "currentIndex":index, "listId":list,
++            "eventDetails":serde_json::json!({"eventType":kind}).to_string()
++        })])
++    }
++
++    #[test]
++    fn delayed_additions_preserve_last_selection_but_real_reselection_wins() {
++        let mut current = CurrentMedia {
++            video_id:Some("z".into()), video_ids:vec!["z".into()],
++            list_id:Some("queue".into()), ..Default::default()
++        };
++        // Captured pattern: final PLAYLIST_SET, then four VIDEO_ADDED messages
++        // whose currentIndex points at the newly inserted (older requested) item.
++        for (videos,index) in [("z,a",1),("z,a,b",2),("z,a,b,c",3),("z,a,b,c,d",4)] {
++            let result = current.coalesce_pending_selection(event("VIDEO_ADDED",videos,index,"queue"));
++            let Incoming::Command(LoungeCommand::UpdatePlaylist {video_ids,..}) = result else {
++                panic!("addition must not start another title");
++            };
++            current.video_ids = video_ids;
++            assert_eq!(current.video_ids[current.current_index], "z");
++        }
++        for kind in ["VIDEO_SELECTED", "PLAYLIST_SET"] {
++            assert!(matches!(current.coalesce_pending_selection(event(kind,"z,a,b,c,d",1,"queue")),
++                Incoming::Command(LoungeCommand::SetPlaylist {current_index:1,..})));
++        }
++        current.awaiting_load = true;
++        assert!(matches!(current.coalesce_pending_selection(event("VIDEO_ADDED","z,a,b,c,d,e",5,"queue")),
++            Incoming::Command(LoungeCommand::UpdatePlaylist {..})));
++    }
++
++    #[test]
++    fn additions_without_matching_active_queue_keep_previous_semantics() {
++        let current = CurrentMedia {video_id:Some("z".into()),list_id:Some("queue".into()),
++            ..Default::default()};
++        for incoming in [event("VIDEO_ADDED","z,a",1,"other"),
++            event("VIDEO_ADDED","a,z",0,"queue")] {
++            assert!(matches!(current.coalesce_pending_selection(incoming),
++                Incoming::Command(LoungeCommand::SetPlaylist {..})));
++        }
++        assert!(matches!(CurrentMedia::default().coalesce_pending_selection(
++            event("VIDEO_ADDED","a",0,"queue")),
++            Incoming::Command(LoungeCommand::SetPlaylist {..})));
++    }
++
++    #[test]
++    fn exposes_mismatch_without_logging_private_params() {
++        let message = vec![serde_json::json!("setPlaylist"), serde_json::json!({
++            "videoId":"explicit", "videoIds":"first,indexed", "currentIndex":"1",
++            "currentTime":"0", "token":"secret-do-not-log",
++            "eventDetails":"{\"videoId\":\"event\",\"credential\":\"hidden\"}"
++        })];
++        let incoming = parse_message(&message);
++        let details = selection_diagnostics(&message, &incoming);
++        assert_eq!(details["videoId"], "explicit");
++        assert_eq!(details["eventVideoId"], "event");
++        assert_eq!(details["selectedVideoId"], "indexed");
++        assert_eq!(details["parsedIndex"], 1);
++        assert!(!details.to_string().contains("secret-do-not-log"));
++        assert!(!details.to_string().contains("hidden"));
++    }
++
++    #[test]
++    fn exposes_event_kind_but_redacts_unknown_values() {
++        for (kind, expected) in [("PLAYLIST_SET", "PLAYLIST_SET"),
++            ("VIDEO_ADDED", "VIDEO_ADDED"), ("private-value", "OTHER")] {
++            let message = vec![serde_json::json!("setPlaylist"), serde_json::json!({
++                "videoIds":"a,b", "currentIndex":"1",
++                "eventDetails": serde_json::json!({"eventType":kind,
++                    "videoIds":["b"], "user":"private-user"}).to_string()
++            })];
++            let details = selection_diagnostics(&message, &parse_message(&message));
++            assert_eq!(details["eventType"], expected);
++            assert_eq!(details["eventVideoCount"], 1);
++            assert!(!details.to_string().contains("private-"));
++        }
++    }
++}
++
+ fn parse_message(message: &[Value]) -> Incoming {
+     let Some(name) = message.first().and_then(Value::as_str) else {
+         return Incoming::Ignored;
+@@ -539,6 +815,7 @@ fn parse_message(message: &[Value]) -> Incoming {
+         "updatePlaylist" => parse_update_playlist(params),
+         "play" => Some(LoungeCommand::Play),
+         "pause" => Some(LoungeCommand::Pause),
++        "stopVideo" | "stop" => Some(LoungeCommand::Stop),
+         "next" => Some(LoungeCommand::Next),
+         "seekTo" => params
+             .and_then(|value| value.get("newTime"))
+@@ -547,6 +824,11 @@ fn parse_message(message: &[Value]) -> Incoming {
+         _ => None,
+     };
+     if let Some(command) = command {
++        let is_addition = name == "setPlaylist" && params
++            .and_then(|p| p.get("eventDetails")).and_then(Value::as_str)
++            .and_then(|s| serde_json::from_str::<Value>(s).ok())
++            .is_some_and(|e| e.get("eventType").and_then(Value::as_str) == Some("VIDEO_ADDED"));
++        if is_addition { return Incoming::QueueAddition(command); }
+         return Incoming::Command(command);
+     }
+     match name {
+@@ -761,6 +1043,38 @@ struct LoungeTokenScreen {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++    #[test]
++    fn volume_reply_uses_actual_level_and_mute() {
++        let current = CurrentMedia { volume: Some((0.5, true)), ..Default::default() };
++        let body = Outbound::Volume.form_body(0, &current, "device", "lounge");
++        assert!(body.contains("req0_volume=50"));
++        assert!(body.contains("req0_muted=true"));
++    }
++
++    #[test]
++    fn pending_selection_updates_queue_without_second_load() {
++        let mut current = CurrentMedia {
++            awaiting_load: true,
++            video_id: Some("a".into()),
++            state: Some(PlaybackState { player_state: PlayerState::Buffering,
++                current_time: 0.0, duration: None, idle_reason: None }),
++            ..Default::default()
++        };
++        let selection = |video: &str, position| Incoming::Command(LoungeCommand::SetPlaylist {
++            video_ids: vec![video.into(), "next".into()], current_index: 0,
++            current_time: position, list_id: Some("new-queue".into()),
++        });
++        assert!(matches!(current.coalesce_pending_selection(selection("a", 0.0)),
++            Incoming::Command(LoungeCommand::UpdatePlaylist { video_ids, list_id })
++                if video_ids == ["a", "next"] && list_id.as_deref() == Some("new-queue")));
++        for command in [selection("b", 0.0), selection("a", 42.0)] {
++            assert!(matches!(current.coalesce_pending_selection(command),
++                Incoming::Command(LoungeCommand::SetPlaylist { .. })));
++        }
++        current.awaiting_load = false;
++        assert!(matches!(current.coalesce_pending_selection(selection("a", 0.0)),
++            Incoming::Command(LoungeCommand::SetPlaylist { .. })));
++    }
+     use std::path::PathBuf;
+     use wiremock::matchers::{method, path};
+     use wiremock::{Mock, MockServer, ResponseTemplate};
+@@ -945,6 +1259,7 @@ mod tests {
+             .await;
+ 
+         let mut connection = LoungeConnection {
++            volume_rx: None,
+             http: reqwest::Client::new(),
+             bind_url: Url::parse(&format!("{}/api/lounge/bc/bind", server.uri())).unwrap(),
+             bound: BoundSession {
+diff --git a/crates/vibecast-apps-youtube/src/resolver.rs b/crates/vibecast-apps-youtube/src/resolver.rs
+index 09f5b3e..9ec565e 100644
+--- a/crates/vibecast-apps-youtube/src/resolver.rs
++++ b/crates/vibecast-apps-youtube/src/resolver.rs
+@@ -1,5 +1,7 @@
+ //! YouTube video metadata and progressive-stream resolution.
+ 
++use std::process::Stdio;
++
+ use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
+ use base64::Engine as _;
+ use prost::Message as _;
+@@ -11,10 +13,12 @@ use vibecast_sdk::{
+     StreamType,
+ };
+ 
+-const CLIENT_NAME: &str = "ANDROID_VR";
+-const CLIENT_VERSION: &str = "1.57";
+-const CLIENT_USER_AGENT: &str =
+-    "com.google.android.apps.youtube.vr.oculus/1.57 (Linux; U; Android 12L; en_US)";
++// The VR client is currently challenged by YouTube for otherwise public
++// videos.  The regular Android client returns the same clear adaptive
++// formats without requiring a browser login or cookies.
++const CLIENT_NAME: &str = "ANDROID";
++const CLIENT_VERSION: &str = "20.10.38";
++const CLIENT_USER_AGENT: &str = "com.google.android.youtube/20.10.38";
+ 
+ pub(crate) const PREFERRED_VIDEO_CODEC_KEY: SettingKey<String> =
+     SettingKey::new("preferred_video_codec");
+@@ -53,6 +57,8 @@ impl PreferredVideoCodec {
+ pub(crate) struct Resolver {
+     http: reqwest::Client,
+     endpoints: Endpoints,
++    #[cfg(test)]
++    test_requests: Option<tokio::sync::mpsc::UnboundedSender<(String, tokio::sync::oneshot::Sender<Result<PlaybackMedia, ResolveError>>)>>,
+ }
+ 
+ #[derive(Clone)]
+@@ -71,10 +77,19 @@ impl Default for Endpoints {
+ }
+ 
+ impl Resolver {
++    #[cfg(test)]
++    pub(crate) fn controlled() -> (Self, tokio::sync::mpsc::UnboundedReceiver<(String, tokio::sync::oneshot::Sender<Result<PlaybackMedia, ResolveError>>)>) {
++        let (tx, rx) = tokio::sync::mpsc::unbounded_channel();
++        let mut resolver = Self::new(reqwest::Client::new());
++        resolver.test_requests = Some(tx);
++        (resolver, rx)
++    }
+     pub(crate) fn new(http: reqwest::Client) -> Self {
+         Self {
+             http,
+             endpoints: Endpoints::default(),
++            #[cfg(test)]
++            test_requests: None,
+         }
+     }
+ 
+@@ -86,6 +101,7 @@ impl Resolver {
+                 watch: format!("{base}/watch"),
+                 player: format!("{base}/youtubei/v1/player"),
+             },
++            test_requests: None,
+         }
+     }
+ 
+@@ -95,6 +111,48 @@ impl Resolver {
+         start_time: f64,
+         capabilities: &PlayerCapabilities,
+         preferred_video_codec: PreferredVideoCodec,
++    ) -> Result<PlaybackMedia, ResolveError> {
++        #[cfg(test)]
++        if let Some(requests) = &self.test_requests {
++            let (tx, rx) = tokio::sync::oneshot::channel();
++            requests.send((video_id.to_owned(), tx)).unwrap();
++            return rx.await.unwrap();
++        }
++        let started = std::time::Instant::now();
++        // Metadata and checked audio extraction are independent network work.
++        // Join both futures rather than waiting for metadata before extraction.
++        let metadata = self.resolve_metadata(video_id, start_time, capabilities, preferred_video_codec);
++        let audio = async {
++            let result = external_audio_url(video_id).await;
++            let elapsed = started.elapsed().as_millis();
++            (result, elapsed)
++        };
++        let metadata = async {
++            let result = metadata.await;
++            (result, started.elapsed().as_millis())
++        };
++        let ((media, metadata_ms), (audio, audio_ms)) = tokio::join!(metadata, audio);
++        tracing::info!(%video_id, metadata_ms = metadata_ms as u64,
++            audio_ms = audio_ms as u64, total_ms = started.elapsed().as_millis() as u64,
++            "YouTube parallel resolution completed");
++        let mut media = media?;
++        let url = audio
++            .ok_or(ResolveError::Protocol("external audio resolver failed"))?;
++        let content_type = if url.contains("/manifest/") {
++            "application/vnd.apple.mpegurl"
++        } else {
++            "application/octet-stream"
++        };
++        media.streams = vec![PlaybackStream::url(url, content_type)];
++        Ok(media)
++    }
++
++    async fn resolve_metadata(
++        &self,
++        video_id: &str,
++        start_time: f64,
++        capabilities: &PlayerCapabilities,
++        preferred_video_codec: PreferredVideoCodec,
+     ) -> Result<PlaybackMedia, ResolveError> {
+         let mut watch_url = Url::parse(&self.endpoints.watch)
+             .map_err(|_| ResolveError::Protocol("invalid watch endpoint"))?;
+@@ -141,6 +199,130 @@ impl Resolver {
+     }
+ }
+ 
++async fn external_audio_url(video_id: &str) -> Option<String> {
++    let watch_url = format!("https://www.youtube.com/watch?v={video_id}");
++    let mut command = tokio::process::Command::new("yt-dlp");
++    command
++        .args([
++            "--no-warnings",
++            "--no-playlist",
++            // A listed format may still return HTTP 403. Let the upstream
++            // extractor probe candidates before handing a URL to the player.
++            "--check-formats",
++            "-f",
++            "ba",
++            "--get-url",
++            &watch_url,
++        ]);
++    let output = checked_process_output(command, std::time::Duration::from_secs(35)).await?;
++    if !output.status.success() {
++        return None;
++    }
++    String::from_utf8(output.stdout)
++        .ok()?
++        .lines()
++        .find(|line| line.starts_with("https://"))
++        .map(str::to_owned)
++}
++
++// A cancelled resolver must terminate the owned process group before the next
++// resolver starts. The supervisor continues draining/reaping after cancellation.
++struct ProcessCancellation {
++    pid: u32,
++    cancel: Option<tokio::sync::oneshot::Sender<()>>,
++}
++
++impl Drop for ProcessCancellation {
++    fn drop(&mut self) {
++        if let Some(cancel) = self.cancel.take() {
++            if cancel.is_closed() { return; } // supervisor already completed/reaped
++            #[cfg(unix)]
++            { let _ = std::process::Command::new("kill")
++                .args(["-KILL", "--", &format!("-{}", self.pid)])
++                .stdout(Stdio::null()).stderr(Stdio::null()).status(); }
++            let _ = cancel.send(());
++        }
++    }
++}
++
++#[cfg(all(test, target_os = "linux"))]
++mod process_tests {
++    use super::*;
++
++    async fn process_tree_case(cancel: bool) {
++        let path = std::env::temp_dir().join(format!("vibecast-child-{}", uuid::Uuid::new_v4()));
++        let mut command = tokio::process::Command::new("sh");
++        command.args(["-c", "sleep 60 & echo $$ $! > \"$1\"; wait", "test"])
++            .arg(&path);
++        let job = tokio::spawn(checked_process_output(command,
++            std::time::Duration::from_millis(if cancel { 10_000 } else { 500 })));
++        let pids = tokio::time::timeout(std::time::Duration::from_secs(2), async {
++            loop {
++                if let Ok(text) = std::fs::read_to_string(&path) {
++                    let pids: Vec<u32> = text.split_whitespace().filter_map(|s| s.parse().ok()).collect();
++                    if pids.len() == 2 { break pids; }
++                }
++                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
++            }
++        }).await.unwrap();
++        if cancel { job.abort(); assert!(job.await.unwrap_err().is_cancelled()); }
++        else { assert!(job.await.unwrap().is_none()); }
++        tokio::time::timeout(std::time::Duration::from_secs(2), async {
++            loop {
++                let leader_gone = !std::path::Path::new(&format!("/proc/{}", pids[0])).exists();
++                let child_dead = std::fs::read_to_string(format!("/proc/{}/stat", pids[1]))
++                    .map(|s| s.split_once(") ").unwrap().1.starts_with('Z')).unwrap_or(true);
++                if leader_gone && child_dead { break; }
++                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
++            }
++        }).await.expect("leader must be reaped and helper must not keep running");
++        std::fs::remove_file(path).unwrap();
++    }
++
++    #[tokio::test]
++    async fn cancellation_terminates_process_tree() { process_tree_case(true).await; }
++    #[tokio::test]
++    async fn timeout_terminates_process_tree() { process_tree_case(false).await; }
++    #[tokio::test]
++    async fn normal_process_completion_preserves_output() {
++        let mut command = tokio::process::Command::new("printf");
++        command.arg("checked-output");
++        let output = checked_process_output(command, std::time::Duration::from_secs(2)).await.unwrap();
++        assert!(output.status.success()); assert_eq!(output.stdout, b"checked-output");
++    }
++}
++
++async fn checked_process_output(
++    mut command: tokio::process::Command,
++    timeout: std::time::Duration,
++) -> Option<std::process::Output> {
++    command.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped())
++        .kill_on_drop(true);
++    #[cfg(unix)]
++    command.process_group(0);
++    let child = command.spawn().ok()?;
++    let pid = child.id()?;
++    let (cancel_tx, cancel_rx) = tokio::sync::oneshot::channel();
++    let mut guard = ProcessCancellation { pid, cancel: Some(cancel_tx) };
++    let supervisor = tokio::spawn(async move {
++        let output = child.wait_with_output();
++        tokio::pin!(output);
++        tokio::select! {
++            result = &mut output => result.ok(),
++            _ = cancel_rx => {
++                // Unix group was already killed by the cancellation guard.
++                #[cfg(unix)]
++                { let _ = output.await; }
++                None
++            }
++        }
++    });
++    match tokio::time::timeout(timeout, supervisor).await {
++        Ok(Ok(output)) => { guard.cancel.take(); output }
++        _ => None, // guard terminates the process group and wakes the reaper
++    }
++}
++
+ #[derive(Debug, Error)]
+ pub(crate) enum ResolveError {
+     #[error("YouTube HTTP request failed")]
+@@ -396,20 +578,25 @@ fn playback_media(
+         .map(|tracklist| tracklist.caption_tracks)
+         .unwrap_or_default();
+ 
+-    let (manifest, stream_duration) = build_dash_manifest(
+-        &formats,
+-        &caption_tracks,
+-        capabilities,
+-        preferred_video_codec,
+-    )?;
++    // This receiver is primarily an audio endpoint.  Returning the selected
++    // audio rendition directly avoids handing MPV a synthetic DASH document
++    // whose signed Googlevideo BaseURLs require special HTTP headers and are
++    // otherwise intercepted by MPV's yt-dlp hook.  The URL is freshly signed
++    // for every LOAD, so it remains short-lived and is never persisted.
++    let audio = formats
++        .iter()
++        .filter_map(AudioRep::from_format)
++        .filter(|rep| capabilities.audio_codecs.iter().any(|codec| codec == rep.codec.token()))
++        .max_by_key(|rep| rep.bitrate)
++        .ok_or(ResolveError::NoCompatibleStream)?;
++    let audio_url = audio.url.to_owned();
++    let audio_content_type = audio.container.to_owned();
+ 
+-    let duration = stream_duration.or_else(|| {
++    let duration = details.as_ref().and_then(|details| {
+         details
+-            .as_ref()?
+             .length_seconds
+-            .as_deref()?
+-            .parse::<f64>()
+-            .ok()
++            .as_deref()
++            .and_then(|value| value.parse::<f64>().ok())
+     });
+     let images = details
+         .as_ref()
+@@ -430,16 +617,14 @@ fn playback_media(
+ 
+     Ok(PlaybackMedia {
+         session_id: String::new(),
+-        streams: vec![PlaybackStream::inline_manifest(
+-            manifest,
+-            "application/dash+xml",
+-        )],
++        streams: vec![PlaybackStream::url(audio_url, audio_content_type)],
+         stream_type: StreamType::Buffered,
+         content_id: details
+             .as_ref()
+             .and_then(|details| details.video_id.clone()),
+         title: details.as_ref().and_then(|details| details.title.clone()),
+         subtitle: details.as_ref().and_then(|details| details.author.clone()),
++        metadata: None,
+         images,
+         duration,
+         autoplay: true,
+@@ -1125,6 +1310,19 @@ fn valid_video_id(value: &str) -> bool {
+ 
+ #[cfg(test)]
+ mod tests {
++    #[tokio::test]
++    #[ignore = "explicit live network probe; requires yt-dlp on PATH"]
++    async fn live_parallel_audio_resolution() {
++        let resolver = super::Resolver::new(reqwest::Client::new());
++        for id in ["b7l31agg58g", "qXCwga3LUO0"] {
++            let started = std::time::Instant::now();
++            let result = resolver.resolve(id, 0.0, &Default::default(),
++                super::PreferredVideoCodec::Auto).await;
++            println!("live probe video={id} elapsed_ms={} success={}",
++                started.elapsed().as_millis(), result.is_ok());
++            assert!(result.is_ok(), "live resolution failed for {id}");
++        }
++    }
+     use super::*;
+     use wiremock::matchers::{method, path};
+     use wiremock::{Mock, MockServer, ResponseTemplate};
+@@ -1603,7 +1801,7 @@ mod tests {
+     }
+ 
+     #[tokio::test]
+-    async fn resolve_returns_inline_dash_manifest() {
++    async fn metadata_fixture_returns_audio_and_metadata_without_external_extraction() {
+         let server = MockServer::start().await;
+         Mock::given(method("GET"))
+             .and(path("/watch"))
+@@ -1621,6 +1819,7 @@ mod tests {
+                     "videoId": "dQw4w9WgXcQ",
+                     "title": "Example",
+                     "author": "Channel",
++                    "lengthSeconds": "213",
+                     "thumbnail": {"thumbnails": [{
+                         "url": "https://img.example/large.jpg", "width": 1280, "height": 720
+                     }]}
+@@ -1642,23 +1841,16 @@ mod tests {
+         let mut capabilities = caps(&["av1", "vp9", "h264"], &["opus", "aac"], &[], (3840, 2160));
+         capabilities.subtitle_formats = vec!["vtt".into()];
+         let media = resolver
+-            .resolve("dQw4w9WgXcQ", 12.5, &capabilities, PreferredVideoCodec::Vp9)
++            .resolve_metadata("dQw4w9WgXcQ", 12.5, &capabilities, PreferredVideoCodec::Vp9)
+             .await
+             .unwrap();
+ 
+         assert_eq!(media.streams.len(), 1);
+-        assert_eq!(media.streams[0].content_type, "application/dash+xml");
+-        let StreamSource::InlineManifest(manifest) = &media.streams[0].source else {
+-            panic!("expected an inline manifest");
+-        };
+-        assert!(manifest.starts_with("<?xml"));
+-        assert!(manifest.contains("<MPD"));
+-        assert!(manifest.contains("codecs=\"vp9\""));
+-        assert!(!manifest.contains("av01"));
+-        assert!(manifest.contains("<Label>English</Label>"));
++        assert_eq!(media.streams[0].content_type, "audio/webm");
++        assert!(matches!(&media.streams[0].source, StreamSource::Url(_)));
+         assert_eq!(media.title.as_deref(), Some("Example"));
+         assert_eq!(media.subtitle.as_deref(), Some("Channel"));
+-        assert!((media.duration.unwrap() - 213.04).abs() < 0.001);
++        assert_eq!(media.duration, Some(213.0));
+         assert_eq!(media.start_time, 12.5);
+     }
+ }
+diff --git a/crates/vibecast-bridge/src/bridge.rs b/crates/vibecast-bridge/src/bridge.rs
+index f3ad98e..6449a1e 100644
+--- a/crates/vibecast-bridge/src/bridge.rs
++++ b/crates/vibecast-bridge/src/bridge.rs
+@@ -621,6 +621,7 @@ async fn handle_socket(socket: WebSocket, state: BridgeState) {
+                     Some(Ok(Message::Text(text))) => {
+                         match serde_json::from_str::<ClientMessage>(text.as_str()) {
+                             Ok(message @ ClientMessage::State { .. })
++                            | Ok(message @ ClientMessage::Artwork { .. })
+                             | Ok(message @ ClientMessage::Error { .. }) => {
+                                 if let Some(report) = message.into_report() {
+                                     let _ = reports_tx.send(report).await;
+@@ -1062,7 +1063,7 @@ mod tests {
+                 assert_eq!(session_id, "s1");
+                 assert_eq!(player_state, PlayerState::Playing);
+             }
+-            PlayerReport::Error { .. } => panic!("expected state report"),
++            _ => panic!("expected state report"),
+         }
+ 
+         // Closing the socket emits Disconnected.
+diff --git a/crates/vibecast-cast/src/connection.rs b/crates/vibecast-cast/src/connection.rs
+index 1484157..118736e 100644
+--- a/crates/vibecast-cast/src/connection.rs
++++ b/crates/vibecast-cast/src/connection.rs
+@@ -265,6 +265,16 @@ fn device_auth_response(message: &CastMessage, auth: &AuthMaterial) -> Option<Ve
+         ),
+     };
+ 
++    tracing::info!(
++        requested_hash,
++        requested_sig,
++        nonce_bytes = challenge
++            .challenge
++            .as_ref()
++            .and_then(|inner| inner.sender_nonce.as_ref())
++            .map_or(0, |nonce| nonce.len()),
++        "device auth parameters (hash 0=SHA1, 1=SHA256)"
++    );
+     if requested_sig != SignatureAlgorithm::RsassaPkcs1v15 as i32 {
+         return Some(build_auth_error(
+             AuthErrorType::SignatureAlgorithmUnavailable,
+diff --git a/crates/vibecast-core/src/coordinator.rs b/crates/vibecast-core/src/coordinator.rs
+index 159f8f0..28894a3 100644
+--- a/crates/vibecast-core/src/coordinator.rs
++++ b/crates/vibecast-core/src/coordinator.rs
+@@ -25,6 +25,27 @@ pub(crate) struct Coordinator {
+ }
+ 
+ impl Coordinator {
++    /// Replace only matching active artwork; never change the playback clock.
++    pub(crate) fn update_artwork(&mut self, source: &str, url: &str) -> bool {
++        if self.player_state == PlayerState::Idle || source.is_empty()
++            || !(url.starts_with("http://") || url.starts_with("https://"))
++            || url.len() > 8192 || url.chars().any(char::is_control) {
++            return false;
++        }
++        let Some(metadata) = self.current_media.as_mut().and_then(|m| m.metadata.as_mut()) else {
++            return false;
++        };
++        let Some(image) = metadata.images.first_mut().filter(|i| i.url == source) else {
++            return false;
++        };
++        image.url = url.to_owned();
++        image.width = None;
++        image.height = None;
++        // Alternate original thumbnails must not bypass the processed square.
++        metadata.images.truncate(1);
++        true
++    }
++
+     pub(crate) fn new(volume: Volume) -> Self {
+         Self {
+             media_session_id: 1,
+@@ -70,11 +91,19 @@ impl Coordinator {
+             self.player_state,
+             PlayerState::Playing | PlayerState::Paused | PlayerState::Buffering
+         );
+-        let commands = if is_active {
++        let mut commands = if is_active {
+             media_command::ACTIVE
+         } else {
+             media_command::IDLE
+         };
++        // No seekable/DVR range is modeled for live sources yet.
++        if self
++            .current_media
++            .as_ref()
++            .is_some_and(|media| media.stream_type == StreamType::Live)
++        {
++            commands &= !media_command::SEEK;
++        }
+         let playback_rate = if self.player_state == PlayerState::Playing {
+             1.0
+         } else {
+@@ -140,6 +169,7 @@ pub(crate) fn loading_media_info(request: &LoadRequest) -> MediaInfo {
+     } else {
+         request.media.content_type.clone()
+     };
++    let category = category_for_content_type(&content_type);
+     MediaInfo {
+         content_id: request.media.content_id.clone(),
+         content_type,
+@@ -148,7 +178,7 @@ pub(crate) fn loading_media_info(request: &LoadRequest) -> MediaInfo {
+         duration: Some(0.0),
+         custom_data: None,
+         content_url: None,
+-        media_category: Some(MediaCategory::Video),
++        media_category: Some(category),
+         start_absolute_time: None,
+         is_live_media: None,
+     }
+@@ -157,7 +187,9 @@ pub(crate) fn loading_media_info(request: &LoadRequest) -> MediaInfo {
+ /// Build a fully resolved `MediaInfo` from app-resolved media.
+ pub(crate) fn media_info(media: &PlaybackMedia) -> MediaInfo {
+     let primary = media.streams.first();
+-    let metadata = if media.title.is_some() || media.subtitle.is_some() || !media.images.is_empty()
++    let metadata = if media.metadata.is_some() {
++        media.metadata.clone()
++    } else if media.title.is_some() || media.subtitle.is_some() || !media.images.is_empty()
+     {
+         Some(MediaMetadata {
+             title: media.title.clone(),
+@@ -190,12 +222,113 @@ pub(crate) fn media_info(media: &PlaybackMedia) -> MediaInfo {
+         content_url: primary
+             .and_then(|stream| stream.source.as_url())
+             .map(str::to_string),
+-        media_category: Some(MediaCategory::Video),
++        media_category: Some(category_for_content_type(
++            primary
++                .map(|stream| stream.content_type.as_str())
++                .unwrap_or_default(),
++        )),
+         start_absolute_time: None,
+         is_live_media: if is_live { Some(true) } else { None },
+     }
+ }
+ 
++fn category_for_content_type(content_type: &str) -> MediaCategory {
++    // Containers such as DASH/HLS do not establish an audio-only track.
++    // Preserve the old fallback unless the MIME type explicitly identifies audio.
++    if content_type
++        .trim()
++        .get(..6)
++        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("audio/"))
++    {
++        MediaCategory::Audio
++    } else {
++        MediaCategory::Video
++    }
++}
++
+ fn is_non_empty_object(value: &Value) -> bool {
+     !matches!(value, Value::Object(map) if map.is_empty())
+ }
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn artwork_replaces_only_matching_active_image_without_clock_changes() {
++        let mut c = Coordinator::new(Volume::default());
++        c.current_media = Some(serde_json::from_value(serde_json::json!({
++            "contentId": "song", "contentType": "audio/mpeg", "streamType": "BUFFERED",
++            "metadata": {"metadataType": 3, "title": "Track", "images": [
++                {"url": "https://example.test/a", "width": 640, "height": 360}]}
++        })).unwrap());
++        c.player_state = PlayerState::Playing;
++        c.current_time = 42.0;
++        assert!(!c.update_artwork("https://example.test/old", "http://localhost/artwork/id.jpg"));
++        assert!(c.update_artwork("https://example.test/a", "http://localhost/artwork/id.jpg"));
++        assert_eq!(c.current_time, 42.0);
++        assert_eq!(c.player_state, PlayerState::Playing);
++        let m = c.current_media.as_ref().unwrap().metadata.as_ref().unwrap();
++        assert_eq!(m.title.as_deref(), Some("Track"));
++        assert_eq!(m.images[0].url, "http://localhost/artwork/id.jpg");
++        assert_eq!(m.images[0].width, None);
++        c.player_state = PlayerState::Idle;
++        assert!(!c.update_artwork("http://localhost/artwork/id.jpg", "http://localhost/other"));
++    }
++
++    #[test]
++    fn audio_load_reports_audio_category_before_resolution() {
++        for mime in ["audio/wav", "audio/mpeg", " Audio/FLAC; codecs=flac "] {
++            let request: LoadRequest = serde_json::from_value(serde_json::json!({
++                "requestId": 1,
++                "media": {"contentId": "https://example.test/track", "contentType": mime}
++            })).unwrap();
++            assert_eq!(loading_media_info(&request).media_category, Some(MediaCategory::Audio));
++        }
++        for mime in ["video/mp4", "application/dash+xml", "application/vnd.apple.mpegurl", ""] {
++            assert_eq!(category_for_content_type(mime), MediaCategory::Video);
++        }
++    }
++
++    #[test]
++    fn typed_music_metadata_reaches_status_and_player_payload() {
++        let original: MediaMetadata = serde_json::from_value(serde_json::json!({
++            "metadataType": 3, "title": "Track", "artist": "Artist",
++            "albumName": "Album", "albumArtist": "Album artist",
++            "images": [{"url": "https://example.test/cover"}]
++        })).unwrap();
++        let mut media = PlaybackMedia::new("session", Vec::new(), StreamType::Buffered);
++        media.title = Some("legacy title".into());
++        media.metadata = Some(original.clone());
++        assert_eq!(media_info(&media).metadata, Some(original.clone()));
++        assert_eq!(crate::proxy::to_payload(&media).metadata, Some(original));
++        media.metadata = None;
++        let legacy = media_info(&media).metadata.unwrap();
++        assert_eq!(legacy.title.as_deref(), Some("legacy title"));
++        assert!(legacy.artist.is_none());
++        assert_eq!(legacy.metadata_type, 0);
++    }
++
++    #[test]
++    fn live_status_does_not_advertise_seek() {
++        let mut coordinator = Coordinator::new(Volume::default());
++        coordinator.player_state = PlayerState::Playing;
++        let media: MediaInfo = serde_json::from_value(serde_json::json!({
++            "contentId": "https://example.test/radio", "contentType": "audio/mpeg",
++            "streamType": "LIVE"
++        }))
++        .unwrap();
++        coordinator.current_media = Some(media);
++        let status = coordinator.media_status().unwrap();
++        assert_eq!(status.supported_media_commands & media_command::SEEK, 0);
++        assert_ne!(
++            status.supported_media_commands & media_command::STREAM_VOLUME,
++            0
++        );
++        coordinator.current_media.as_mut().unwrap().stream_type = StreamType::Buffered;
++        assert_ne!(
++            coordinator.media_status().unwrap().supported_media_commands & media_command::SEEK,
++            0
++        );
++    }
++}
+diff --git a/crates/vibecast-core/src/hub.rs b/crates/vibecast-core/src/hub.rs
+index cb4b63d..789bcb1 100644
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -212,6 +212,11 @@ impl DeviceHubHandle {
+ /// slow app (HTTP auth, token exchange, ...) never blocks the hub mailbox. Jobs
+ /// for one session run in the order the hub enqueues them.
+ enum AppJob {
++    VolumeUpdate {
++        ctx: AppContext,
++        level: f64,
++        muted: bool,
++    },
+     /// A sender connected to the app transport.
+     SenderConnected { ctx: AppContext, sender_id: String },
+     /// A custom-namespace message arrived.
+@@ -233,6 +238,9 @@ enum AppJob {
+ async fn run_app_session(app: Arc<dyn AppSession>, mut jobs: mpsc::Receiver<AppJob>) {
+     while let Some(job) = jobs.recv().await {
+         match job {
++            AppJob::VolumeUpdate { ctx, level, muted } => {
++                app.on_volume_update(&ctx, level, muted).await
++            }
+             AppJob::SenderConnected { ctx, sender_id } => {
+                 app.on_sender_connected(&ctx, &sender_id).await;
+             }
+@@ -311,18 +319,38 @@ pub struct DeviceHub {
+     connections: HashMap<u64, ConnectionHandle>,
+     /// `(connection, sender)` -> transport id.
+     subscriptions: HashMap<(u64, String), String>,
++    // Platform and app channels coexist for the same Cast sender ID.
++    platform_subscriptions: HashSet<(u64, String)>,
+     /// session id (== transport id) -> session.
+     sessions: HashMap<String, Session>,
++    session_owners: HashMap<String, u64>,
+     self_tx: mpsc::Sender<HubEvent>,
+     events: Option<mpsc::Receiver<HubEvent>>,
+ }
+ 
++fn volume_path(base: &std::path::Path, device_id: &str) -> PathBuf {
++    let key: String = device_id.bytes().map(|b| format!("{b:02x}")).collect();
++    base.join(format!("volume-{key}.json"))
++}
++
++fn prepare_volume_for_session(volume: &mut Volume) {
++    if volume.level == 0.0 {
++        volume.level = 0.1;
++        volume.muted = false;
++    }
++}
++
+ impl DeviceHub {
+     /// Build a hub. Feed it with [`handle`](Self::handle) and drive it with
+     /// [`run`](Self::run).
+     #[must_use]
+     pub fn new(config: HubConfig) -> Self {
+         let (tx, rx) = mpsc::channel(128);
++        let volume = std::fs::read(volume_path(&config.data_dir, &config.identity.device_id))
++            .ok()
++            .and_then(|bytes| serde_json::from_slice::<Volume>(&bytes).ok())
++            .filter(|v| v.level.is_finite() && (0.0..=1.0).contains(&v.level))
++            .unwrap_or(config.volume);
+         Self {
+             identity: config.identity,
+             registry: config.registry,
+@@ -330,14 +358,16 @@ impl DeviceHub {
+             proxy: config.proxy,
+             http: config.http,
+             data_dir: config.data_dir,
+-            volume: config.volume,
++            volume,
+             user_agent: config.user_agent,
+             cast_device_capabilities: config.cast_device_capabilities,
+             capabilities: config.capabilities,
+             player_settings: config.player_settings,
+             connections: HashMap::new(),
+             subscriptions: HashMap::new(),
++            platform_subscriptions: HashSet::new(),
+             sessions: HashMap::new(),
++            session_owners: HashMap::new(),
+             self_tx: tx,
+             events: Some(rx),
+         }
+@@ -372,8 +402,39 @@ impl DeviceHub {
+                 self.connections.insert(handle.id(), handle);
+             }
+             HubEvent::Server(ServerEvent::Disconnected { id, .. }) => {
++                let owned: Vec<String> = self
++                    .session_owners
++                    .iter()
++                    .filter(|(_, owner)| **owner == id)
++                    .map(|(session, _)| session.clone())
++                    .collect();
++                for session in owned {
++                    self.stop_session(&session).await;
++                }
++                // A sender can leave without sending an explicit Cast STOP.
++                // Keep sessions that still have another subscribed sender, but
++                // tear down sessions whose last sender connection disappeared;
++                // otherwise receiver status advertises a stale app forever.
++                let affected_sessions: Vec<String> = self
++                    .subscriptions
++                    .iter()
++                    .filter(|((conn, _), _)| *conn == id)
++                    .map(|(_, transport)| transport.clone())
++                    .collect();
+                 self.subscriptions.retain(|(conn, _), _| *conn != id);
++                self.platform_subscriptions.retain(|(conn, _)| *conn != id);
+                 self.connections.remove(&id);
++                for session_id in affected_sessions {
++                    let still_subscribed = self
++                        .subscriptions
++                        .values()
++                        .any(|transport| transport == &session_id);
++                    if !still_subscribed {
++                        self.stop_session(&session_id).await;
++                    }
++                }
++                let response = self.receiver_status(0);
++                self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
+             }
+             HubEvent::Server(ServerEvent::Message { handle, message }) => {
+                 self.on_message(&handle, message).await;
+@@ -412,11 +473,10 @@ impl DeviceHub {
+         match message.namespace.as_str() {
+             ns::CONNECTION => match serde_json::from_value::<ConnectionMessage>(payload) {
+                 Ok(ConnectionMessage::Connect(_)) => {
+-                    self.subscriptions
+-                        .insert((conn_id, source), RECEIVER_0.to_string());
++                    self.platform_subscriptions.insert((conn_id, source));
+                 }
+                 _ => {
+-                    self.subscriptions.remove(&(conn_id, source));
++                    self.platform_subscriptions.remove(&(conn_id, source));
+                 }
+             },
+             ns::RECEIVER => self.handle_receiver(conn_id, &source, payload).await,
+@@ -488,6 +548,17 @@ impl DeviceHub {
+             }
+             ReceiverRequest::SetVolume(r) => {
+                 self.volume.apply_update(&r.volume);
++                for (id, session) in &mut self.sessions {
++                    session.coordinator.volume = self.volume.clone();
++                    self.player
++                        .send(PlayerCommand::Volume {
++                            session_id: id.clone(),
++                            level: self.volume.level,
++                            muted: self.volume.muted,
++                        })
++                        .await;
++                }
++                self.publish_volume().await;
+                 let response = self.receiver_status(r.request_id);
+                 self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
+             }
+@@ -495,6 +566,7 @@ impl DeviceHub {
+     }
+ 
+     async fn handle_launch(&mut self, conn_id: u64, source: &str, request: LaunchRequest) {
++        prepare_volume_for_session(&mut self.volume);
+         tracing::info!(
+             app_id = %request.app_id,
+             request_id = request.request_id,
+@@ -532,6 +604,7 @@ impl DeviceHub {
+         }
+ 
+         let session_id = Uuid::new_v4().to_string();
++        self.session_owners.insert(session_id.clone(), conn_id);
+         let (credentials, credentials_type) = request.resolved_credentials();
+         let app_key = manifest.app_key;
+         let data_dir = self.data_dir.join("apps").join(app_key);
+@@ -591,6 +664,16 @@ impl DeviceHub {
+             }
+         };
+ 
++        app.on_volume_update(&ctx, self.volume.level, self.volume.muted)
++            .await;
++        self.player
++            .send(PlayerCommand::Volume {
++                session_id: session_id.clone(),
++                level: self.volume.level,
++                muted: self.volume.muted,
++            })
++            .await;
++
+         let mut namespaces: Vec<String> = manifest
+             .namespaces
+             .iter()
+@@ -618,16 +701,24 @@ impl DeviceHub {
+             jobs: jobs_tx,
+         };
+         self.sessions.insert(session_id, session);
++        self.publish_volume().await;
+ 
+         let response = self.receiver_status(request.request_id);
+         self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
+     }
+ 
+     async fn stop_session(&mut self, session_id: &str) {
+-        let Some(session) = self.sessions.remove(session_id) else {
++        self.session_owners.remove(session_id);
++        let Some(mut session) = self.sessions.remove(session_id) else {
+             return;
+         };
+         tracing::info!(session_id = %session_id, app_key = %session.app_key, "stopping session");
++        // Observers (e.g. Home Assistant) retain their last MEDIA_STATUS even
++        // after the application disappears. Publish the terminal state while
++        // its subscriptions still exist; later player reports are too late.
++        session.coordinator.set_idle(Some(IdleReason::Cancelled));
++        let terminal = session.coordinator.status_response(0);
++        self.broadcast(session_id, ns::MEDIA, &terminal).await;
+         if session.coordinator.playback_media.is_some() {
+             self.player
+                 .send(PlayerCommand::Stop {
+@@ -718,7 +809,21 @@ impl DeviceHub {
+                         })
+                         .await;
+                 }
+-                _ => {
++                Ok(ConnectionMessage::Close(_)) => {
++                    self.subscriptions.remove(&(conn_id, source));
++                    let still_subscribed = self
++                        .subscriptions
++                        .values()
++                        .any(|target| target == &transport);
++                    if !still_subscribed {
++                        self.stop_session(&transport).await;
++                    }
++                    // CLOSE only leaves the app channel. The platform socket
++                    // can remain open, so no Disconnected event will refresh it.
++                    let response = self.receiver_status(0);
++                    self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
++                }
++                Err(_) => {
+                     self.subscriptions.remove(&(conn_id, source));
+                 }
+             },
+@@ -766,7 +871,20 @@ impl DeviceHub {
+         };
+ 
+         match request {
+-            MediaRequest::Load(load) => self.media_load(conn_id, transport, source, load).await,
++            MediaRequest::Load(load) => {
++                let metadata = load.media.metadata.as_ref();
++                tracing::info!(
++                    session_id = %transport,
++                    stream_type = ?load.media.stream_type,
++                    is_live = ?load.media.is_live_media,
++                    has_duration = load.media.duration.is_some(),
++                    has_title = metadata.is_some_and(|m| m.title.is_some()),
++                    has_subtitle = metadata.is_some_and(|m| m.subtitle.is_some()),
++                    image_count = metadata.map_or(0, |m| m.images.len()),
++                    "media LOAD field summary"
++                );
++                self.media_load(conn_id, transport, source, load).await;
++            }
+             MediaRequest::Play(r) => {
+                 tracing::debug!(session_id = %transport, request_id = r.request_id, "PLAY");
+                 self.play(transport, r.request_id).await;
+@@ -777,6 +895,22 @@ impl DeviceHub {
+             }
+             MediaRequest::Seek(r) => {
+                 let position = r.current_time;
++                let live = self.sessions.get(transport).is_some_and(|session| {
++                    session
++                        .coordinator
++                        .current_media
++                        .as_ref()
++                        .is_some_and(|media| {
++                            media.stream_type == vibecast_messages::StreamType::Live
++                        })
++                });
++                if live || !position.is_finite() || position < 0.0 {
++                    let response =
++                        MediaInvalidRequestResponse::new(r.request_id, "Seek position unavailable");
++                    self.send_to(conn_id, transport, source, ns::MEDIA, &response)
++                        .await;
++                    return;
++                }
+                 tracing::debug!(session_id = %transport, request_id = r.request_id, position, "SEEK");
+                 self.seek(transport, r.request_id, position).await;
+             }
+@@ -808,6 +942,12 @@ impl DeviceHub {
+                     })
+                     .await;
+                 self.notify_app(transport).await;
++                self.volume.level = level;
++                self.volume.muted = muted;
++                self.publish_volume().await;
++                let receiver_status = self.receiver_status(0);
++                self.broadcast(RECEIVER_0, ns::RECEIVER, &receiver_status)
++                    .await;
+             }
+             MediaRequest::GetStatus(r) => {
+                 if let Some(session) = self.sessions.get(transport) {
+@@ -831,6 +971,19 @@ impl DeviceHub {
+                     .await;
+             }
+             MediaRequest::QueueLoad(r) => {
++                if self
++                    .sessions
++                    .get(transport)
++                    .is_some_and(|session| session.app_id == "CC1AD845")
++                {
++                    let response = MediaInvalidRequestResponse::new(
++                        r.request_id,
++                        "QUEUE_LOAD is not supported; use a single-item LOAD",
++                    );
++                    self.send_to(conn_id, transport, source, ns::MEDIA, &response)
++                        .await;
++                    return;
++                }
+                 let response =
+                     vibecast_messages::MediaStatusResponse::new(r.request_id, Vec::new());
+                 self.send_to(conn_id, transport, source, ns::MEDIA, &response)
+@@ -1151,19 +1304,66 @@ impl DeviceHub {
+ 
+     // -- player reports ---------------------------------------------------
+ 
++    async fn publish_volume(&mut self) {
++        let path = volume_path(&self.data_dir, &self.identity.device_id);
++        let tmp = path.with_extension("tmp");
++        let result = std::fs::create_dir_all(&self.data_dir).and_then(|_| {
++            std::fs::write(
++                &tmp,
++                serde_json::to_vec(&self.volume).expect("finite volume"),
++            )?;
++            std::fs::rename(&tmp, &path)
++        });
++        if let Err(error) = result {
++            tracing::warn!(%error, "cannot persist receiver volume");
++        }
++        for session in self.sessions.values_mut() {
++            session.coordinator.volume = self.volume.clone();
++            let _ = session
++                .jobs
++                .send(AppJob::VolumeUpdate {
++                    ctx: session.ctx.clone(),
++                    level: self.volume.level,
++                    muted: self.volume.muted,
++                })
++                .await;
++        }
++    }
++
+     async fn on_report(&mut self, report: PlayerReport) {
+         let session_id = report.session_id().to_string();
+         if !self.sessions.contains_key(&session_id) {
+             return;
+         }
+         match report {
++            PlayerReport::Artwork { source_url, url, .. } => {
++                let Some(session) = self.sessions.get_mut(&session_id) else { return; };
++                if session.coordinator.update_artwork(&source_url, &url) {
++                    let response = session.coordinator.status_response(0);
++                    self.broadcast(&session_id, ns::MEDIA, &response).await;
++                }
++            }
+             PlayerReport::State {
+                 player_state,
+                 current_time,
+                 duration,
+                 idle_reason,
++                volume,
++                muted,
+                 ..
+             } => {
++                let before = self.volume.clone();
++                if let Some(level) = volume.filter(|v| v.is_finite()) {
++                    self.volume.level = level.clamp(0.0, 1.0);
++                }
++                if let Some(muted) = muted {
++                    self.volume.muted = muted;
++                }
++                if self.volume != before {
++                    self.publish_volume().await;
++                    let response = self.receiver_status(0);
++                    self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
++                }
+                 tracing::debug!(
+                     session_id = %session_id,
+                     state = ?player_state,
+@@ -1329,12 +1529,18 @@ impl DeviceHub {
+         let Ok(value) = serde_json::to_value(message) else {
+             return;
+         };
+-        let connection_ids: HashSet<u64> = self
+-            .subscriptions
+-            .iter()
+-            .filter(|(_, target)| target.as_str() == transport)
+-            .map(|((conn, _), _)| *conn)
+-            .collect();
++        let connection_ids: HashSet<u64> = if transport == RECEIVER_0 {
++            self.platform_subscriptions
++                .iter()
++                .map(|(conn, _)| *conn)
++                .collect()
++        } else {
++            self.subscriptions
++                .iter()
++                .filter(|(_, target)| target.as_str() == transport)
++                .map(|((conn, _), _)| *conn)
++                .collect()
++        };
+         for conn_id in connection_ids {
+             if let Some(handle) = self.connections.get(&conn_id) {
+                 let _ = handle.send_json(transport, "*", namespace, &value).await;
+@@ -1347,3 +1553,37 @@ fn parse_payload(message: &CastMessage) -> Option<serde_json::Value> {
+     let text = message.payload_utf8.as_deref()?;
+     serde_json::from_str(text).ok()
+ }
++
++#[cfg(test)]
++mod volume_tests {
++    use super::*;
++    #[test]
++    fn zero_promotes_only_at_session_start() {
++        let mut volume = Volume {
++            level: 0.0,
++            muted: true,
++            ..Default::default()
++        };
++        prepare_volume_for_session(&mut volume);
++        assert_eq!(volume.level, 0.1);
++        assert!(!volume.muted);
++        volume.level = 0.5;
++        prepare_volume_for_session(&mut volume);
++        assert_eq!(volume.level, 0.5);
++    }
++    #[test]
++    fn device_volume_paths_are_distinct_and_safe() {
++        let base = std::path::Path::new("/tmp");
++        let a = volume_path(base, "../a");
++        assert_eq!(a.parent(), Some(base));
++        assert_ne!(a, volume_path(base, "other"));
++        let volume = Volume {
++            level: 0.5,
++            muted: true,
++            ..Default::default()
++        };
++        let restored: Volume =
++            serde_json::from_slice(&serde_json::to_vec(&volume).unwrap()).unwrap();
++        assert_eq!(restored, volume);
++    }
++}
+diff --git a/crates/vibecast-core/src/proxy.rs b/crates/vibecast-core/src/proxy.rs
+index 49bcf53..e7cd97f 100644
+--- a/crates/vibecast-core/src/proxy.rs
++++ b/crates/vibecast-core/src/proxy.rs
+@@ -459,6 +459,7 @@ pub(crate) fn to_payload(media: &PlaybackMedia) -> PlaybackMediaPayload {
+             })
+             .collect(),
+         stream_type: media.stream_type,
++        metadata: media.metadata.clone(),
+         title: media.title.clone(),
+         subtitle: media.subtitle.clone(),
+         images: media.images.clone(),
+diff --git a/crates/vibecast-core/src/tests.rs b/crates/vibecast-core/src/tests.rs
+index 495457b..4980604 100644
+--- a/crates/vibecast-core/src/tests.rs
++++ b/crates/vibecast-core/src/tests.rs
+@@ -101,7 +101,7 @@ fn fake_manifest() -> AppManifest {
+         }],
+     )
+     .expect("fake settings schema");
+-    AppManifest::new("fake", &["APP1"], "Fake App", settings)
++    AppManifest::new("fake", &["APP1", "CC1AD845"], "Fake App", settings)
+         .with_icon_url("https://example.test/fake.png")
+         .with_namespaces(&[FAKE_NS])
+ }
+@@ -146,7 +146,7 @@ impl AppSession for FakeSession {
+                 "https://cdn.example/manifest.mpd",
+                 "application/dash+xml",
+             )],
+-            StreamType::Buffered,
++            request.media.stream_type,
+         );
+         media.title = Some("Fake Title".into());
+         media.duration = Some(120.0);
+@@ -330,6 +330,10 @@ async fn next_json(client: &mut Framed<DuplexStream, CastCodec>) -> Value {
+ }
+ 
+ async fn launch(client: &mut Framed<DuplexStream, CastCodec>) -> String {
++    launch_id(client, "APP1").await
++}
++
++async fn launch_id(client: &mut Framed<DuplexStream, CastCodec>, app_id: &str) -> String {
+     send(
+         client,
+         ns::CONNECTION,
+@@ -341,13 +345,13 @@ async fn launch(client: &mut Framed<DuplexStream, CastCodec>) -> String {
+         client,
+         ns::RECEIVER,
+         "receiver-0",
+-        r#"{"type":"LAUNCH","requestId":1,"appId":"APP1"}"#,
++        &serde_json::json!({"type":"LAUNCH","requestId":1,"appId":app_id}).to_string(),
+     )
+     .await;
+     let status = next_json(client).await;
+     assert_eq!(status["type"], "RECEIVER_STATUS");
+     let app = &status["status"]["applications"][0];
+-    assert_eq!(app["appId"], "APP1");
++    assert_eq!(app["appId"], app_id);
+     assert_eq!(app["displayName"], "Fake App");
+     assert_eq!(app["iconUrl"], "https://example.test/fake.png");
+     assert_eq!(
+@@ -462,11 +466,14 @@ async fn launch_load_and_play_end_to_end() {
+     assert_eq!(playing["status"][0]["playerState"], "PLAYING");
+     assert_eq!(playing["status"][0]["supportedMediaCommands"], 15);
+ 
+-    // The player received Load then Play; the manifest proxy was registered.
++    // Restore receiver volume before Load/Play; register the manifest proxy.
+     let commands = harness.player.commands();
+-    assert!(matches!(commands.first(), Some(PlayerCommand::Load { .. })));
++    assert!(matches!(
++        commands.first(),
++        Some(PlayerCommand::Volume { .. })
++    ));
+     assert!(matches!(commands.last(), Some(PlayerCommand::Play { .. })));
+-    if let Some(PlayerCommand::Load { media, .. }) = commands.first() {
++    if let Some(PlayerCommand::Load { media, .. }) = commands.get(1) {
+         assert!(media.streams[0].url.contains("/manifest/"));
+     }
+     assert!(harness
+@@ -478,6 +485,78 @@ async fn launch_load_and_play_end_to_end() {
+         .any(|event| event.starts_with("+manifest:")));
+ }
+ 
++#[tokio::test]
++async fn default_media_rejects_queue_load_without_poisoning_next_load() {
++    let mut harness = setup().await;
++    let transport = launch_id(&mut harness.client, "CC1AD845").await;
++    send(
++        &mut harness.client,
++        ns::CONNECTION,
++        &transport,
++        r#"{"type":"CONNECT"}"#,
++    )
++    .await;
++    let _ = next_json(&mut harness.client).await;
++    let before = harness.player.commands().len();
++    send(
++        &mut harness.client,
++        ns::MEDIA,
++        &transport,
++        r#"{"type":"QUEUE_LOAD","requestId":71,"items":[]}"#,
++    )
++    .await;
++    let rejected = next_json(&mut harness.client).await;
++    assert_eq!(rejected["type"], "INVALID_REQUEST");
++    assert_eq!(rejected["requestId"], 71);
++    assert_eq!(harness.player.commands().len(), before);
++    send(
++        &mut harness.client,
++        ns::MEDIA,
++        &transport,
++        r#"{"type":"LOAD","requestId":72,"media":{"contentId":"abc","contentType":"audio/mpeg"}}"#,
++    )
++    .await;
++    for _ in 0..3 {
++        let _ = next_json(&mut harness.client).await;
++    }
++    assert!(harness
++        .player
++        .commands()
++        .iter()
++        .any(|c| matches!(c, PlayerCommand::Load { .. })));
++}
++
++#[tokio::test]
++async fn live_seek_is_rejected_without_player_command() {
++    let mut harness = setup().await;
++    let transport = launch(&mut harness.client).await;
++    send(
++        &mut harness.client,
++        ns::CONNECTION,
++        &transport,
++        r#"{"type":"CONNECT"}"#,
++    )
++    .await;
++    let _ = next_json(&mut harness.client).await;
++    send(&mut harness.client, ns::MEDIA, &transport,
++        r#"{"type":"LOAD","requestId":72,"media":{"contentId":"abc","contentType":"audio/mpeg","streamType":"LIVE"}}"#).await;
++    for _ in 0..3 {
++        let _ = next_json(&mut harness.client).await;
++    }
++    let before = harness.player.commands().len();
++    send(
++        &mut harness.client,
++        ns::MEDIA,
++        &transport,
++        r#"{"type":"SEEK","requestId":73,"mediaSessionId":1,"currentTime":5}"#,
++    )
++    .await;
++    let rejected = next_json(&mut harness.client).await;
++    assert_eq!(rejected["type"], "INVALID_REQUEST");
++    assert_eq!(rejected["reason"], "Seek position unavailable");
++    assert_eq!(harness.player.commands().len(), before);
++}
++
+ #[tokio::test]
+ async fn load_failure_sends_load_failed() {
+     let mut harness = setup().await;
+@@ -542,6 +621,8 @@ async fn primary_player_report_broadcasts_status() {
+             current_time: 33.5,
+             duration: Some(120.0),
+             idle_reason: None,
++            volume: None,
++            muted: None,
+         })
+         .await
+         .unwrap();
+@@ -628,14 +709,100 @@ async fn app_driven_playback_uses_canonical_media_path() {
+     assert_eq!(stopped["status"][0]["idleReason"], "CANCELLED");
+ 
+     let commands = harness.player.commands();
+-    assert!(matches!(commands[0], PlayerCommand::Load { .. }));
+-    assert!(matches!(commands[1], PlayerCommand::Pause { .. }));
++    assert!(matches!(commands[0], PlayerCommand::Volume { .. }));
++    assert!(matches!(commands[1], PlayerCommand::Load { .. }));
++    assert!(matches!(commands[2], PlayerCommand::Pause { .. }));
+     assert!(matches!(
+-        commands[2],
++        commands[3],
+         PlayerCommand::Seek { position: 33.0, .. }
+     ));
+-    assert!(matches!(commands[3], PlayerCommand::Play { .. }));
+-    assert!(matches!(commands[4], PlayerCommand::Stop { .. }));
++    assert!(matches!(commands[4], PlayerCommand::Play { .. }));
++    assert!(matches!(commands[5], PlayerCommand::Stop { .. }));
++}
++
++#[tokio::test]
++async fn receiver_stop_publishes_terminal_media_before_removing_app() {
++    let mut harness = setup().await;
++    let client = &mut harness.client;
++    let transport = launch(client).await;
++    send(client, ns::CONNECTION, &transport, r#"{"type":"CONNECT"}"#).await;
++    let _ = next_json(client).await;
++    send(client, FAKE_NS, &transport, r#"{"type":"PUSH_MEDIA"}"#).await;
++    let _ = next_json(client).await;
++    let _ = next_json(client).await;
++    send(client, FAKE_NS, &transport, r#"{"type":"APP_PLAY"}"#).await;
++    assert_eq!(next_json(client).await["status"][0]["playerState"], "PLAYING");
++    send(client, ns::RECEIVER, "receiver-0", &serde_json::json!({
++        "type":"STOP", "requestId":90, "sessionId":transport
++    }).to_string()).await;
++    let terminal = tokio::time::timeout(std::time::Duration::from_secs(2), next_json(client)).await.unwrap();
++    assert_eq!(terminal["type"], "MEDIA_STATUS");
++    assert_eq!(terminal["status"][0]["playerState"], "IDLE");
++    assert_eq!(terminal["status"][0]["idleReason"], "CANCELLED");
++    let receiver = next_json(client).await;
++    assert_eq!(receiver["status"]["applications"].as_array().unwrap().len(), 0);
++    assert!(harness.player.commands().iter().any(|c| matches!(c, PlayerCommand::Stop { .. })));
++}
++
++#[tokio::test]
++async fn app_close_refreshes_platform_status_without_transport_disconnect() {
++    let mut harness = setup().await;
++    let client = &mut harness.client;
++    let transport = launch(client).await;
++    send(client, ns::CONNECTION, &transport, r#"{"type":"CONNECT"}"#).await;
++    let _ = next_json(client).await;
++    send(client, FAKE_NS, &transport, r#"{"type":"PUSH_MEDIA"}"#).await;
++    let _ = next_json(client).await;
++    let _ = next_json(client).await;
++    // The sender closes its app channel, not the still-subscribed platform
++    // connection. No later socket disconnect or GET_STATUS should be required.
++    send(client, ns::CONNECTION, &transport, r#"{"type":"CLOSE"}"#).await;
++    let receiver = tokio::time::timeout(
++        std::time::Duration::from_secs(2), next_json(client)
++    ).await.expect("platform observer must learn that the app stopped");
++    assert_eq!(receiver["type"], "RECEIVER_STATUS");
++    assert!(receiver["status"]["applications"].as_array().unwrap().is_empty());
++    assert!(harness.player.commands().iter().any(|c| matches!(c, PlayerCommand::Stop { .. })));
++    // The same socket can immediately create a new app session.
++    assert_ne!(launch(client).await, transport);
++}
++
++/// A separate monitoring connection must not retain the owner's stopped media.
++#[tokio::test]
++async fn owner_disconnect_notifies_a_separate_observer_and_allows_takeover() {
++    let mut harness = setup().await;
++    let transport = launch(&mut harness.client).await;
++    send(&mut harness.client, ns::CONNECTION, &transport, r#"{"type":"CONNECT"}"#).await;
++    let _ = next_json(&mut harness.client).await;
++    send(&mut harness.client, FAKE_NS, &transport, r#"{"type":"PUSH_MEDIA"}"#).await;
++    let _ = next_json(&mut harness.client).await;
++    let _ = next_json(&mut harness.client).await;
++
++    let (server_end, client_end) = tokio::io::duplex(64 * 1024);
++    let (events_tx, mut events_rx) = mpsc::channel::<ServerEvent>(32);
++    tokio::spawn(run_connection(server_end, 2, Arc::from("observer"), Arc::new(dummy_auth()), events_tx));
++    let hub = harness.hub.clone();
++    tokio::spawn(async move {
++        while let Some(event) = events_rx.recv().await {
++            if hub.send_server_event(event).await.is_err() {
++                break;
++            }
++        }
++    });
++    let mut observer = Framed::new(client_end, CastCodec);
++    send(&mut observer, ns::CONNECTION, "receiver-0", r#"{"type":"CONNECT"}"#).await;
++    send(&mut observer, ns::CONNECTION, &transport, r#"{"type":"CONNECT"}"#).await;
++    assert_eq!(next_json(&mut observer).await["type"], "MEDIA_STATUS");
++    drop(harness.client);
++    let terminal = tokio::time::timeout(std::time::Duration::from_secs(2), next_json(&mut observer))
++        .await.expect("observer must receive terminal media state");
++    assert_eq!(terminal["type"], "MEDIA_STATUS");
++    assert_eq!(terminal["status"][0]["playerState"], "IDLE");
++    assert_eq!(terminal["status"][0]["idleReason"], "CANCELLED");
++    let receiver = next_json(&mut observer).await;
++    assert!(receiver["status"]["applications"].as_array().unwrap().is_empty());
++    assert_ne!(launch(&mut observer).await, transport);
++    assert!(harness.player.commands().iter().any(|c| matches!(c, PlayerCommand::Stop { .. })));
+ }
+ 
+ /// An app session whose `resolve_license` reverses the challenge instead of
+@@ -805,3 +972,60 @@ async fn platform_set_volume_broadcasts_receiver_status() {
+     // muted was omitted, so it stays at its prior value.
+     assert_eq!(reply["status"]["volume"]["muted"], false);
+ }
++
++#[tokio::test]
++async fn platform_volume_subscription_survives_app_connect() {
++    let mut harness = setup().await;
++    let client = &mut harness.client;
++    let transport = launch(client).await;
++    send(client, ns::CONNECTION, &transport, r#"{"type":"CONNECT"}"#).await;
++    // CONNECT generates no reply. Barrier through GET_STATUS drains prior work.
++    send(
++        client,
++        ns::RECEIVER,
++        "receiver-0",
++        r#"{"type":"GET_STATUS","requestId":50}"#,
++    )
++    .await;
++    loop {
++        if next_json(client).await["requestId"] == 50 {
++            break;
++        }
++    }
++    send(
++        client,
++        ns::RECEIVER,
++        "receiver-0",
++        r#"{"type":"SET_VOLUME","requestId":51,"volume":{"level":0.42}}"#,
++    )
++    .await;
++    let reply = tokio::time::timeout(std::time::Duration::from_secs(2), async {
++        loop {
++            let reply = next_json(client).await;
++            if reply["type"] == "RECEIVER_STATUS" && reply["requestId"] == 51 {
++                break reply;
++            }
++        }
++    })
++    .await
++    .expect("platform status must arrive during an app session");
++    assert_eq!(reply["status"]["volume"]["level"], 0.42);
++    send(
++        client,
++        ns::MEDIA,
++        &transport,
++        r#"{"type":"SET_VOLUME","requestId":52,"mediaSessionId":1,"volume":{"level":0.43}}"#,
++    )
++    .await;
++    let reply = tokio::time::timeout(std::time::Duration::from_secs(2), async {
++        loop {
++            let reply = next_json(client).await;
++            if reply["type"] == "RECEIVER_STATUS" {
++                break reply;
++            }
++        }
++    })
++    .await
++    .expect("media volume changes must update platform observers too");
++    assert_eq!(reply["status"]["volume"]["level"], 0.43);
++}
+diff --git a/crates/vibecast-discovery/src/mdns.rs b/crates/vibecast-discovery/src/mdns.rs
+index fec6e36..6365d76 100644
+--- a/crates/vibecast-discovery/src/mdns.rs
++++ b/crates/vibecast-discovery/src/mdns.rs
+@@ -57,7 +57,7 @@ impl CastServiceTxt {
+             friendly_name: friendly_name.into(),
+             id: clean_id.into(),
+             cd: cert_digest.to_uppercase(),
+-            ca: "463365".into(),
++            ca: "199428".into(),
+             bs: bs.into(),
+             st: "0".into(),
+             nf: "1".into(),
+@@ -364,7 +364,7 @@ mod tests {
+         assert_eq!(txt.friendly_name, "Living Room");
+         assert_eq!(txt.id, "12345678123412341234123456789abc");
+         assert_eq!(txt.cd, "ABCDEF"); // uppercased
+-        assert_eq!(txt.ca, "463365");
++        assert_eq!(txt.ca, "199428");
+         assert_eq!(txt.st, "0");
+         assert_eq!(txt.ic, "/setup/icon.png");
+         assert_eq!(
+diff --git a/crates/vibecast-messages/src/common.rs b/crates/vibecast-messages/src/common.rs
+index 811371f..74f9bc8 100644
+--- a/crates/vibecast-messages/src/common.rs
++++ b/crates/vibecast-messages/src/common.rs
+@@ -215,7 +215,7 @@ pub struct MediaImage {
+ }
+ 
+ /// Metadata for a media item.
+-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
++#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+ #[serde(rename_all = "camelCase")]
+ pub struct MediaMetadata {
+     /// Metadata schema selector (0 = generic, 1 = movie, ...).
+@@ -227,6 +227,15 @@ pub struct MediaMetadata {
+     /// Subtitle.
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub subtitle: Option<String>,
++    /// Track artist (music metadata).
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub artist: Option<String>,
++    /// Album title (music metadata).
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub album_name: Option<String>,
++    /// Album artist (music metadata).
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub album_artist: Option<String>,
+     /// Series title (TV).
+     #[serde(default, skip_serializing_if = "Option::is_none")]
+     pub series_title: Option<String>,
+diff --git a/crates/vibecast-messages/src/discovery.rs b/crates/vibecast-messages/src/discovery.rs
+index 8f8982e..2290487 100644
+--- a/crates/vibecast-messages/src/discovery.rs
++++ b/crates/vibecast-messages/src/discovery.rs
+@@ -51,7 +51,7 @@ impl DeviceInfoResponse {
+             device_id,
+             device_model,
+             friendly_name,
+-            device_capabilities: 4101,
++            device_capabilities: 199428,
+             device_icon_url: String::new(),
+             control_notifications: 1,
+             receiver_metrics_id: String::new(),
+diff --git a/crates/vibecast-messages/src/tests.rs b/crates/vibecast-messages/src/tests.rs
+index b18c0cb..417f718 100644
+--- a/crates/vibecast-messages/src/tests.rs
++++ b/crates/vibecast-messages/src/tests.rs
+@@ -153,7 +153,7 @@ fn device_info_response_has_defaults_and_camel_case() {
+     .unwrap();
+     assert_eq!(value["type"], "DEVICE_INFO");
+     assert_eq!(value["deviceId"], "dev-id");
+-    assert_eq!(value["deviceCapabilities"], 4101);
++    assert_eq!(value["deviceCapabilities"], 199428);
+     assert_eq!(value["controlNotifications"], 1);
+ }
+ 
+@@ -179,3 +179,11 @@ fn extract_request_id_handles_both_casings() {
+     assert_eq!(extract_request_id(&json!({"request_id": 12})), 12);
+     assert_eq!(extract_request_id(&Value::Null), 0);
+ }
++
++#[test]
++fn music_metadata_roundtrip_preserves_typed_fields() {
++    let value = json!({"metadataType": 3, "title": "Track", "artist": "Artist",
++        "albumName": "Album", "albumArtist": "Album artist"});
++    let parsed: crate::MediaMetadata = serde_json::from_value(value.clone()).unwrap();
++    assert_eq!(serde_json::to_value(parsed).unwrap(), value);
++}
+diff --git a/crates/vibecast-platform/Cargo.toml b/crates/vibecast-platform/Cargo.toml
+index dca9ecf..9ffbddf 100644
+--- a/crates/vibecast-platform/Cargo.toml
++++ b/crates/vibecast-platform/Cargo.toml
+@@ -30,6 +30,7 @@ vibecast-apps-tv4play = { path = "../vibecast-apps-tv4play" }
+ vibecast-apps-viaplay = { path = "../vibecast-apps-viaplay" }
+ vibecast-apps-primevideo = { path = "../vibecast-apps-primevideo" }
+ vibecast-apps-youtube = { path = "../vibecast-apps-youtube" }
++vibecast-apps-default-media = { path = "../vibecast-apps-default-media" }
+ 
+ tokio = { workspace = true }
+ tokio-util = { workspace = true, features = ["rt"] }
+diff --git a/crates/vibecast-platform/src/lib.rs b/crates/vibecast-platform/src/lib.rs
+index 9ea50fd..591f2df 100644
+--- a/crates/vibecast-platform/src/lib.rs
++++ b/crates/vibecast-platform/src/lib.rs
+@@ -32,6 +32,7 @@ use serde::{Deserialize, Serialize};
+ use tokio::sync::mpsc;
+ use tokio_util::sync::CancellationToken;
+ 
++use vibecast_apps_default_media::DefaultMedia;
+ use vibecast_apps_primevideo::PrimeVideo;
+ use vibecast_apps_svtplay::SvtPlay;
+ use vibecast_apps_tv4play::Tv4Play;
+@@ -318,7 +319,8 @@ pub async fn run(
+ fn load_or_create_installation_id(data_dir: &Path) -> Result<uuid::Uuid, PlatformError> {
+     let path = data_dir.join(INSTALLATION_ID_FILE);
+     match std::fs::read_to_string(&path) {
+-        Ok(value) => parse_installation_id(&path, &value),
++        Ok(value) => parse_installation_id(&path, &value)
++            .or_else(|_| read_concurrently_created_installation_id(&path)),
+         Err(error) if error.kind() == std::io::ErrorKind::NotFound => create_installation_id(&path),
+         Err(source) => Err(PlatformError::StateRead { path, source }),
+     }
+@@ -390,6 +392,7 @@ fn build_app_providers() -> Vec<Arc<dyn AppProvider>> {
+         Arc::new(Viaplay::new()),
+         Arc::new(PrimeVideo::new()),
+         Arc::new(YouTube::new()),
++        Arc::new(DefaultMedia),
+     ]
+ }
+ 
+@@ -687,6 +690,7 @@ mod tests {
+         assert!(keys.contains(&"viaplay"));
+         assert!(keys.contains(&"primevideo"));
+         assert!(keys.contains(&"youtube"));
++        assert!(keys.contains(&"default_media"));
+     }
+ 
+     #[tokio::test]
+@@ -819,6 +823,26 @@ mod tests {
+         std::fs::remove_dir_all(data_dir).unwrap();
+     }
+ 
++    #[test]
++    fn initially_empty_installation_id_waits_for_writer() {
++        let data_dir = std::env::temp_dir().join(format!(
++            "vibecast-platform-empty-installation-id-{}",
++            uuid::Uuid::new_v4()
++        ));
++        std::fs::create_dir(&data_dir).unwrap();
++        let path = data_dir.join(INSTALLATION_ID_FILE);
++        std::fs::write(&path, "").unwrap();
++        let id = uuid::Uuid::new_v4();
++        let writer = std::thread::spawn(move || {
++            std::thread::sleep(Duration::from_millis(20));
++            std::fs::write(path, id.to_string()).unwrap();
++        });
++        let result = load_or_create_installation_id(&data_dir);
++        writer.join().unwrap();
++        assert_eq!(result.unwrap(), id);
++        std::fs::remove_dir_all(data_dir).unwrap();
++    }
++
+     #[test]
+     fn explicit_bind_ip_is_used_as_local_ip() {
+         assert_eq!(detect_local_ip("192.168.1.50"), "192.168.1.50");
+diff --git a/crates/vibecast-platform/src/manager.rs b/crates/vibecast-platform/src/manager.rs
+index 7ddb891..dccce57 100644
+--- a/crates/vibecast-platform/src/manager.rs
++++ b/crates/vibecast-platform/src/manager.rs
+@@ -172,7 +172,7 @@ impl PlayerManager {
+         }
+ 
+         let device_id = player_device_id(&self.config.installation_id, &player_id);
+-        let friendly_name = format!("{} [vibecast]", registration.name);
++        let friendly_name = registration.name.clone();
+         let eureka_identity = self.eureka_identity(&friendly_name, &device_id);
+ 
+         let params = ReceiverParams {
+diff --git a/crates/vibecast-player-api/src/protocol.rs b/crates/vibecast-player-api/src/protocol.rs
+index 771669a..9cbd86f 100644
+--- a/crates/vibecast-player-api/src/protocol.rs
++++ b/crates/vibecast-player-api/src/protocol.rs
+@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, HashMap};
+ 
+ use serde::{Deserialize, Serialize};
+ use serde_json::{Map, Value};
+-use vibecast_messages::{IdleReason, MediaImage, PlayerState, StreamType};
++use vibecast_messages::{IdleReason, MediaImage, MediaMetadata, PlayerState, StreamType};
+ use vibecast_settings::SettingValue;
+ 
+ /// Supported DRM key systems (EME key-system identifiers).
+@@ -58,6 +58,9 @@ pub struct PlaybackStreamPayload {
+ #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+ #[serde(rename_all = "camelCase")]
+ pub struct PlaybackMediaPayload {
++    /// Original typed sender metadata, when retained by the app provider.
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    pub metadata: Option<MediaMetadata>,
+     /// Stream candidates in preference order.
+     #[serde(default)]
+     pub streams: Vec<PlaybackStreamPayload>,
+@@ -89,6 +92,7 @@ pub struct PlaybackMediaPayload {
+ impl Default for PlaybackMediaPayload {
+     fn default() -> Self {
+         Self {
++            metadata: None,
+             streams: Vec::new(),
+             stream_type: StreamType::default(),
+             title: None,
+@@ -181,6 +185,12 @@ impl PlayerCommand {
+     rename_all_fields = "camelCase"
+ )]
+ pub enum PlayerReport {
++    /// Optional processed cover, correlated with its original image URL.
++    Artwork {
++        session_id: String,
++        source_url: String,
++        url: String,
++    },
+     /// Player state update.
+     State {
+         /// Owning session id.
+@@ -196,6 +206,10 @@ pub enum PlayerReport {
+         /// Reason for entering IDLE, if applicable.
+         #[serde(default)]
+         idle_reason: Option<IdleReason>,
++        #[serde(default)]
++        volume: Option<f64>,
++        #[serde(default)]
++        muted: Option<bool>,
+     },
+     /// Player error.
+     Error {
+@@ -213,7 +227,8 @@ impl PlayerReport {
+     #[must_use]
+     pub fn session_id(&self) -> &str {
+         match self {
+-            PlayerReport::State { session_id, .. } | PlayerReport::Error { session_id, .. } => {
++            PlayerReport::State { session_id, .. } | PlayerReport::Error { session_id, .. }
++            | PlayerReport::Artwork { session_id, .. } => {
+                 session_id
+             }
+         }
+@@ -296,6 +311,12 @@ pub struct AppSettingsPayload {
+ #[derive(Debug, Deserialize)]
+ #[serde(tag = "type", rename_all_fields = "camelCase")]
+ pub enum ClientMessage {
++    #[serde(rename = "artwork")]
++    Artwork {
++        session_id: String,
++        source_url: String,
++        url: String,
++    },
+     #[serde(rename = "register")]
+     Register { player: PlayerRegistration },
+     #[serde(rename = "state")]
+@@ -308,6 +329,10 @@ pub enum ClientMessage {
+         duration: Option<f64>,
+         #[serde(default)]
+         idle_reason: Option<IdleReason>,
++        #[serde(default)]
++        volume: Option<f64>,
++        #[serde(default)]
++        muted: Option<bool>,
+     },
+     #[serde(rename = "error")]
+     Error {
+@@ -327,18 +352,24 @@ pub enum ClientMessage {
+ impl ClientMessage {
+     pub fn into_report(self) -> Option<PlayerReport> {
+         match self {
++            Self::Artwork { session_id, source_url, url } =>
++                Some(PlayerReport::Artwork { session_id, source_url, url }),
+             Self::State {
+                 session_id,
+                 player_state,
+                 current_time,
+                 duration,
+                 idle_reason,
++                volume,
++                muted,
+             } => Some(PlayerReport::State {
+                 session_id,
+                 player_state,
+                 current_time,
+                 duration,
+                 idle_reason,
++                volume,
++                muted,
+             }),
+             Self::Error {
+                 session_id,
+@@ -446,6 +477,7 @@ mod tests {
+         assert_eq!(value["media"]["startTime"], 0.0);
+         // drm omitted when absent
+         assert!(value["media"]["streams"][0].get("drm").is_none());
++        assert!(value["media"].get("metadata").is_none());
+     }
+ 
+     #[test]
+@@ -480,7 +512,7 @@ mod tests {
+                 assert_eq!(player_state, PlayerState::Playing);
+                 assert_eq!(current_time, 21.5);
+             }
+-            PlayerReport::Error { .. } => panic!("expected state report"),
++            _ => panic!("expected state report"),
+         }
+     }
+ 
+diff --git a/crates/vibecast-sdk/src/lib.rs b/crates/vibecast-sdk/src/lib.rs
+index b50979a..041476f 100644
+--- a/crates/vibecast-sdk/src/lib.rs
++++ b/crates/vibecast-sdk/src/lib.rs
+@@ -250,6 +250,9 @@ pub trait AppSession: Send + Sync {
+     /// Called when canonical playback state changes.
+     async fn on_playback_update(&self, _ctx: &AppContext, _state: PlaybackState) {}
+ 
++    /// Output volume, including changes made directly at the player.
++    async fn on_volume_update(&self, _ctx: &AppContext, _level: f64, _muted: bool) {}
++
+     /// Called before the session is torn down.
+     async fn on_stop(&self, _ctx: &AppContext) {}
+ }
+diff --git a/crates/vibecast-sdk/src/types.rs b/crates/vibecast-sdk/src/types.rs
+index 3a4c6cf..bbca63b 100644
+--- a/crates/vibecast-sdk/src/types.rs
++++ b/crates/vibecast-sdk/src/types.rs
+@@ -1,7 +1,7 @@
+ //! Owned data types exchanged between apps and the coordinator.
+ 
+ use serde_json::Value;
+-use vibecast_messages::{IdleReason, MediaImage, PlayerState, StreamType};
++use vibecast_messages::{IdleReason, MediaImage, MediaMetadata, PlayerState, StreamType};
+ 
+ /// Supported DRM key systems.
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+@@ -119,6 +119,9 @@ pub struct PlaybackMedia {
+     pub stream_type: StreamType,
+     /// Original content identifier from the LOAD request.
+     pub content_id: Option<String>,
++    /// Original typed metadata when the provider preserves sender metadata.
++    /// None retains the legacy title/subtitle/images normalization.
++    pub metadata: Option<MediaMetadata>,
+     /// Display title.
+     pub title: Option<String>,
+     /// Display subtitle.
+@@ -148,6 +151,7 @@ impl PlaybackMedia {
+             streams,
+             stream_type,
+             content_id: None,
++            metadata: None,
+             title: None,
+             subtitle: None,
+             images: Vec::new(),
+diff --git a/crates/vibecast-security/src/tests.rs b/crates/vibecast-security/src/tests.rs
+index a8a523e..cddd41d 100644
+--- a/crates/vibecast-security/src/tests.rs
++++ b/crates/vibecast-security/src/tests.rs
+@@ -193,3 +193,23 @@ fn tls_server_config_builds_and_resolver_hot_reloads() {
+     // Hot-reload with the same bundle succeeds (exercises key reload path).
+     resolver.update(bundle).unwrap();
+ }
++
++#[test]
++fn rotation_boundaries_gaps_and_clock_rollback_are_explicit() {
++    let (dev, _, _) = cert("Device", (2000, 1, 1), (2099, 1, 1));
++    let (ica, _, _) = cert("ICA", (2000, 1, 1), (2099, 1, 1));
++    let (a, ak, ader) = cert("A", (2000, 1, 1), (2030, 1, 1));
++    let (b, bk, bder) = cert("B", (2030, 1, 2), (2040, 1, 1));
++    let json = manifest(&dev, &ica,
++        &[(a, ak, vec![1], vec![2]), (b, bk, vec![3], vec![4])], None);
++    let mut store = CertificateStore::from_manifest_str(&json).unwrap();
++    // Test synthetic instants; never change the machine or phone clock.
++    assert!(store.rotate_if_needed(unix(2030, 1, 1)).unwrap().is_none());
++    assert!(matches!(store.rotate_if_needed(unix(2030, 1, 1) + 1),
++        Err(SecurityError::NoValidCert)));
++    assert_eq!(store.active_bundle().peer_cert_der, ader);
++    assert_eq!(store.rotate_if_needed(unix(2030, 1, 2)).unwrap().unwrap().peer_cert_der, bder);
++    assert_eq!(store.rotate_if_needed(unix(2027, 1, 1)).unwrap().unwrap().peer_cert_der, ader);
++    assert!(matches!(store.rotate_if_needed(unix(2040, 1, 1) + 1),
++        Err(SecurityError::NoValidCert)));
++}
+diff --git a/crates/vibecast-apps-default-media/Cargo.toml b/crates/vibecast-apps-default-media/Cargo.toml
+new file mode 100644
+index 0000000..4028bc2
+--- /dev/null
++++ b/crates/vibecast-apps-default-media/Cargo.toml
+@@ -0,0 +1,17 @@
++[package]
++name = "vibecast-apps-default-media"
++description = "URL-based Default Media Receiver Cast application"
++version.workspace = true
++edition.workspace = true
++rust-version.workspace = true
++license.workspace = true
++repository.workspace = true
++publish.workspace = true
++
++[dependencies]
++vibecast-sdk = { path = "../vibecast-sdk" }
++async-trait = { workspace = true }
++url = { workspace = true }
++
++[dev-dependencies]
++serde_json = { workspace = true }
+diff --git a/crates/vibecast-apps-default-media/src/lib.rs b/crates/vibecast-apps-default-media/src/lib.rs
+new file mode 100644
+index 0000000..6053066
+--- /dev/null
++++ b/crates/vibecast-apps-default-media/src/lib.rs
+@@ -0,0 +1,237 @@
++//! Single-item HTTP(S) Default Media Receiver application.
++
++#![forbid(unsafe_code)]
++
++use std::sync::Arc;
++
++use async_trait::async_trait;
++use url::Url;
++use vibecast_sdk::{
++    normalize_stream_type, AppContext, AppManifest, AppProvider, AppSession, LaunchCredentials,
++    LaunchError, LoadRequest, MediaResolveError, PlaybackMedia, PlaybackStream, StreamSource,
++    StreamType,
++};
++
++/// Direct-media application, without service-specific extraction or DRM.
++#[derive(Debug, Default)]
++pub struct DefaultMedia;
++
++#[async_trait]
++impl AppProvider for DefaultMedia {
++    fn manifest(&self) -> AppManifest {
++        AppManifest::without_settings("default_media", &["CC1AD845"], "Default Media Receiver")
++    }
++
++    async fn launch(
++        &self,
++        _ctx: &AppContext,
++        _credentials: LaunchCredentials,
++    ) -> Result<Arc<dyn AppSession>, LaunchError> {
++        Ok(Arc::new(DefaultMediaSession))
++    }
++}
++
++struct DefaultMediaSession;
++
++#[async_trait]
++impl AppSession for DefaultMediaSession {
++    async fn resolve_media(
++        &self,
++        ctx: &AppContext,
++        request: &LoadRequest,
++    ) -> Result<PlaybackMedia, MediaResolveError> {
++        resolve(&ctx.session_id, request)
++    }
++}
++
++fn resolve(session_id: &str, request: &LoadRequest) -> Result<PlaybackMedia, MediaResolveError> {
++    let media = &request.media;
++    let source = media.content_url.as_deref().unwrap_or(&media.content_id);
++    let url =
++        Url::parse(source).map_err(|_| MediaResolveError::invalid_request("INVALID_MEDIA_URL"))?;
++    // Keep LAN URLs: this is how local media and TTS reach a Cast receiver.
++    // Do not allow arbitrary decoder protocols, local paths or URL credentials.
++    if !matches!(url.scheme(), "http" | "https")
++        || url.host_str().is_none()
++        || !url.username().is_empty()
++        || url.password().is_some()
++        || source.chars().any(char::is_control)
++    {
++        return Err(MediaResolveError::invalid_request("INVALID_MEDIA_URL"));
++    }
++    if !request.current_time.is_finite()
++        || request.current_time < 0.0
++        || media
++            .duration
++            .is_some_and(|value| !value.is_finite() || value < 0.0)
++    {
++        return Err(MediaResolveError::invalid_request("INVALID_MEDIA_TIME"));
++    }
++    if media.content_type.trim().is_empty() || media.content_type.chars().any(char::is_control) {
++        return Err(MediaResolveError::invalid_request("INVALID_CONTENT_TYPE"));
++    }
++    let stream_type = if media.is_live_media == Some(true) {
++        StreamType::Live
++    } else {
++        normalize_stream_type(media.stream_type)
++    };
++    if stream_type == StreamType::Live && request.current_time > 0.0 {
++        return Err(MediaResolveError::invalid_request("LIVE_SEEK_UNSUPPORTED"));
++    }
++    let metadata = media.metadata.as_ref();
++    Ok(PlaybackMedia {
++        session_id: session_id.to_owned(),
++        streams: vec![PlaybackStream {
++            // Preserve original escaping and signatures rather than reserializing Url.
++            source: StreamSource::Url(source.to_owned()),
++            content_type: media.content_type.clone(),
++            drm: None,
++        }],
++        stream_type,
++        content_id: Some(media.content_id.clone()),
++        metadata: media.metadata.clone(),
++        title: metadata.and_then(|value| value.title.clone()),
++        subtitle: metadata.and_then(|value| value.subtitle.clone()),
++        images: metadata
++            .map(|value| value.images.clone())
++            .unwrap_or_default(),
++        duration: media.duration,
++        autoplay: request.autoplay,
++        start_time: request.current_time,
++        custom_data: media.custom_data.clone(),
++    })
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use serde_json::json;
++
++    fn request() -> LoadRequest {
++        serde_json::from_value(json!({
++            "requestId": 1,
++            "media": {
++                "contentId": "http://192.168.1.2/audio.mp3",
++                "contentType": "audio/mpeg",
++                "duration": 42.0,
++                "metadata": {"title": "Track", "subtitle": "Artist",
++                    "images": [{"url": "https://example.test/cover.jpg"}]}
++            },
++            "autoplay": false,
++            "currentTime": 12.5
++        }))
++        .unwrap()
++    }
++
++    #[test]
++    fn manifest_advertises_only_default_id() {
++        let manifest = DefaultMedia.manifest();
++        assert_eq!(manifest.app_ids, &["CC1AD845"]);
++        assert!(manifest.namespaces.is_empty());
++    }
++
++    #[test]
++    fn preserves_direct_media_and_controls_without_network_resolution() {
++        let playback = resolve("session", &request()).unwrap();
++        assert_eq!(
++            playback.streams[0].source.as_url(),
++            Some("http://192.168.1.2/audio.mp3")
++        );
++        assert_eq!(playback.title.as_deref(), Some("Track"));
++        assert_eq!(playback.subtitle.as_deref(), Some("Artist"));
++        assert_eq!(playback.images.len(), 1);
++        assert_eq!(playback.duration, Some(42.0));
++        assert_eq!(playback.start_time, 12.5);
++        assert!(!playback.autoplay);
++        assert_eq!(playback.stream_type, StreamType::Buffered);
++    }
++
++    #[test]
++    fn content_url_overrides_logical_id_without_rewriting_signature() {
++        let mut load = request();
++        load.media.content_id = "logical-id".into();
++        let source = "https://example.test/a%2fb?token=a%2Bb&x=1";
++        load.media.content_url = Some(source.into());
++        let playback = resolve("session", &load).unwrap();
++        assert_eq!(playback.streams[0].source.as_url(), Some(source));
++        assert_eq!(playback.content_id.as_deref(), Some("logical-id"));
++    }
++
++    #[test]
++    fn music_metadata_is_retained_without_inventing_missing_fields() {
++        let mut load = request();
++        load.media.metadata = Some(serde_json::from_value(json!({
++            "metadataType": 3, "title": "Track", "artist": "Artist",
++            "albumName": "Album", "albumArtist": "Album artist"
++        })).unwrap());
++        let playback = resolve("session", &load).unwrap();
++        assert_eq!(playback.metadata, load.media.metadata);
++        load.media.metadata = None;
++        assert!(resolve("session", &load).unwrap().metadata.is_none());
++    }
++
++    #[test]
++    fn invalid_explicit_url_does_not_fall_back_to_content_id() {
++        let mut load = request();
++        load.media.content_url = Some("file:///tmp/audio".into());
++        assert!(resolve("session", &load).is_err());
++    }
++
++    #[test]
++    fn rejects_non_web_sources_and_credentials() {
++        for source in [
++            "file:///tmp/audio",
++            "pipe:0",
++            "concat:a|b",
++            "/tmp/audio",
++            "https://user:password@example.test/a",
++            "https://example.test/a\n",
++        ] {
++            let mut load = request();
++            load.media.content_id = source.into();
++            assert!(
++                resolve("session", &load).is_err(),
++                "accepted invalid source"
++            );
++        }
++    }
++
++    #[test]
++    fn rejects_invalid_timing_and_content_type() {
++        for value in [-1.0, f64::NAN, f64::INFINITY] {
++            let mut load = request();
++            load.current_time = value;
++            assert!(resolve("session", &load).is_err());
++            load.current_time = 0.0;
++            load.media.duration = Some(value);
++            assert!(resolve("session", &load).is_err());
++        }
++        for mime in ["", "audio/mpeg\r\nx: y"] {
++            let mut load = request();
++            load.media.content_type = mime.into();
++            assert!(resolve("session", &load).is_err());
++        }
++    }
++
++    #[test]
++    fn live_source_preserves_unknown_duration() {
++        let mut load = request();
++        load.current_time = 0.0;
++        load.media.duration = None;
++        load.media.stream_type = StreamType::Live;
++        assert_eq!(
++            resolve("session", &load).unwrap().stream_type,
++            StreamType::Live
++        );
++        load.current_time = 1.0;
++        assert!(resolve("session", &load).is_err());
++        load.current_time = 0.0;
++        assert_eq!(resolve("session", &load).unwrap().duration, None);
++        load.media.stream_type = StreamType::Buffered;
++        load.media.is_live_media = Some(true);
++        assert_eq!(
++            resolve("session", &load).unwrap().stream_type,
++            StreamType::Live
++        );
++    }
++}

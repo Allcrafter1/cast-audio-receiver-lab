@@ -1,0 +1,11 @@
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -561,1 +561,3 @@
++            tracing::info!(sequence = parts.first().and_then(serde_json::Value::as_u64),
++                command = message.first().and_then(serde_json::Value::as_str), "Lounge incoming command");
+             messages.push(parse_message(message));
+--- a/crates/vibecast-apps-youtube/src/lib.rs
++++ b/crates/vibecast-apps-youtube/src/lib.rs
+@@ -332,1 +332,2 @@
+         if let Some((video_id, start_time)) = load {
++            tracing::info!(%video_id, start_time, "YouTube queue requests load");

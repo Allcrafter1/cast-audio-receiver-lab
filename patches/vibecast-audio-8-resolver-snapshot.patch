@@ -1,0 +1,178 @@
+diff --git a/crates/vibecast-apps-youtube/src/resolver.rs b/crates/vibecast-apps-youtube/src/resolver.rs
+index 09f5b3e..23785d3 100644
+--- a/crates/vibecast-apps-youtube/src/resolver.rs
++++ b/crates/vibecast-apps-youtube/src/resolver.rs
+@@ -1,5 +1,7 @@
+ //! YouTube video metadata and progressive-stream resolution.
+ 
++use std::process::Command;
++
+ use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
+ use base64::Engine as _;
+ use prost::Message as _;
+@@ -11,10 +13,12 @@ use vibecast_sdk::{
+     StreamType,
+ };
+ 
+-const CLIENT_NAME: &str = "ANDROID_VR";
+-const CLIENT_VERSION: &str = "1.57";
+-const CLIENT_USER_AGENT: &str =
+-    "com.google.android.apps.youtube.vr.oculus/1.57 (Linux; U; Android 12L; en_US)";
++// The VR client is currently challenged by YouTube for otherwise public
++// videos.  The regular Android client returns the same clear adaptive
++// formats without requiring a browser login or cookies.
++const CLIENT_NAME: &str = "ANDROID";
++const CLIENT_VERSION: &str = "20.10.38";
++const CLIENT_USER_AGENT: &str = "com.google.android.youtube/20.10.38";
+ 
+ pub(crate) const PREFERRED_VIDEO_CODEC_KEY: SettingKey<String> =
+     SettingKey::new("preferred_video_codec");
+@@ -95,6 +99,43 @@ impl Resolver {
+         start_time: f64,
+         capabilities: &PlayerCapabilities,
+         preferred_video_codec: PreferredVideoCodec,
++    ) -> Result<PlaybackMedia, ResolveError> {
++        let started = std::time::Instant::now();
++        // Metadata and checked audio extraction are independent network work.
++        // Join both futures rather than waiting for metadata before extraction.
++        let metadata = self.resolve_metadata(video_id, start_time, capabilities, preferred_video_codec);
++        let audio = async {
++            let id = video_id.to_owned();
++            let result = tokio::task::spawn_blocking(move || external_audio_url(&id)).await;
++            let elapsed = started.elapsed().as_millis();
++            (result, elapsed)
++        };
++        let metadata = async {
++            let result = metadata.await;
++            (result, started.elapsed().as_millis())
++        };
++        let ((media, metadata_ms), (audio, audio_ms)) = tokio::join!(metadata, audio);
++        tracing::info!(%video_id, metadata_ms = metadata_ms as u64,
++            audio_ms = audio_ms as u64, total_ms = started.elapsed().as_millis() as u64,
++            "YouTube parallel resolution completed");
++        let mut media = media?;
++        let url = audio.ok().flatten()
++            .ok_or(ResolveError::Protocol("external audio resolver failed"))?;
++        let content_type = if url.contains("/manifest/") {
++            "application/vnd.apple.mpegurl"
++        } else {
++            "application/octet-stream"
++        };
++        media.streams = vec![PlaybackStream::url(url, content_type)];
++        Ok(media)
++    }
++
++    async fn resolve_metadata(
++        &self,
++        video_id: &str,
++        start_time: f64,
++        capabilities: &PlayerCapabilities,
++        preferred_video_codec: PreferredVideoCodec,
+     ) -> Result<PlaybackMedia, ResolveError> {
+         let mut watch_url = Url::parse(&self.endpoints.watch)
+             .map_err(|_| ResolveError::Protocol("invalid watch endpoint"))?;
+@@ -141,6 +182,34 @@ impl Resolver {
+     }
+ }
+ 
++fn external_audio_url(video_id: &str) -> Option<String> {
++    let watch_url = format!("https://www.youtube.com/watch?v={video_id}");
++    let output = Command::new("timeout")
++        .args([
++            "35s",
++            "yt-dlp",
++            "--no-warnings",
++            "--no-playlist",
++            // A listed format may still return HTTP 403. Let the upstream
++            // extractor probe candidates before handing a URL to the player.
++            "--check-formats",
++            "-f",
++            "ba",
++            "--get-url",
++            &watch_url,
++        ])
++        .output()
++        .ok()?;
++    if !output.status.success() {
++        return None;
++    }
++    String::from_utf8(output.stdout)
++        .ok()?
++        .lines()
++        .find(|line| line.starts_with("https://"))
++        .map(str::to_owned)
++}
++
+ #[derive(Debug, Error)]
+ pub(crate) enum ResolveError {
+     #[error("YouTube HTTP request failed")]
+@@ -396,20 +465,25 @@ fn playback_media(
+         .map(|tracklist| tracklist.caption_tracks)
+         .unwrap_or_default();
+ 
+-    let (manifest, stream_duration) = build_dash_manifest(
+-        &formats,
+-        &caption_tracks,
+-        capabilities,
+-        preferred_video_codec,
+-    )?;
++    // This receiver is primarily an audio endpoint.  Returning the selected
++    // audio rendition directly avoids handing MPV a synthetic DASH document
++    // whose signed Googlevideo BaseURLs require special HTTP headers and are
++    // otherwise intercepted by MPV's yt-dlp hook.  The URL is freshly signed
++    // for every LOAD, so it remains short-lived and is never persisted.
++    let audio = formats
++        .iter()
++        .filter_map(AudioRep::from_format)
++        .filter(|rep| capabilities.audio_codecs.iter().any(|codec| codec == rep.codec.token()))
++        .max_by_key(|rep| rep.bitrate)
++        .ok_or(ResolveError::NoCompatibleStream)?;
++    let audio_url = audio.url.to_owned();
++    let audio_content_type = audio.container.to_owned();
+ 
+-    let duration = stream_duration.or_else(|| {
++    let duration = details.as_ref().and_then(|details| {
+         details
+-            .as_ref()?
+             .length_seconds
+-            .as_deref()?
+-            .parse::<f64>()
+-            .ok()
++            .as_deref()
++            .and_then(|value| value.parse::<f64>().ok())
+     });
+     let images = details
+         .as_ref()
+@@ -430,10 +504,7 @@ fn playback_media(
+ 
+     Ok(PlaybackMedia {
+         session_id: String::new(),
+-        streams: vec![PlaybackStream::inline_manifest(
+-            manifest,
+-            "application/dash+xml",
+-        )],
++        streams: vec![PlaybackStream::url(audio_url, audio_content_type)],
+         stream_type: StreamType::Buffered,
+         content_id: details
+             .as_ref()
+@@ -1125,6 +1196,19 @@ fn valid_video_id(value: &str) -> bool {
+ 
+ #[cfg(test)]
+ mod tests {
++    #[tokio::test]
++    #[ignore = "explicit live network probe; requires yt-dlp on PATH"]
++    async fn live_parallel_audio_resolution() {
++        let resolver = super::Resolver::new(reqwest::Client::new());
++        for id in ["b7l31agg58g", "qXCwga3LUO0"] {
++            let started = std::time::Instant::now();
++            let result = resolver.resolve(id, 0.0, &Default::default(),
++                super::PreferredVideoCodec::Auto).await;
++            println!("live probe video={id} elapsed_ms={} success={}",
++                started.elapsed().as_millis(), result.is_ok());
++            assert!(result.is_ok(), "live resolution failed for {id}");
++        }
++    }
+     use super::*;
+     use wiremock::matchers::{method, path};
+     use wiremock::{Mock, MockServer, ResponseTemplate};
+

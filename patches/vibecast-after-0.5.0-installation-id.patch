@@ -1,0 +1,40 @@
+diff --git a/crates/vibecast-platform/src/lib.rs b/crates/vibecast-platform/src/lib.rs
+--- a/crates/vibecast-platform/src/lib.rs
++++ b/crates/vibecast-platform/src/lib.rs
+@@ -319,7 +319,8 @@ pub async fn run(
+ fn load_or_create_installation_id(data_dir: &Path) -> Result<uuid::Uuid, PlatformError> {
+     let path = data_dir.join(INSTALLATION_ID_FILE);
+     match std::fs::read_to_string(&path) {
+-        Ok(value) => parse_installation_id(&path, &value),
++        Ok(value) => parse_installation_id(&path, &value)
++            .or_else(|_| read_concurrently_created_installation_id(&path)),
+         Err(error) if error.kind() == std::io::ErrorKind::NotFound => create_installation_id(&path),
+         Err(source) => Err(PlatformError::StateRead { path, source }),
+     }
+@@ -822,6 +823,26 @@ mod tests {
+         std::fs::remove_dir_all(data_dir).unwrap();
+     }
+ 
++    #[test]
++    fn initially_empty_installation_id_waits_for_writer() {
++        let data_dir = std::env::temp_dir().join(format!(
++            "vibecast-platform-empty-installation-id-{}",
++            uuid::Uuid::new_v4()
++        ));
++        std::fs::create_dir(&data_dir).unwrap();
++        let path = data_dir.join(INSTALLATION_ID_FILE);
++        std::fs::write(&path, "").unwrap();
++        let id = uuid::Uuid::new_v4();
++        let writer = std::thread::spawn(move || {
++            std::thread::sleep(Duration::from_millis(20));
++            std::fs::write(path, id.to_string()).unwrap();
++        });
++        let result = load_or_create_installation_id(&data_dir);
++        writer.join().unwrap();
++        assert_eq!(result.unwrap(), id);
++        std::fs::remove_dir_all(data_dir).unwrap();
++    }
++
+     #[test]
+     fn explicit_bind_ip_is_used_as_local_ip() {
+         assert_eq!(detect_local_ip("192.168.1.50"), "192.168.1.50");

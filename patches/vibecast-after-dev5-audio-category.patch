@@ -1,0 +1,74 @@
+diff --git a/crates/vibecast-core/src/coordinator.rs b/crates/vibecast-core/src/coordinator.rs
+index 3e63664..e23f915 100644
+--- a/crates/vibecast-core/src/coordinator.rs
++++ b/crates/vibecast-core/src/coordinator.rs
+@@ -148,6 +148,7 @@ pub(crate) fn loading_media_info(request: &LoadRequest) -> MediaInfo {
+     } else {
+         request.media.content_type.clone()
+     };
++    let category = category_for_content_type(&content_type);
+     MediaInfo {
+         content_id: request.media.content_id.clone(),
+         content_type,
+@@ -156,7 +157,7 @@ pub(crate) fn loading_media_info(request: &LoadRequest) -> MediaInfo {
+         duration: Some(0.0),
+         custom_data: None,
+         content_url: None,
+-        media_category: Some(MediaCategory::Video),
++        media_category: Some(category),
+         start_absolute_time: None,
+         is_live_media: None,
+     }
+@@ -200,12 +201,30 @@ pub(crate) fn media_info(media: &PlaybackMedia) -> MediaInfo {
+         content_url: primary
+             .and_then(|stream| stream.source.as_url())
+             .map(str::to_string),
+-        media_category: Some(MediaCategory::Video),
++        media_category: Some(category_for_content_type(
++            primary
++                .map(|stream| stream.content_type.as_str())
++                .unwrap_or_default(),
++        )),
+         start_absolute_time: None,
+         is_live_media: if is_live { Some(true) } else { None },
+     }
+ }
+ 
++fn category_for_content_type(content_type: &str) -> MediaCategory {
++    // Containers such as DASH/HLS do not establish an audio-only track.
++    // Preserve the old fallback unless the MIME type explicitly identifies audio.
++    if content_type
++        .trim()
++        .get(..6)
++        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("audio/"))
++    {
++        MediaCategory::Audio
++    } else {
++        MediaCategory::Video
++    }
++}
++
+ fn is_non_empty_object(value: &Value) -> bool {
+     !matches!(value, Value::Object(map) if map.is_empty())
+ }
+@@ -214,6 +233,20 @@ fn is_non_empty_object(value: &Value) -> bool {
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn audio_load_reports_audio_category_before_resolution() {
++        for mime in ["audio/wav", "audio/mpeg", " Audio/FLAC; codecs=flac "] {
++            let request: LoadRequest = serde_json::from_value(serde_json::json!({
++                "requestId": 1,
++                "media": {"contentId": "https://example.test/track", "contentType": mime}
++            })).unwrap();
++            assert_eq!(loading_media_info(&request).media_category, Some(MediaCategory::Audio));
++        }
++        for mime in ["video/mp4", "application/dash+xml", "application/vnd.apple.mpegurl", ""] {
++            assert_eq!(category_for_content_type(mime), MediaCategory::Video);
++        }
++    }
++
+     #[test]
+     fn typed_music_metadata_reaches_status_and_player_payload() {
+         let original: MediaMetadata = serde_json::from_value(serde_json::json!({

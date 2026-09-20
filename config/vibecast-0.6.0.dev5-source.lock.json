@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "lab_version": "0.6.0.dev5",
+  "upstream_commit": "b4616f8f399be706a1409ed21922aa2df892e303",
+  "patch": "patches/vibecast-0.6.0.dev5-complete.patch",
+  "patch_sha256": "e667e2aaaa9e5273baf7b2071e74db6424cc8624919ea8a4872c2e73bbd73c3b",
+  "build_input_file_count": 109,
+  "build_input_hash_map_sha256": "0779de0d033faa63694cc5dbb0e90f87f6fa443e386e23b941499bc4500778ba",
+  "hash_map_encoding": "UTF-8 JSON files object, sorted keys, separators comma/colon, no trailing newline",
+  "observed_rustc": "1.98.1 (48a229cea 2026-09-01)",
+  "observed_host": "x86_64-unknown-linux-gnu",
+  "deployed_frontend_sha256": "4a2679d02f9e967bee46120a6ab98b3ee86268e222140dadb44cf0f71de36ff4",
+  "scope": "Rust build-source reconstruction, not a complete environment lock or bit-identical build guarantee"
+}

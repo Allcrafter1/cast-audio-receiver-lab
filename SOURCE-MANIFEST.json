@@ -1,0 +1,1100 @@
+{
+  "files": [
+    {
+      "bytes": 96,
+      "path": ".dockerignore",
+      "sha256": "293d0104e0c8ef8190d4a83ff2c906dd17229fde5774d544d7738754588f3cf2"
+    },
+    {
+      "bytes": 336,
+      "path": ".github/dependabot.yml",
+      "sha256": "ad3c592c5c3126d357c6bc0dadfba2ce0aa751eda3493f76c4f1540ae5aebf53"
+    },
+    {
+      "bytes": 2038,
+      "path": ".github/workflows/ci.yml",
+      "sha256": "ce9bcc7eb679a2ed9f35e8303c47fbeeafe44cc5c8a58bf1549c399f05437ee1"
+    },
+    {
+      "bytes": 1845,
+      "path": ".github/workflows/upstream-watch.yml",
+      "sha256": "59f61b628d587494fa0e64884cc21c0acb99ae75771989c91337a59dc1b3a025"
+    },
+    {
+      "bytes": 224,
+      "path": ".gitignore",
+      "sha256": "57d61edc4a7b995c3d99fdf77e29ee7b3252576491e697c682682051c96b054b"
+    },
+    {
+      "bytes": 31523,
+      "path": "CHANGELOG.md",
+      "sha256": "0fc771ca6b2567fa043a9f1f74268bfeada6895c81a4f4991c1053f40c7988ab"
+    },
+    {
+      "bytes": 3018,
+      "path": "CONTRIBUTING.md",
+      "sha256": "47a2fe798e4839e149ee2eae01a1484c42171648a505890bc80adeed3243c5b1"
+    },
+    {
+      "bytes": 3195,
+      "path": "Containerfile",
+      "sha256": "2638d1edd83a7dd31a083a1ef7b481aa5a5cdbc476ebaf99b543c4e68c50c473"
+    },
+    {
+      "bytes": 35149,
+      "path": "LICENSE",
+      "sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986"
+    },
+    {
+      "bytes": 11528,
+      "path": "README.md",
+      "sha256": "da1fb1715e2cd98c4ce417f5c7ec51bf3614e79d17e713110b8e223921632994"
+    },
+    {
+      "bytes": 6161,
+      "path": "THIRD_PARTY_NOTICES.md",
+      "sha256": "ecfe9dcfc423690b8724d1063d64d24965fe5e1bc71d7abf181d4bd0923979a9"
+    },
+    {
+      "bytes": 1738,
+      "path": "cast-audio-receiver/DOCS.md",
+      "sha256": "f49e8d08570e84ac0efc239014741071c469b3ffffd6e6232ad2b5bfe8681adf"
+    },
+    {
+      "bytes": 755,
+      "path": "cast-audio-receiver/config.yaml",
+      "sha256": "1f9d86559bc41cb8da8247c5d66b8911ae87cd3eb07669991b13fc2e3a407aac"
+    },
+    {
+      "bytes": 405,
+      "path": "config/cliairplay-linux-x86_64.lock.json",
+      "sha256": "bd124e30d4a03ba53a589d344eff68ed1f9cd614b3b75931b17d8d5cad226c9a"
+    },
+    {
+      "bytes": 245,
+      "path": "config/container-build-cp312.lock.txt",
+      "sha256": "c1ebca5df11f60e444ca0eb4c66d21e85ef14844587abc2126ca5c991025d3f5"
+    },
+    {
+      "bytes": 427,
+      "path": "config/container-build-cp312.wheels.json",
+      "sha256": "93fb56411edd7298a7d98b02cab3223548c252f7bec52016eee1f1ba08485d91"
+    },
+    {
+      "bytes": 3158,
+      "path": "config/container-linux-x86_64-cp312.lock.txt",
+      "sha256": "5e7481c883037520d9d58a4946b63242cf7ca76483a63635d2be10ec6d50f7cb"
+    },
+    {
+      "bytes": 7500,
+      "path": "config/container-linux-x86_64-cp312.wheels.json",
+      "sha256": "1eb8144d635bb43f2b2cd401741277acf2c40ea8845bbc4a3dbcedacdbaec311"
+    },
+    {
+      "bytes": 1780,
+      "path": "config/management-linux-x86_64-cp312.lock.txt",
+      "sha256": "79e42d0ca57e82ce5537f66a9b1904f4479676d02ab61a117494d8c4c5a8883b"
+    },
+    {
+      "bytes": 4280,
+      "path": "config/management-linux-x86_64-cp312.wheels.json",
+      "sha256": "c230e2de9e9efa95d07c4893afa8108c05246bbc5c387271686b824d9ba52bb9"
+    },
+    {
+      "bytes": 1770,
+      "path": "config/management-linux-x86_64-cp313.lock.txt",
+      "sha256": "539ab4c6c5543e1216ef109762eec7aefef00d58be504d7cbf040a5bdb3eb874"
+    },
+    {
+      "bytes": 4280,
+      "path": "config/management-linux-x86_64-cp313.wheels.json",
+      "sha256": "8b2cc22d2a8a6856bcc9508f53580a2a271f74d051c2703c134b9bd5d1b6745b"
+    },
+    {
+      "bytes": 418,
+      "path": "config/management-tested-constraints.txt",
+      "sha256": "6c756eefc8fcc4fa890415af45234b81e9067a7c020067cf723673d5687d1b9a"
+    },
+    {
+      "bytes": 808,
+      "path": "config/vibecast-0.5.0-source.lock.json",
+      "sha256": "8a564585ab1029f210341a9b4e63ab883df72c0c7b3d3c37749f5f2eb1b73e70"
+    },
+    {
+      "bytes": 817,
+      "path": "config/vibecast-0.6.0.dev11-source.lock.json",
+      "sha256": "823c5ff3bfb1647d9f92c22c11922108ef93a086a6f9cd17c5a95f3871bb23f1"
+    },
+    {
+      "bytes": 1017,
+      "path": "config/vibecast-0.6.0.dev12-source.lock.json",
+      "sha256": "5a07a0d7626b478d7770a5a738597fa9a05e786ca5968c90ef1e31a2e9f1f6ed"
+    },
+    {
+      "bytes": 818,
+      "path": "config/vibecast-0.6.0.dev4-source.lock.json",
+      "sha256": "7a2b442455a7fe07a4572946a3fcbb6c971dc06f0005a99165b35a8b42c08c61"
+    },
+    {
+      "bytes": 818,
+      "path": "config/vibecast-0.6.0.dev5-source.lock.json",
+      "sha256": "86c71d1157346726c4b8b8db9c9d281e22631f3b19fbe57b6c4d587fdb1a2c65"
+    },
+    {
+      "bytes": 815,
+      "path": "config/vibecast-0.6.0.dev6-source.lock.json",
+      "sha256": "f7236f3813498b7c079c100b236d833156865ace578910d959ce89abcae603df"
+    },
+    {
+      "bytes": 299,
+      "path": "config/vibecast-audio.toml",
+      "sha256": "5c9bb649c499dc8f7b217ad18267d839273803c6bfdab49f9ef87014006060de"
+    },
+    {
+      "bytes": 134,
+      "path": "config/youtube-extractor-requirements.txt",
+      "sha256": "069f728fea03f85a9d5aebe6a4521d6ae606ce1b2b3e5bb30b28e2e0ca3b98e4"
+    },
+    {
+      "bytes": 3018,
+      "path": "docs/PROJECT-ORIGIN.md",
+      "sha256": "57d2ed0446f3be3f1e86f92d2393c21ff9ac6ed91e585fdf0764b4db8999fba7"
+    },
+    {
+      "bytes": 3916,
+      "path": "docs/RELEASE-CHECKLIST.md",
+      "sha256": "5755a3f1d708a04432a8b7c005651ca70530e2f21ecd10ba0a824c31507ad088"
+    },
+    {
+      "bytes": 6977,
+      "path": "docs/TESTING.md",
+      "sha256": "cba8c7810c90723b7ecd9f4f5f87b388d3ac052d43a12a6b21d7f239017d0194"
+    },
+    {
+      "bytes": 99879,
+      "path": "docs/WORKING-PLAN.md",
+      "sha256": "6d2cc1444ce9003963a129275a2d6d897027e6b7030866bfdfc0ca12fbe73061"
+    },
+    {
+      "bytes": 4535,
+      "path": "docs/airplay-044-integration.md",
+      "sha256": "bd5d228aee0f56d45af2e8d548d8aa37f3091e067d1c6aa362e4f6c98b9654d9"
+    },
+    {
+      "bytes": 2734,
+      "path": "docs/airplay-045-redmi-test.md",
+      "sha256": "00430838c0d2114cfe1bc152c0d5c071ded5d409b1f22f8a6d863c123833290f"
+    },
+    {
+      "bytes": 2864,
+      "path": "docs/airreceiver-a50-runtime.md",
+      "sha256": "1ccd49343bc8d231e84909429afb65c07276fa73f92f265c3b8a2a650d8eaaa4"
+    },
+    {
+      "bytes": 4685,
+      "path": "docs/airreceiver-apk-5.1.7.md",
+      "sha256": "35568990f029a20016a2fca5010b5894e16a0e396371da2731d2d6f2786d6307"
+    },
+    {
+      "bytes": 4495,
+      "path": "docs/airreceiver-observation.md",
+      "sha256": "e519a03063840b345600cfbce3aa05d702c3ea8a528f65a6e60c252f1d6cfbe7"
+    },
+    {
+      "bytes": 5001,
+      "path": "docs/architecture-current.md",
+      "sha256": "2575aee10f30682ea3c3774bfbe7aada170a95fc60a56cf24fc178a1bf3e02a8"
+    },
+    {
+      "bytes": 7424,
+      "path": "docs/architecture-review-11.md",
+      "sha256": "80e78bf59b6d37afd6c66e9ff642db622ba6dd119f6cb9ad8cdcdb6ccda9b7bd"
+    },
+    {
+      "bytes": 21764,
+      "path": "docs/architecture-review-2026-09-19.md",
+      "sha256": "d7e118e7f6b63d59f8aae2ce7e6aa9b282bc2ea5b3471b7abf588993ab3fd0a7"
+    },
+    {
+      "bytes": 3555,
+      "path": "docs/architecture.md",
+      "sha256": "7f43055fd38479acc10f9e75c4e7ae631007c1e19fedfb13a9e81d506d7f473b"
+    },
+    {
+      "bytes": 4493,
+      "path": "docs/artwork-dev11.md",
+      "sha256": "9e78f304ae1e2e6a773f6104b71d6bdb4ca7c2894e5f56319014bb5593fde61c"
+    },
+    {
+      "bytes": 3588,
+      "path": "docs/artwork-radio-followup.md",
+      "sha256": "8fc91df123e94575e183e748dd26e2237d6a6bf691b49949b08331f6207f8f15"
+    },
+    {
+      "bytes": 2452,
+      "path": "docs/audio-10-transition-latency.md",
+      "sha256": "31d001e8c241f6e1f4909fcf602a7eda9a8ae79eba1522644cec664a5de0425e"
+    },
+    {
+      "bytes": 2726,
+      "path": "docs/audio-9-prefetch.md",
+      "sha256": "1c497955c39770f1a3abe8b92325992e335530543db30501e9b8ced50698d112"
+    },
+    {
+      "bytes": 3254,
+      "path": "docs/audio-debug-2026-09-12.md",
+      "sha256": "4187615f13636a3ff42d4f61342c6c4dba6f343aa2359ffb55998375ec296f14"
+    },
+    {
+      "bytes": 7750,
+      "path": "docs/auth-comparison-2026-09-12.md",
+      "sha256": "6dd3b88912cc039a68cf9e37712dc9173afecfcb61472f07ce2ccfa5692fb7f0"
+    },
+    {
+      "bytes": 5192,
+      "path": "docs/autonomous-dev4.md",
+      "sha256": "d769a4f83d828e89791da51bd99c8d1058b8e2f5211769712d739ca6e73868f2"
+    },
+    {
+      "bytes": 8172,
+      "path": "docs/certificate-continuation-20260919.md",
+      "sha256": "339a68782cd1909eb8624ed6df0a2807ae2efdf201fd461d640d9dd4e9774a1d"
+    },
+    {
+      "bytes": 5503,
+      "path": "docs/certificate-offline-breakthrough.md",
+      "sha256": "0d32e9f3866939ddf1b2b604ddd92c42a55f3cce27c274c51f1aaad6c58468d9"
+    },
+    {
+      "bytes": 2990,
+      "path": "docs/certificate-readiness-audit.md",
+      "sha256": "2da792c1ae67d46c3d189440220200f7209a889750195642eabe6ff4de77f6c8"
+    },
+    {
+      "bytes": 4979,
+      "path": "docs/certificate-window-pilot.md",
+      "sha256": "d5a644b1adeec2d9c49f397bdc13d88c5fcd65c309124b016d07f89c32f5b399"
+    },
+    {
+      "bytes": 4176,
+      "path": "docs/controls-12-plan-audit.md",
+      "sha256": "710b305e8011847c4a2936108d3521dbc74519e4197b5f7b9baf2c742969030c"
+    },
+    {
+      "bytes": 4097,
+      "path": "docs/controls-13-cancellation.md",
+      "sha256": "d9a01132c6faa2500aaa99dabea79d2ded59c79543b4b341102244a213e2a9c4"
+    },
+    {
+      "bytes": 5430,
+      "path": "docs/controls-14-selection-trace.md",
+      "sha256": "e115dd681cc86fbbaca689e0dfc177090bc1a07220bc14e4dbad2dc112f4e271"
+    },
+    {
+      "bytes": 2752,
+      "path": "docs/controls-15-event-correlation.md",
+      "sha256": "8ee5361a1b1a76f29d64d6e5a6d2880db21382f0a43d57ee8bcc1cae073dfb57"
+    },
+    {
+      "bytes": 4615,
+      "path": "docs/controls-16-queue-additions.md",
+      "sha256": "6bb02927c383d109d099d23dd3d82e3c053a8b2fc573380fe0663d8b5d861596"
+    },
+    {
+      "bytes": 9036,
+      "path": "docs/current-runbook.md",
+      "sha256": "4529cdc61010f5a077c6860e267bbb881b4ec4f3c88a0bdf425c84bd4ecb16c9"
+    },
+    {
+      "bytes": 8215,
+      "path": "docs/default-media-receiver-plan.md",
+      "sha256": "8a0b75c72ac6ed06353557369de8c007ae74fa4f915c821836cafa246b2ad440"
+    },
+    {
+      "bytes": 3989,
+      "path": "docs/dependency-locks.md",
+      "sha256": "189fe9ec74328d926eebd29d2c04158a053cb8d7f975e7b66fce359b1958498d"
+    },
+    {
+      "bytes": 4094,
+      "path": "docs/dmr-metadata-dev5.md",
+      "sha256": "8f803c34b8985ddb562e183f30ddb96223387d0423bd214097bb06cf81da16d9"
+    },
+    {
+      "bytes": 2176,
+      "path": "docs/ha-acceptance-20260920.md",
+      "sha256": "bef21afc55b8672d65e4ae4bd7d9ea1b7d439a95a1df97e222714129e99ba50a"
+    },
+    {
+      "bytes": 3800,
+      "path": "docs/ha-status-and-ui-dev3.md",
+      "sha256": "1926dbb981a9b64937c97e4003ed6859d5bec07e1f51f1100ac05e2b3d39be36"
+    },
+    {
+      "bytes": 1600,
+      "path": "docs/incidents.md",
+      "sha256": "1467273611d5349ef4515df756bbb447b68c8139387690b29f885afc266b088e"
+    },
+    {
+      "bytes": 13916,
+      "path": "docs/maintenance.md",
+      "sha256": "186a842acb10079d12e3d64817e300b796370e56aec7fae89f1e9bb082408447"
+    },
+    {
+      "bytes": 3148,
+      "path": "docs/native-cast-speaker.md",
+      "sha256": "5d7f099c9309d9ab9bea7d528f1b053c7e7bf26eeeef43b4fc7145878335b16d"
+    },
+    {
+      "bytes": 1954,
+      "path": "docs/network-outputs.md",
+      "sha256": "9268ecfd63d5be1f235c924316696d76dcb6737524a4de8dcf5b4e0572ca0c23"
+    },
+    {
+      "bytes": 4171,
+      "path": "docs/packaging.md",
+      "sha256": "964991759dc58860f807987d89475c2e4f755f23fd7757b901fc8d613aa71a68"
+    },
+    {
+      "bytes": 5768,
+      "path": "docs/project-a-roadmap.md",
+      "sha256": "5b81fcee4e402d34262f41b8498d0d4e69d74c738080b8e8b4210f0720602da2"
+    },
+    {
+      "bytes": 2190,
+      "path": "docs/queue-start-diagnostics.md",
+      "sha256": "e0ed459d22ff48a0a020793b5ac0e9de17c638e2b843557aa4a58c616218ad3c"
+    },
+    {
+      "bytes": 3196,
+      "path": "docs/route-manager-proposal.md",
+      "sha256": "0429575469750dbdcb54ca01da7e0ef7c3f05b3b25517f56ac1a3a756ae14334"
+    },
+    {
+      "bytes": 1248,
+      "path": "docs/session-controls-4.md",
+      "sha256": "acd7c789bda32a9ae3990064d33bd8fc835fbdc094699bb7117f203fc0b182de"
+    },
+    {
+      "bytes": 7549,
+      "path": "docs/source-reconstruction.md",
+      "sha256": "ac9075052dbf166252e24e624695193724fcb6ec249e0a6930a95e726677a873"
+    },
+    {
+      "bytes": 4964,
+      "path": "docs/speaker-management.md",
+      "sha256": "ab825b46d3fd9cf4a6e9a790d0b75c1471c84aa5b838d635bdae2d980c21c923"
+    },
+    {
+      "bytes": 2201,
+      "path": "docs/title-qXCwga3LUO0.md",
+      "sha256": "f9bf5aa788a4a87510382e07064de4d5ad0d4651096647078e1e235bf233f750"
+    },
+    {
+      "bytes": 5454,
+      "path": "docs/vibecast-audio-frontend.md",
+      "sha256": "146914221a3c5d0727304a24d31340b93713902f260fd5eb72db8a7043d65c27"
+    },
+    {
+      "bytes": 3666,
+      "path": "docs/youtube-receiver-plan.md",
+      "sha256": "a1aebf4f3c685521be1efe8ca615a060075c78349776d54f146d363ca08a5ed2"
+    },
+    {
+      "bytes": 1075,
+      "path": "licenses/Vibecast-MIT.txt",
+      "sha256": "c7be50cabe9219b38ff5ec920b9b4091d583d44a69c6ff45214e1226af2a012f"
+    },
+    {
+      "bytes": 103535,
+      "path": "patches/vibecast-0.5.0-complete.patch",
+      "sha256": "03e8c2d47e470b224d0674316a3caa5988597c1d0e7d21bfae02243c8a4be731"
+    },
+    {
+      "bytes": 130386,
+      "path": "patches/vibecast-0.6.0.dev11-complete.patch",
+      "sha256": "51a104563808548caf65bde262a8191680d766601a1928b767962592e03c1832"
+    },
+    {
+      "bytes": 156156,
+      "path": "patches/vibecast-0.6.0.dev12-complete.patch",
+      "sha256": "4812a4d1542ee214bb268e1cef7abfa5e8180630ea77d5297e3a9e2f2f7184a0"
+    },
+    {
+      "bytes": 110036,
+      "path": "patches/vibecast-0.6.0.dev4-complete.patch",
+      "sha256": "2712f93de25122cb2040af0c7aa8abd833704ee3fb24a8a35bb4f90ab1d9e820"
+    },
+    {
+      "bytes": 120147,
+      "path": "patches/vibecast-0.6.0.dev5-complete.patch",
+      "sha256": "e667e2aaaa9e5273baf7b2071e74db6424cc8624919ea8a4872c2e73bbd73c3b"
+    },
+    {
+      "bytes": 2591,
+      "path": "patches/vibecast-0.6.0.dev5-observer-test.patch",
+      "sha256": "10c0fe347e2c7cc2fc98a0d433ece0182b0a816c98e857ce95c9fc7d98168d2b"
+    },
+    {
+      "bytes": 124503,
+      "path": "patches/vibecast-0.6.0.dev6-complete.patch",
+      "sha256": "ecbdf1cc17460a74000310289bfbe02634f8636bfb02187512f128cc26a5611e"
+    },
+    {
+      "bytes": 1818,
+      "path": "patches/vibecast-after-0.5.0-installation-id.patch",
+      "sha256": "c2b45cb4676b6976780411e9124ef80d8c073a4f2836fb1d61bb6e4a792ee1c4"
+    },
+    {
+      "bytes": 2960,
+      "path": "patches/vibecast-after-dev5-audio-category.patch",
+      "sha256": "c2f37257566f588d37e4527fbedde24c6c2100c739855685ba842e619d433ceb"
+    },
+    {
+      "bytes": 17324,
+      "path": "patches/vibecast-audio-10-transitions-snapshot.patch",
+      "sha256": "7cbeacf499d67fcca6a7dfeff1b483752edeb8be12cec8d3df4adafeaf9a5b9b"
+    },
+    {
+      "bytes": 6980,
+      "path": "patches/vibecast-audio-8-resolver-snapshot.patch",
+      "sha256": "ad36a2c296f8ceb0e6bb584572008fc0403d94bb9c6a8bbe22a6e77967dd9567"
+    },
+    {
+      "bytes": 6343,
+      "path": "patches/vibecast-audio-9-queue-snapshot.patch",
+      "sha256": "e965d00b9668b40f4846bc384bf01f22af3431f1d00c34c445a3869c17c104da"
+    },
+    {
+      "bytes": 3324,
+      "path": "patches/vibecast-audio-receiver.patch",
+      "sha256": "58bbc93dd9d8ecf9486df0796af586bef2602d9609a39722ba03a07342b565bd"
+    },
+    {
+      "bytes": 757,
+      "path": "patches/vibecast-auth-diagnostics.patch",
+      "sha256": "5889a85051061303bf5237db65ab90af1dbac5be7fc6dbfd2031b482fdbb39c8"
+    },
+    {
+      "bytes": 358,
+      "path": "patches/vibecast-check-audio-formats.patch",
+      "sha256": "8ff659fb09dabff483721bd6dcb40347a77203553bbcddcd0c1d1bed6b51bc88"
+    },
+    {
+      "bytes": 44783,
+      "path": "patches/vibecast-controls-11-snapshot.patch",
+      "sha256": "c06e69f84ebe7d403e726c85f39ec705729661d57da936e9842704e0cd1bc57e"
+    },
+    {
+      "bytes": 48573,
+      "path": "patches/vibecast-controls-12-snapshot.patch",
+      "sha256": "ffa6296b0c66e883d8f9062d63bd0e123b72fd4373a5e5f2c6e708060f835aa0"
+    },
+    {
+      "bytes": 64607,
+      "path": "patches/vibecast-controls-13-snapshot.patch",
+      "sha256": "8580977b1a7d262181828f0fed90078b77c9f01938504aaff8fd11dfb128f7a7"
+    },
+    {
+      "bytes": 67496,
+      "path": "patches/vibecast-controls-14-snapshot.patch",
+      "sha256": "e5a5a884a33b3bfe8d68d1da776dac80a2ada75ed1abf48c561199d54c99decd"
+    },
+    {
+      "bytes": 16877,
+      "path": "patches/vibecast-controls-15-lounge-snapshot.patch",
+      "sha256": "c7dab9519baaf957e85a233dd18786c81a27730c8e89949fffd33c88a87645db"
+    },
+    {
+      "bytes": 24542,
+      "path": "patches/vibecast-controls-16-1-lounge-snapshot.patch",
+      "sha256": "bf1642dae5ef50307046c1ef53d98476e936c436d6822fd61b971c1268ad5c0a"
+    },
+    {
+      "bytes": 21765,
+      "path": "patches/vibecast-controls-16-lounge-snapshot.patch",
+      "sha256": "99864e4b13b155bd2d0cabbb378e100d7e3705fa990ef146928375bd7fe45115"
+    },
+    {
+      "bytes": 25152,
+      "path": "patches/vibecast-controls-17-cleanup-snapshot.patch",
+      "sha256": "bf0a481ad5a65f39567973a9489caabb88cc7acf1132d6173e7a8c8d0cdf6224"
+    },
+    {
+      "bytes": 4615,
+      "path": "patches/vibecast-controls-experiment.patch",
+      "sha256": "15bc309c4dd4a8d381a6b4fa846fde1769f21becec21444e7760a749c82a19dd"
+    },
+    {
+      "bytes": 38660,
+      "path": "patches/vibecast-dmr-1-snapshot.patch",
+      "sha256": "fa91be880e488513c9fa71b15ae6c8767fb24e10dd6e6a11e8541e438a5bd5ee"
+    },
+    {
+      "bytes": 28231,
+      "path": "patches/vibecast-ha-terminal-dev3-snapshot.patch",
+      "sha256": "b977e3f049b16f3e788071beff83ff72ac99abd258bbc3dfb355eea9e2560b14"
+    },
+    {
+      "bytes": 617,
+      "path": "patches/vibecast-load-diagnostics.patch",
+      "sha256": "fd44db52815ba3dcc8fb3bfef81fa0d25e1cc5e1f2949b326c8133d0408ac39b"
+    },
+    {
+      "bytes": 8522,
+      "path": "patches/vibecast-lounge-controls-7-snapshot.patch",
+      "sha256": "3a4cc9cd3326d96ec92bd599fc3745d3cfca1f92c1310be39b0e4ac0b5348499"
+    },
+    {
+      "bytes": 4558,
+      "path": "patches/vibecast-responsive-controls.patch",
+      "sha256": "59198545dd4c781f13f79dc0dce60d538fbe288d1179fd50ead74d07b39f352c"
+    },
+    {
+      "bytes": 9561,
+      "path": "patches/vibecast-session-ownership.patch",
+      "sha256": "c32b80bef4564eb8dd2328dd4ac6185fc57beb64d149767d6fc32a10b8fe65a1"
+    },
+    {
+      "bytes": 4758,
+      "path": "patches/vibecast-youtube-hls-experiment.patch",
+      "sha256": "2394ffda1aeedb74c2730817dbe0e7b6dd991dd6551b3c1283fc7ca4554d7ec7"
+    },
+    {
+      "bytes": 1157,
+      "path": "pyproject.toml",
+      "sha256": "67d189474bc3fb34e202e4671d7051f48fd2ef0c06732f8aaf161673a4d1b55f"
+    },
+    {
+      "bytes": 114,
+      "path": "repository.yaml",
+      "sha256": "46d9c3e46331316a9ba27e8301366c32c8b515ceafed86ec46de60954fe700cf"
+    },
+    {
+      "bytes": 1085,
+      "path": "research/legacy_python_receiver/README.md",
+      "sha256": "e2388160b8ee7008ce0024a538db6291e2a3653a4ec1e49d98f56752afbd8a6b"
+    },
+    {
+      "bytes": 276,
+      "path": "research/legacy_python_receiver/legacy_cast_receiver/__init__.py",
+      "sha256": "c67a433f1fa3002c6096300912ef13c4d6571221b1b32794961a11bcebcc31bb"
+    },
+    {
+      "bytes": 2952,
+      "path": "research/legacy_python_receiver/legacy_cast_receiver/auth.py",
+      "sha256": "de1d95c07c9634082aa96c8ce0e31faa2e88023a586a5b80c260cccf013326bd"
+    },
+    {
+      "bytes": 26496,
+      "path": "research/legacy_python_receiver/legacy_cast_receiver/lounge.py",
+      "sha256": "a95e36f18a6b8f20330467bb348847623e352517c674f3bbae208a746b02410d"
+    },
+    {
+      "bytes": 4654,
+      "path": "research/legacy_python_receiver/legacy_cast_receiver/mdns.py",
+      "sha256": "eac69d2baa91a9df64ebb1593c95a422a7275feffb696ee50b208d7550de88bc"
+    },
+    {
+      "bytes": 13663,
+      "path": "research/legacy_python_receiver/legacy_cast_receiver/protocol.py",
+      "sha256": "576911ba1281592f789a77d757363c03ae216022853c4383889ee9c0e606e5c7"
+    },
+    {
+      "bytes": 13554,
+      "path": "research/legacy_python_receiver/legacy_cast_receiver/server.py",
+      "sha256": "0d73f19f05c6f193e160da0d46b0c9b6faf12d6b419dc2c00d987ddbea287ab8"
+    },
+    {
+      "bytes": 2227,
+      "path": "research/legacy_python_receiver/legacy_cast_receiver/tls.py",
+      "sha256": "3f9548193e40af3480a2844c5dc9fe1604391225312afd43d956575f50dfe08a"
+    },
+    {
+      "bytes": 5732,
+      "path": "research/legacy_python_receiver/legacy_cast_receiver/wire.py",
+      "sha256": "8f9dedbd97f192d5f6ce7a79db86df14f213c20e8c40b3b1f06bdd4e68329ade"
+    },
+    {
+      "bytes": 10664,
+      "path": "research/legacy_python_receiver/legacy_cast_receiver/youtube_dial.py",
+      "sha256": "7af6213605aa0bc03d9f3fa937f177e2c0b3b7e94c5bd88b73cc446e3b609b15"
+    },
+    {
+      "bytes": 3790,
+      "path": "research/legacy_python_receiver/legacy_cast_receiver/youtube_receiver.py",
+      "sha256": "8ea4e27e4c3781a773a2eb95df16412d92536656b023cfc6837ae3ec0ff62e15"
+    },
+    {
+      "bytes": 78,
+      "path": "src/cast_audio_lab/__init__.py",
+      "sha256": "5cccb9929b164db21aa8092a433e6120b20440937dd9bf715e574bd802431d02"
+    },
+    {
+      "bytes": 118,
+      "path": "src/cast_audio_lab/__main__.py",
+      "sha256": "5d54266e7bd9911740212a783eedcabb6318812fd105de1394c49539e601b737"
+    },
+    {
+      "bytes": 29638,
+      "path": "src/cast_audio_lab/airplay.py",
+      "sha256": "5659aea032bd578ecdfc23194eeb124ee7e272141c625fb922b730c51a673958"
+    },
+    {
+      "bytes": 6826,
+      "path": "src/cast_audio_lab/airplay_discovery.py",
+      "sha256": "5a87167dcc25e658af35015bb47cd2292ac6dbcedbd82ac6e06eefc4599fed0d"
+    },
+    {
+      "bytes": 7686,
+      "path": "src/cast_audio_lab/artwork.py",
+      "sha256": "fd0f4cdbd145652d8ab47c23bf1be8c36bdee86c00a11421e57d6c68f63c0d0a"
+    },
+    {
+      "bytes": 3410,
+      "path": "src/cast_audio_lab/artwork_cache.py",
+      "sha256": "19ef675891140b32dde6c519e684cc164c15fff6a07bb01c6f490306f71ce267"
+    },
+    {
+      "bytes": 8945,
+      "path": "src/cast_audio_lab/backend.py",
+      "sha256": "5dac6c3b2ca7b38566b9495850518b423501979e4901ee18bd3a41751ad8e0cb"
+    },
+    {
+      "bytes": 4389,
+      "path": "src/cast_audio_lab/container_bootstrap.py",
+      "sha256": "6156303871decaa0d8a59f7add245d7b434c72345142b9b3b8a428200cb76c0b"
+    },
+    {
+      "bytes": 4335,
+      "path": "src/cast_audio_lab/container_entrypoint.py",
+      "sha256": "defffce7f6363c7a997e5582603bffaf6ff7db779e097358905fac3241d3283c"
+    },
+    {
+      "bytes": 5984,
+      "path": "src/cast_audio_lab/dlna.py",
+      "sha256": "f88ee1b2e1a8d361133ca0272619ca1e6c558f940e84b1c5b0dff3a2fc8909e7"
+    },
+    {
+      "bytes": 15649,
+      "path": "src/cast_audio_lab/management.py",
+      "sha256": "f1028773207ba2749a6b2684f21ce7ca3ddd3e888047bef3e3d6277b75921040"
+    },
+    {
+      "bytes": 7522,
+      "path": "src/cast_audio_lab/mpv_backend.py",
+      "sha256": "95d84b44bffe6517d2dfc1de687ab79ad28d1494ba801257540367673da08e49"
+    },
+    {
+      "bytes": 8992,
+      "path": "src/cast_audio_lab/output_registry.py",
+      "sha256": "ca874f78ef9bc9d746a2730cac020f7ecfe17ad164508d2ad0b60f058b29efc0"
+    },
+    {
+      "bytes": 10117,
+      "path": "src/cast_audio_lab/route_manager.py",
+      "sha256": "66bc6e6e1139c28aa62fc7d8af17fc492878c06b12f409de63cca75ed14d7f9b"
+    },
+    {
+      "bytes": 4903,
+      "path": "src/cast_audio_lab/routes.py",
+      "sha256": "785e12f41c058800bcb51e1f1ddf7ba36668449b00113a17626a0e8ff1115d5f"
+    },
+    {
+      "bytes": 8002,
+      "path": "src/cast_audio_lab/runtime.py",
+      "sha256": "35f2e20879d903ec9a4143973c066712db5f93f42f3d67c9d236b0e03d199cfd"
+    },
+    {
+      "bytes": 4829,
+      "path": "src/cast_audio_lab/sonos.py",
+      "sha256": "1a653e8a77e110df79cf6eee8c17dc17ebf6840925348ad248d7beaaa86b1b3c"
+    },
+    {
+      "bytes": 15033,
+      "path": "src/cast_audio_lab/vibecast_player.py",
+      "sha256": "e81ee3f76fda186bcc81b13a192734cf442beebe4f496f2a581f3fcfa8d66036"
+    },
+    {
+      "bytes": 5909,
+      "path": "src/cast_audio_lab/web/app.js",
+      "sha256": "c2098b160f5380111d2ae697ada700010c7b64c9a4e2be094a0e38defb4b98df"
+    },
+    {
+      "bytes": 324,
+      "path": "src/cast_audio_lab/web/favicon.svg",
+      "sha256": "5290ea390176e888b0f62343774ebaf41b9aea8bff27b29893f3424c7b0b1a69"
+    },
+    {
+      "bytes": 2281,
+      "path": "src/cast_audio_lab/web/index.html",
+      "sha256": "a9949c8510afed0d45de42c8945216bd6923dcc22f2bea29963ce358b6df69c1"
+    },
+    {
+      "bytes": 1703,
+      "path": "src/cast_audio_lab/web/style.css",
+      "sha256": "38168d60532373211f1d393201be9a2e300072d1d3c45003f68953fd49953488"
+    },
+    {
+      "bytes": 3514,
+      "path": "tests/test_airplay.py",
+      "sha256": "cb6962a29437ba553a22ee494e91111824bbb040ed2d23adb3f668be21105af1"
+    },
+    {
+      "bytes": 12255,
+      "path": "tests/test_airplay_bridge.py",
+      "sha256": "2a8964be2d1ce764e27bfd8730b254db75ce6795cefd601bc5e530c4f45e4913"
+    },
+    {
+      "bytes": 2018,
+      "path": "tests/test_airplay_discovery.py",
+      "sha256": "8d5da4837c7251971751c18255616a0be3d40b0d7e0d0d4b6fb51ff9a809ebc4"
+    },
+    {
+      "bytes": 8232,
+      "path": "tests/test_airplay_persistent.py",
+      "sha256": "d860a70b6a63821f07f7f746d6409c2b408a39d600b879bdc7de4855f48a9978"
+    },
+    {
+      "bytes": 5788,
+      "path": "tests/test_artwork.py",
+      "sha256": "062b5ca5f5c20d7427f027c3beab79667da8151ca8eccb3d2251d767469ef458"
+    },
+    {
+      "bytes": 2789,
+      "path": "tests/test_artwork_cache.py",
+      "sha256": "d0d3eb86746b4ef83f9387d8dc982740a1b761bc1df974f924a4339269410778"
+    },
+    {
+      "bytes": 1091,
+      "path": "tests/test_auth.py",
+      "sha256": "f2188b4c0020cbc7b62e2063aa4521233a470600ab53ecee21c6812ba19304ef"
+    },
+    {
+      "bytes": 1490,
+      "path": "tests/test_auth_probe.py",
+      "sha256": "608c20ce5df5fcc1d0ba7f06c4894a2c798093bfaac06dfb01a6ec37ae430bcf"
+    },
+    {
+      "bytes": 2007,
+      "path": "tests/test_bridge_reconnect.py",
+      "sha256": "7daf32b276f1a680f6ff3cea76fefe288bbec9100deb19a7dde46cf86eb43a38"
+    },
+    {
+      "bytes": 8151,
+      "path": "tests/test_certificate_collection.py",
+      "sha256": "61b13f0bf7442c85289b31785e3b69c6a74a30e1870a13a90165f15dc552a6fc"
+    },
+    {
+      "bytes": 3887,
+      "path": "tests/test_certificate_windows.py",
+      "sha256": "cd6e06359a9f7102909e3394f9cf43d250b0c11917e45b7e54e0a7b5ffd32985"
+    },
+    {
+      "bytes": 1183,
+      "path": "tests/test_check_cast_crl.py",
+      "sha256": "d9b1ecdc191382e288de27f8d7b5625e488b1f9c5c726b662528829e7ad32160"
+    },
+    {
+      "bytes": 1189,
+      "path": "tests/test_command_backend.py",
+      "sha256": "6f7af95762dcd3ad44218e0e90710fc3409bb645eef5d07a4c698dc130c1326a"
+    },
+    {
+      "bytes": 5031,
+      "path": "tests/test_container_bootstrap.py",
+      "sha256": "b2d1290f7ceba917bd329b25736f20d7ded2976f5cd3e98c3643b9fc28e67fee"
+    },
+    {
+      "bytes": 4314,
+      "path": "tests/test_container_entrypoint.py",
+      "sha256": "ee0a6ae553a8933b06d395d5943e5503e4fb771e78c95ae6b2edad3e66434cd9"
+    },
+    {
+      "bytes": 1560,
+      "path": "tests/test_dial_probe.py",
+      "sha256": "d1836ef4f4a0ed6bcc10be11ca3858a8a9d12e188d818f5f8de1e569762ce32f"
+    },
+    {
+      "bytes": 2426,
+      "path": "tests/test_dlna.py",
+      "sha256": "530097b7ea4cf2c72f507cc94d64a2a564734d8b6520ce71855db91e15b1dbae"
+    },
+    {
+      "bytes": 1628,
+      "path": "tests/test_dmr_fixture.py",
+      "sha256": "e9c903a06f0988fd026a60e50fb1200d939999ce7f577e3a15623ac72ef8b60a"
+    },
+    {
+      "bytes": 1591,
+      "path": "tests/test_ha_test_repository.py",
+      "sha256": "e44196bc92e61a0dde64cb15096d64bdc438d3d28c95520792b3183632616982"
+    },
+    {
+      "bytes": 7333,
+      "path": "tests/test_lounge.py",
+      "sha256": "03c17fe5217374097a43fda159ec8d4eec142158369329b288338a5fb4e1dcbb"
+    },
+    {
+      "bytes": 894,
+      "path": "tests/test_mdns.py",
+      "sha256": "61ca36c68874c58bea36e5a5ae4bece0195e7e347d91945234132eb2a403bd3f"
+    },
+    {
+      "bytes": 881,
+      "path": "tests/test_mdns_probe.py",
+      "sha256": "4edac98108bcbff93b10c60f6ab3ad6496dc4cc02108225a45f5442fd79e735b"
+    },
+    {
+      "bytes": 2637,
+      "path": "tests/test_mpv_backend.py",
+      "sha256": "af297093b7b52aa987d1f208e30956849deeaa7eb11a26b277e7f07eee4ff8bc"
+    },
+    {
+      "bytes": 3156,
+      "path": "tests/test_output_registry.py",
+      "sha256": "ae153faac4cfb1905df290c79f1891304499ff5f668b1a05e418b90198bc8b35"
+    },
+    {
+      "bytes": 742,
+      "path": "tests/test_probe.py",
+      "sha256": "39ae2892b73d1273ef5b06741df0c5d68aa5434fef08e42076326b22e825c065"
+    },
+    {
+      "bytes": 6500,
+      "path": "tests/test_protocol.py",
+      "sha256": "af3299ddcb4c3c0b40c3ba29d1b1dbc139f07e3c7f3a2bfcddc565edb25e62f5"
+    },
+    {
+      "bytes": 2254,
+      "path": "tests/test_public_source_export.py",
+      "sha256": "c16432b8cb27099115e67e9ec3049a0305cb53fa048225f795c0642af4a9197b"
+    },
+    {
+      "bytes": 4315,
+      "path": "tests/test_release_records.py",
+      "sha256": "39b96cbf688d6d6a628a1cfafd63b28123577ff58af6fcbf31b1be20ac5422f7"
+    },
+    {
+      "bytes": 1350,
+      "path": "tests/test_release_wheel.py",
+      "sha256": "e3a2be5b376f057ad8f849f1fc69db67dafec05bb2ca04ddff624d47e052f991"
+    },
+    {
+      "bytes": 1927,
+      "path": "tests/test_resource_profile.py",
+      "sha256": "42e783336814cd1b4592e1a8606b285779bc97658fba2387f6d902c0e40e2df5"
+    },
+    {
+      "bytes": 15721,
+      "path": "tests/test_route_management.py",
+      "sha256": "a69b317bc3589186a49806242dfe380acad39079409925e760d77759eb6816bd"
+    },
+    {
+      "bytes": 3170,
+      "path": "tests/test_runtime.py",
+      "sha256": "ba89c783499d5a1a4a4f4d79af6d83075ab1b0ab7631545faa3f71c2318c9e7d"
+    },
+    {
+      "bytes": 1219,
+      "path": "tests/test_server.py",
+      "sha256": "38c27d25440577f3884342e2e471cccfd70e06ef13b2235ff3ad6ead2aa3abcf"
+    },
+    {
+      "bytes": 1768,
+      "path": "tests/test_sonos.py",
+      "sha256": "cc3ee7a9d4e9ba86a01e0200850a0fbf43f04fc51b5d355a2d68990848973bf4"
+    },
+    {
+      "bytes": 2010,
+      "path": "tests/test_source_inventory.py",
+      "sha256": "b052373ce34ac4b6752b94fa8a1488b17fbe8e25334cca8472da3945458b23ac"
+    },
+    {
+      "bytes": 2021,
+      "path": "tests/test_support_inventory.py",
+      "sha256": "ba8a182c821f51625e46b78681e619e6ae876efedcbac07a3d003c2c6dbf2b7e"
+    },
+    {
+      "bytes": 5690,
+      "path": "tests/test_vibecast_player.py",
+      "sha256": "49574859ceb24a0638e8f9579dadc946b4d6f44b318631b31fcf2359120a5e69"
+    },
+    {
+      "bytes": 2389,
+      "path": "tests/test_wheel_inventory.py",
+      "sha256": "f00ef4ceaee0b4ae9de04ede5fdcea7670883be9e40bc6f917b7e1373628e596"
+    },
+    {
+      "bytes": 1811,
+      "path": "tests/test_wire.py",
+      "sha256": "8196777b574ba7662a8411edf42e13bf664742b0cbc2c961aae9722ae8fdc789"
+    },
+    {
+      "bytes": 4909,
+      "path": "tests/test_youtube_dial.py",
+      "sha256": "1fd92317c5fa995067f6a1799dcdb3fb15a3885929678158f9ebc4f26947e410"
+    },
+    {
+      "bytes": 1194,
+      "path": "tools/android_clock_restore.sh",
+      "sha256": "d009d410775a323514a71615fc77bc46e71fb4f06d6f1985786804a2ebb84c48"
+    },
+    {
+      "bytes": 7119,
+      "path": "tools/capture_airreceiver_window.py",
+      "sha256": "66b39e90ff60bf4dcddfaefd2830d5dedc695b39ec790337263f8632ead28a9d"
+    },
+    {
+      "bytes": 15289,
+      "path": "tools/capture_future_window.py",
+      "sha256": "8e8b7a62361ff8a0a28dbb7a101915b0f2fd16e0f19be95f318e5568887391cd"
+    },
+    {
+      "bytes": 24672,
+      "path": "tools/cast_speaker_shim.py",
+      "sha256": "aaeadbd5397ac78a12fac4d2b7de6a4d7a3bdf9f1225f1c7338e93ee6d00c73e"
+    },
+    {
+      "bytes": 3013,
+      "path": "tools/cast_tcp_proxy.py",
+      "sha256": "4985201a4ae14095a5959cdb00858c35ff8201119fc6bf74ccb9ca4eba28b6e2"
+    },
+    {
+      "bytes": 1623,
+      "path": "tools/check_cast_crl.py",
+      "sha256": "67a5ae61d8d72802de5d9d6e06df373b5aae44b3e9dbfcb8fcb0ab8ed15affd8"
+    },
+    {
+      "bytes": 1324,
+      "path": "tools/check_release_wheel.py",
+      "sha256": "a7b221bed330b48474b36f4a51dabebb8ee368ee6054d45c31c18dde6e476adf"
+    },
+    {
+      "bytes": 8692,
+      "path": "tools/collect_certificate_windows.py",
+      "sha256": "45224da114c86589409175d722ec1cf2915d6acaf4dfff31b35ca48ff0535b4b"
+    },
+    {
+      "bytes": 1901,
+      "path": "tools/create_ha_test_repository.py",
+      "sha256": "4cc5ae3406f15c531773c015de9548aa6c0d2a1540d92c71f0c63dd0ae76bfea"
+    },
+    {
+      "bytes": 4839,
+      "path": "tools/create_public_source_export.py",
+      "sha256": "92d3669a529bcce94c937816f6f90cb3471049270805600185554d43fce1a8db"
+    },
+    {
+      "bytes": 1162,
+      "path": "tools/disasm_aarch64.py",
+      "sha256": "ad9b29f537e4822b6901a72a71a0f51500981bef930bc7f8f5045dcb55f654d7"
+    },
+    {
+      "bytes": 3037,
+      "path": "tools/find_aarch64_xrefs.py",
+      "sha256": "4bc2e6bfc35cd79bd5a95a330538630e8aaeecde7180f4f1e00fe73b035430cf"
+    },
+    {
+      "bytes": 1684,
+      "path": "tools/find_dex_status.py",
+      "sha256": "d7c0a2b96353473b8f1b75521cc5f9b532edc95e5423ddd16b8a7d4ef2bcb31a"
+    },
+    {
+      "bytes": 6763,
+      "path": "tools/import_shanocast_bundle.py",
+      "sha256": "8a38a7df3a810e1caac5d7b81a9657d7c6d3d20323ec0e0bdf50c28ae60ff17e"
+    },
+    {
+      "bytes": 2088,
+      "path": "tools/inspect_offline_signature_storage.py",
+      "sha256": "7ecdb42647f9b3b4137b276127ad0a4d2aed8c77c4d3b59b187a0d98a5c4bc2f"
+    },
+    {
+      "bytes": 6814,
+      "path": "tools/inspect_receiver.py",
+      "sha256": "ddc4af0bef7d1373755da8859d8ebf1a3796fc54d565d7515f5c273481538860"
+    },
+    {
+      "bytes": 2863,
+      "path": "tools/map_setup_dispatch.py",
+      "sha256": "7da5297b805287690aefde1a5c072937aeef42e01a6a9d810e5dd0d6513880b7"
+    },
+    {
+      "bytes": 4547,
+      "path": "tools/merge_certificate_windows.py",
+      "sha256": "9019808ba10e0ff73a918c463559d455486c258453a9d1f1b408695c40c09c48"
+    },
+    {
+      "bytes": 2243,
+      "path": "tools/play_google_audio.py",
+      "sha256": "1d6418892ef49d1c01b2c0db6efa0545377c3846d937f97ec731db2be35bf2ff"
+    },
+    {
+      "bytes": 11000,
+      "path": "tools/probe_app_launch.py",
+      "sha256": "f0855e260df78f299452d3b148817f9a064580bfd8e590602fdb93e8e7266d81"
+    },
+    {
+      "bytes": 9556,
+      "path": "tools/probe_auth.py",
+      "sha256": "bb879f216746bf089c1542668aa3f8395fde25f9292c7379deadd0b7990cb98c"
+    },
+    {
+      "bytes": 5144,
+      "path": "tools/probe_dial.py",
+      "sha256": "ef8df28cfed363e463791b3a46450455f9df866ecedb349ac060c2ffb06fcb40"
+    },
+    {
+      "bytes": 4665,
+      "path": "tools/probe_mdns.py",
+      "sha256": "6d586d6068203a1845a085b0fe6ef877afd496166b719a9252be95b42b6e0130"
+    },
+    {
+      "bytes": 4287,
+      "path": "tools/resource_profile.py",
+      "sha256": "3a494448e780e64aee9bb1ca01abc44d67b1511bad04351fb63e592fb9ca95fa"
+    },
+    {
+      "bytes": 3497,
+      "path": "tools/smoke_cast_sender.py",
+      "sha256": "2fb0d9d68d775e035562b6276e08b4791336a823fca0f8a2735a8fcd4d3d3df4"
+    },
+    {
+      "bytes": 2232,
+      "path": "tools/source_inventory.py",
+      "sha256": "60c8a8d5ccf8e9fac2a8331ccf2be2b2c9afb421dfea34b864bfedf67348de52"
+    },
+    {
+      "bytes": 2515,
+      "path": "tools/support_inventory.py",
+      "sha256": "3a17c799f4716f30723896f25bad4b3ec0fee5e766a7098c585db117239a26f3"
+    },
+    {
+      "bytes": 4026,
+      "path": "tools/test_cast_speaker_shim.py",
+      "sha256": "a275d8a1601f5665d9c2fc48147354ddd348d0de6f678b09ae028a0bffa60b84"
+    },
+    {
+      "bytes": 19143,
+      "path": "tools/test_default_media.py",
+      "sha256": "1e078be771d7d30fc7af8eed376829d97f4d64eb2e172b62b2c2d925de18dea0"
+    },
+    {
+      "bytes": 3692,
+      "path": "tools/test_persistent_airplay.py",
+      "sha256": "e91b32e43e17921fb66789b945d2366cb252f8d63f9417d4e0c31fc4f6fd2306"
+    },
+    {
+      "bytes": 1930,
+      "path": "tools/watch_receiver.py",
+      "sha256": "c9ce5f190ffc8075b0d6a25eb37c68e2f52dc51f56eb46245990f8c13824dcc2"
+    },
+    {
+      "bytes": 2706,
+      "path": "tools/wheel_inventory.py",
+      "sha256": "145cdf73dd04f80cf91dfd738a928fab6c85f25ce8b210e9dcdb4248214bb956"
+    }
+  ],
+  "schema": 1
+}

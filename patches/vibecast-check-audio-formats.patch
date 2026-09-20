@@ -1,0 +1,8 @@
+--- a/crates/vibecast-apps-youtube/src/resolver.rs
++++ b/crates/vibecast-apps-youtube/src/resolver.rs
+@@ -174,2 +174,5 @@
+             "--no-playlist",
++            // A listed format may still return HTTP 403. Let the upstream
++            // extractor probe candidates before handing a URL to the player.
++            "--check-formats",
+             "-f",

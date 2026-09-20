@@ -1,0 +1,49 @@
+diff --git a/crates/vibecast-core/src/tests.rs b/crates/vibecast-core/src/tests.rs
+index 4f4b197..1e4607b 100644
+--- a/crates/vibecast-core/src/tests.rs
++++ b/crates/vibecast-core/src/tests.rs
+@@ -767,6 +767,44 @@ async fn app_close_refreshes_platform_status_without_transport_disconnect() {
+     assert_ne!(launch(client).await, transport);
+ }
+ 
++/// A separate monitoring connection must not retain the owner's stopped media.
++#[tokio::test]
++async fn owner_disconnect_notifies_a_separate_observer_and_allows_takeover() {
++    let mut harness = setup().await;
++    let transport = launch(&mut harness.client).await;
++    send(&mut harness.client, ns::CONNECTION, &transport, r#"{"type":"CONNECT"}"#).await;
++    let _ = next_json(&mut harness.client).await;
++    send(&mut harness.client, FAKE_NS, &transport, r#"{"type":"PUSH_MEDIA"}"#).await;
++    let _ = next_json(&mut harness.client).await;
++    let _ = next_json(&mut harness.client).await;
++
++    let (server_end, client_end) = tokio::io::duplex(64 * 1024);
++    let (events_tx, mut events_rx) = mpsc::channel::<ServerEvent>(32);
++    tokio::spawn(run_connection(server_end, 2, Arc::from("observer"), Arc::new(dummy_auth()), events_tx));
++    let hub = harness.hub.clone();
++    tokio::spawn(async move {
++        while let Some(event) = events_rx.recv().await {
++            if hub.send_server_event(event).await.is_err() {
++                break;
++            }
++        }
++    });
++    let mut observer = Framed::new(client_end, CastCodec);
++    send(&mut observer, ns::CONNECTION, "receiver-0", r#"{"type":"CONNECT"}"#).await;
++    send(&mut observer, ns::CONNECTION, &transport, r#"{"type":"CONNECT"}"#).await;
++    assert_eq!(next_json(&mut observer).await["type"], "MEDIA_STATUS");
++    drop(harness.client);
++    let terminal = tokio::time::timeout(std::time::Duration::from_secs(2), next_json(&mut observer))
++        .await.expect("observer must receive terminal media state");
++    assert_eq!(terminal["type"], "MEDIA_STATUS");
++    assert_eq!(terminal["status"][0]["playerState"], "IDLE");
++    assert_eq!(terminal["status"][0]["idleReason"], "CANCELLED");
++    let receiver = next_json(&mut observer).await;
++    assert!(receiver["status"]["applications"].as_array().unwrap().is_empty());
++    assert_ne!(launch(&mut observer).await, transport);
++    assert!(harness.player.commands().iter().any(|c| matches!(c, PlayerCommand::Stop { .. })));
++}
++
+ /// An app session whose `resolve_license` reverses the challenge instead of
+ /// forwarding (proving the override is used, no network involved).
+ struct LicenseSession;

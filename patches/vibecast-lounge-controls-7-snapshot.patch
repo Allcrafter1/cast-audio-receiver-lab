@@ -1,0 +1,193 @@
+diff --git a/crates/vibecast-apps-youtube/src/lounge.rs b/crates/vibecast-apps-youtube/src/lounge.rs
+index 5010f8f..acdbcf0 100644
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -7,7 +7,7 @@ use serde_json::Value;
+ use thiserror::Error;
+ use tokio::sync::{mpsc, watch};
+ use url::Url;
+-use vibecast_sdk::{PlaybackState, PlayerState, ReceiverContext};
++use vibecast_sdk::{IdleReason, PlaybackState, PlayerState, ReceiverContext};
+ 
+ const LOUNGE_BASE: &str = "https://www.youtube.com/api/lounge";
+ const USER_AGENT: &str =
+@@ -28,6 +28,7 @@ pub(crate) enum LoungeCommand {
+     },
+     Play,
+     Pause,
++    Stop,
+     Seek(f64),
+     Next,
+ }
+@@ -59,6 +60,7 @@ struct BoundSession {
+ 
+ #[derive(Default)]
+ struct CurrentMedia {
++    awaiting_load: bool,
+     video_ids: Vec<String>,
+     video_id: Option<String>,
+     list_id: Option<String>,
+@@ -67,6 +69,27 @@ struct CurrentMedia {
+     state: Option<PlaybackState>,
+ }
+ 
++impl CurrentMedia {
++    fn coalesce_pending_selection(&self, incoming: Incoming) -> Incoming {
++        if let Incoming::Command(LoungeCommand::SetPlaylist {
++            ref video_ids, current_index, current_time, ref list_id,
++        }) = incoming {
++            if self.awaiting_load
++                && self.video_id.is_some()
++                && self.video_id.as_ref() == video_ids.get(current_index)
++                && self.current_index == current_index
++                && self.state.as_ref().is_some_and(|s| s.current_time == current_time)
++            {
++                tracing::info!("coalesced pending YouTube selection into queue update");
++                return Incoming::Command(LoungeCommand::UpdatePlaylist {
++                    video_ids: video_ids.clone(), list_id: list_id.clone(),
++                });
++            }
++        }
++        incoming
++    }
++}
++
+ #[derive(Debug, Error)]
+ pub(crate) enum LoungeError {
+     #[error("YouTube Lounge HTTP request failed")]
+@@ -197,7 +220,14 @@ impl LoungeConnection {
+         self.post(Outbound::NowPlaying).await?;
+ 
+         loop {
+-            let poll = poll_commands(&self.http, &self.bind_url, &self.bound);
++            // Keep the long poll alive while playback reports arrive. Dropping
++            // it on every position update starves incoming controls.
++            let http = self.http.clone();
++            let bind_url = self.bind_url.clone();
++            let bound = self.bound.clone();
++            let poll = poll_commands(&http, &bind_url, &bound);
++            tokio::pin!(poll);
++            loop {
+             tokio::select! {
+                 result = cancel.changed() => {
+                     if result.is_err() || *cancel.borrow() {
+@@ -206,17 +236,34 @@ impl LoungeConnection {
+                 }
+                 state = playback_rx.recv() => {
+                     let Some(state) = state else { return Ok(()); };
++                    if self.current.awaiting_load {
++                        if state.player_state != PlayerState::Buffering
++                            && !matches!(state.idle_reason, Some(IdleReason::Error | IdleReason::Cancelled)) {
++                            continue;
++                        }
++                        self.current.awaiting_load = false;
++                    }
++                    let ended = state.idle_reason == Some(IdleReason::Finished)
++                        && self.current.state.as_ref().and_then(|s| s.idle_reason)
++                            != Some(IdleReason::Finished);
+                     self.current.state = Some(state.clone());
+                     self.post(Outbound::State(state)).await?;
++                    if ended {
++                        if let Some(outbound) = self.handle_internal(&Incoming::Command(LoungeCommand::Next)) {
++                            self.post(outbound).await?;
++                        }
++                        let _ = command_tx.send(LoungeCommand::Next).await;
++                    }
+                 }
+-                result = poll => {
++                result = &mut poll => {
+                     let batch = match result {
+                         Ok(batch) => batch,
+-                        Err(LoungeError::Http(error)) if error.is_timeout() => continue,
++                        Err(LoungeError::Http(error)) if error.is_timeout() => break,
+                         Err(error) => return Err(error),
+                     };
+                     self.bound.aid = self.bound.aid.max(batch.aid);
+                     for incoming in batch.messages {
++                        let incoming = self.current.coalesce_pending_selection(incoming);
+                         if let Some(outbound) = self.handle_internal(&incoming) {
+                             self.post(outbound).await?;
+                         }
+@@ -226,8 +273,10 @@ impl LoungeConnection {
+                             }
+                         }
+                     }
++                    break;
+                 }
+             }
++            }
+         }
+     }
+ 
+@@ -240,6 +289,7 @@ impl LoungeConnection {
+                 list_id,
+             }) => {
+                 self.current.video_ids.clone_from(video_ids);
++                self.current.awaiting_load = true;
+                 self.current.video_id = video_ids.get(*current_index).cloned();
+                 self.current.current_index = *current_index;
+                 self.current.list_id.clone_from(list_id);
+@@ -270,6 +320,13 @@ impl LoungeConnection {
+                 None
+             }
+             Incoming::Command(LoungeCommand::Next) => {
++                self.current.awaiting_load = true;
++                self.current.state = Some(PlaybackState {
++                    player_state: PlayerState::Buffering,
++                    current_time: 0.0,
++                    duration: None,
++                    idle_reason: None,
++                });
+                 if self.current.current_index + 1 < self.current.video_ids.len() {
+                     self.current.current_index += 1;
+                     self.current.video_id = self
+@@ -523,6 +580,8 @@ fn parse_incoming(bytes: &[u8]) -> Result<IncomingBatch, LoungeError> {
+             let Some(message) = parts.get(1).and_then(Value::as_array) else {
+                 continue;
+             };
++            tracing::info!(sequence = parts.first().and_then(serde_json::Value::as_u64),
++                command = message.first().and_then(serde_json::Value::as_str), "Lounge incoming command");
+             messages.push(parse_message(message));
+         }
+     }
+@@ -539,6 +598,7 @@ fn parse_message(message: &[Value]) -> Incoming {
+         "updatePlaylist" => parse_update_playlist(params),
+         "play" => Some(LoungeCommand::Play),
+         "pause" => Some(LoungeCommand::Pause),
++        "stopVideo" | "stop" => Some(LoungeCommand::Stop),
+         "next" => Some(LoungeCommand::Next),
+         "seekTo" => params
+             .and_then(|value| value.get("newTime"))
+@@ -761,6 +821,31 @@ struct LoungeTokenScreen {
+ #[cfg(test)]
+ mod tests {
+     use super::*;
++
++    #[test]
++    fn pending_selection_updates_queue_without_second_load() {
++        let mut current = CurrentMedia {
++            awaiting_load: true,
++            video_id: Some("a".into()),
++            state: Some(PlaybackState { player_state: PlayerState::Buffering,
++                current_time: 0.0, duration: None, idle_reason: None }),
++            ..Default::default()
++        };
++        let selection = |video: &str, position| Incoming::Command(LoungeCommand::SetPlaylist {
++            video_ids: vec![video.into(), "next".into()], current_index: 0,
++            current_time: position, list_id: Some("new-queue".into()),
++        });
++        assert!(matches!(current.coalesce_pending_selection(selection("a", 0.0)),
++            Incoming::Command(LoungeCommand::UpdatePlaylist { video_ids, list_id })
++                if video_ids == ["a", "next"] && list_id.as_deref() == Some("new-queue")));
++        for command in [selection("b", 0.0), selection("a", 42.0)] {
++            assert!(matches!(current.coalesce_pending_selection(command),
++                Incoming::Command(LoungeCommand::SetPlaylist { .. })));
++        }
++        current.awaiting_load = false;
++        assert!(matches!(current.coalesce_pending_selection(selection("a", 0.0)),
++            Incoming::Command(LoungeCommand::SetPlaylist { .. })));
++    }
+     use std::path::PathBuf;
+     use wiremock::matchers::{method, path};
+     use wiremock::{Mock, MockServer, ResponseTemplate};
+
