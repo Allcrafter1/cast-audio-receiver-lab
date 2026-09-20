@@ -40,3 +40,10 @@ baseline, not a playback peak or evidence for smaller/ARM hardware.
 This acceptance proves the packaging and lifecycle exercised above. It does not
 prove future Google sender acceptance, certificate non-revocation, arbitrary
 Cast-app compatibility or redistribution permission for private credentials.
+
+The user requires final installations to include the working authentication
+coverage rather than silently producing an unusable receiver. For now this is
+fulfilled by the private `/share` input and atomic bootstrap import. Public
+repository/image inclusion remains gated on a separate redistribution and
+security review; the private source-staging repository intentionally contains no
+bundle.

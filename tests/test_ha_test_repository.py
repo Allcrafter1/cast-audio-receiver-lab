@@ -2,8 +2,6 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
 
-import yaml
-
 from tools.create_ha_test_repository import create
 
 
@@ -13,11 +11,12 @@ class HomeAssistantTestRepositoryTests(unittest.TestCase):
             root = Path(temporary)
             create(root)
             app = root / "cast-audio-receiver"
-            config = yaml.safe_load((app / "config.yaml").read_text())
+            config = (app / "config.yaml").read_text()
 
-            self.assertNotIn("image", config)
-            self.assertEqual(config["options"]["certificate_path"],
-                             "/share/cast-audio-receiver/certs.json")
+            self.assertNotIn("\nimage:", "\n" + config)
+            self.assertIn(
+                "certificate_path: /share/cast-audio-receiver/certs.json", config
+            )
             self.assertTrue((app / "Dockerfile").is_file())
             self.assertTrue((app / "src" / "cast_audio_lab" / "runtime.py").is_file())
             self.assertFalse(any(root.rglob("certs.json")))

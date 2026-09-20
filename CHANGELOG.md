@@ -31,7 +31,11 @@
   LAN health endpoint, restart and persistent route identity. The final private
   773-window certificate bundle was then imported through `/share` without
   embedding it in the image; hardware AirPlay and update/rollback remain open.
-- Python suite: 197 tests complete successfully with 19 environment-dependent
+- Add an allowlisted, text-only public-source exporter with a complete hash
+  manifest. Its fresh export excludes private state/artifacts and passes the
+  full suite. A private GitHub staging repository now exercises real CI without
+  declaring the project publicly released.
+- Python suite: 200 tests complete successfully with 19 environment-dependent
   skips in the current development environment. Targeted
   Rust gate: 110 tests pass with one explicit live-network probe ignored.
 

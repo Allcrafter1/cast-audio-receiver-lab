@@ -20,6 +20,9 @@ redistributable release. The latest deployment is recorded in WORKING-PLAN.md.
 - [ ] Review the exact export AND Git history for private data. Do not simply
   push the dirty development checkout. Exclude `.state`, private credentials,
   APKs, packet captures, account/pairing data and unreviewed logs.
+  An allowlisted text-only export with a file/hash manifest now exists, passes
+  200 tests and is staged in a new-history private GitHub repository. Manual
+  review is still required before checking this public-release gate.
 - [ ] Distinguish test fixtures from real credentials; inspect patches and built
   archives too. A grep-based secret scan alone is not sufficient clearance.
 - [ ] Verify attribution for the actual code/research used, without inventing

@@ -13,12 +13,12 @@
     {
       "bytes": 2038,
       "path": ".github/workflows/ci.yml",
-      "sha256": "ce9bcc7eb679a2ed9f35e8303c47fbeeafe44cc5c8a58bf1549c399f05437ee1"
+      "sha256": "b8ab4fb012bc2d9c1022fa9337679b1571c5bf6a2db7930c010f2e5d3efaad02"
     },
     {
       "bytes": 1845,
       "path": ".github/workflows/upstream-watch.yml",
-      "sha256": "59f61b628d587494fa0e64884cc21c0acb99ae75771989c91337a59dc1b3a025"
+      "sha256": "ec243bd241ed20dce1b5c6a061505354233cf0f938491582d317d303ac6bb0d5"
     },
     {
       "bytes": 224,
@@ -26,9 +26,9 @@
       "sha256": "57d61edc4a7b995c3d99fdf77e29ee7b3252576491e697c682682051c96b054b"
     },
     {
-      "bytes": 31523,
+      "bytes": 31799,
       "path": "CHANGELOG.md",
-      "sha256": "0fc771ca6b2567fa043a9f1f74268bfeada6895c81a4f4991c1053f40c7988ab"
+      "sha256": "70ad3dd678f4dcf43a802985bb65a5086c9299a84a1a0c4d0cc0db7c8c17f602"
     },
     {
       "bytes": 3018,
@@ -161,9 +161,9 @@
       "sha256": "57d2ed0446f3be3f1e86f92d2393c21ff9ac6ed91e585fdf0764b4db8999fba7"
     },
     {
-      "bytes": 3916,
+      "bytes": 4141,
       "path": "docs/RELEASE-CHECKLIST.md",
-      "sha256": "5755a3f1d708a04432a8b7c005651ca70530e2f21ecd10ba0a824c31507ad088"
+      "sha256": "ae2cb35af21bf9f9e07aa7304702d42b512db823c1c0fcc20d5127066966ceaf"
     },
     {
       "bytes": 6977,
@@ -171,9 +171,9 @@
       "sha256": "cba8c7810c90723b7ecd9f4f5f87b388d3ac052d43a12a6b21d7f239017d0194"
     },
     {
-      "bytes": 99879,
+      "bytes": 100882,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "6d2cc1444ce9003963a129275a2d6d897027e6b7030866bfdfc0ca12fbe73061"
+      "sha256": "536bdde7da50ba3588a5c1368cafedfe239cba0818064c6a3fa7fb86bc94d3f9"
     },
     {
       "bytes": 4535,
@@ -321,9 +321,9 @@
       "sha256": "8f803c34b8985ddb562e183f30ddb96223387d0423bd214097bb06cf81da16d9"
     },
     {
-      "bytes": 2176,
+      "bytes": 2570,
       "path": "docs/ha-acceptance-20260920.md",
-      "sha256": "bef21afc55b8672d65e4ae4bd7d9ea1b7d439a95a1df97e222714129e99ba50a"
+      "sha256": "0bfc48bdad65536d6889c2c1bdd3da4c249eb036badf1386543617f745ff011f"
     },
     {
       "bytes": 3800,
@@ -826,9 +826,9 @@
       "sha256": "e9c903a06f0988fd026a60e50fb1200d939999ce7f577e3a15623ac72ef8b60a"
     },
     {
-      "bytes": 1591,
+      "bytes": 1557,
       "path": "tests/test_ha_test_repository.py",
-      "sha256": "e44196bc92e61a0dde64cb15096d64bdc438d3d28c95520792b3183632616982"
+      "sha256": "994270cbb17c5af157159b09d6e597a8e0ac39674770333376476631ddf9e617"
     },
     {
       "bytes": 7333,
