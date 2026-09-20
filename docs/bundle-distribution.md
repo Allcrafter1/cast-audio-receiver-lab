@@ -1,5 +1,13 @@
 # Separate bundle artifact — privately staged, not publicly published
 
+**Publication blocked, 2026-09-20:** the execution environment rejected public
+key-material distribution despite the owner's authorization. The repository
+and draft assets remain private, verified after rejection. This restriction
+must not be bypassed via other tools/workflows. It is separate from the legal
+analysis and from ordinary source/image publication. The first-start download
+code in dev18 is therefore prepared but NOT an available anonymous installation
+path. Publishing a BYO-only product instead requires the owner's scope decision.
+
 Code and authentication material have separate release lifecycles. On
 2026-09-20 the owner-authorized bundle was staged as a **draft release in the
 private** `Allcrafter1/cast-audio-receiver-bundles` repository. Its Git history

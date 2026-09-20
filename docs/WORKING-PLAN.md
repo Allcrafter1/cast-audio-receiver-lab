@@ -1,5 +1,26 @@
 # Working plan
 
+## Publication blocker requiring owner scope decision — 2026-09-20
+
+- The execution environment rejected making the separate bundle repository and
+  release public: public disclosure of private TLS/authentication keys, even
+  with the owner's explicit approval. This is an execution/security restriction,
+  NOT a new legal conclusion or a claim that the owner withheld approval.
+- Read-only verification after rejection: bundle repository remains PRIVATE,
+  release 2026.09.20 remains a DRAFT. Neither requested public change executed.
+  Do not retry through another tool/agent/workflow or propose an indirect route.
+- Main source and key-free image work are unaffected. dev18 local suite passes
+  260 tests (10 skips); candidate f3ff8e7 is pushed privately. CI 35522459317
+  and image build 35522486246 were started before the rejection and remain
+  independent of bundle contents. No secret is embedded in the image.
+- The new first-download implementation must NOT be advertised as working for
+  anonymous installation: its planned bundle URL is unavailable. The existing
+  explicit/BYO local-file path remains supported; the live HA app is unchanged.
+- Owner decision required before changing publication scope: publish an
+  experimental code/image release requiring separately user-supplied material,
+  or keep publication pending. The owner previously required a working included
+  default, so silently replacing that promise with BYO-only is not authorized.
+
 ## Publication execution — dev18, 2026-09-20
 
 - User explicitly asks to finish publication, not add more features. Freeze

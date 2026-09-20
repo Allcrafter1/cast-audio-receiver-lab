@@ -251,9 +251,9 @@
       "sha256": "e23a00b7a392aa4b072905e707510d91a413a14b18b66761044f324f8cf4edac"
     },
     {
-      "bytes": 141625,
+      "bytes": 143093,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "417a25b37c88df06ff0c1a86872fa05711f1c86e4d8f52a04c6e0a6e80b3c8c1"
+      "sha256": "4935046d9ddf7b412777996191f491bd15845004d2e6329cd71ef5d18d412633"
     },
     {
       "bytes": 4535,
@@ -346,9 +346,9 @@
       "sha256": "f860f4455d86f47b77e8b7c446a28d2c31ba637c21082c3a1c0aa03b9e1af8a7"
     },
     {
-      "bytes": 4458,
+      "bytes": 5007,
       "path": "docs/bundle-distribution.md",
-      "sha256": "fa70362b139d54a3e20a353ff00c91dfa8d4e239ab540ee26a44fda33f7c68ba"
+      "sha256": "b1c943e3a2669098df3e38444c23c10215429cb034f22852995de3ff822eb5c0"
     },
     {
       "bytes": 8472,
