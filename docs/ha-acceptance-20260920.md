@@ -20,6 +20,10 @@ product repository or embedding private authentication material.
 - The final private certificate inventory (773 windows through 2030-12-06) was
   imported after preserving the previous `/share` input as a rollback copy. The
   frontend returned ready and advertised the persistent route again.
+- The running HA process crossed a real certificate-window boundary at midnight,
+  logged rotation of TLS, device-auth and discovery state, and accepted later
+  Cast connections without an App restart. This validates bundle selection and
+  live rotation for one boundary; it does not prove future Google acceptance.
 
 No media was played through the local output because the HA host has no audio
 device. The laptop development receiver remained stopped to avoid duplicate Cast

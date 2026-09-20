@@ -178,14 +178,19 @@ internal implementation detail.
   dynamic ingress, direct LAN health, App restart and persistent speaker ID/state
   passed. The final private 773-window bundle was supplied separately through
   `/share`, imported with mode 0600 and the Cast frontend returned ready.
+  The same running App subsequently crossed a real midnight bundle boundary,
+  rotated TLS/device-auth/discovery state in place and accepted later Cast
+  connections without a restart.
 - **Next:** publish/scan/inventory the intended image; test update and rollback;
   run physical AirPlay, DLNA and Sonos acceptance where targets are available.
 - **Private source staging:** an allowlisted UTF-8-only export with per-file hash
   manifest excludes `.state`, generated artifacts, device captures, key/cert
   file types and known private host markers. The exported tree independently
   passes the full suite and was pushed as a new-history private GitHub repository
-  at `Allcrafter1/cast-audio-receiver-lab`. CI is the next acceptance gate; this
-  is not yet a public release or redistribution clearance.
+  at `Allcrafter1/cast-audio-receiver-lab`. GitHub CI run `35478233388` passed
+  Python 3.11/3.12/3.13, runtime-wheel inspection, the targeted Rust suite and a
+  clean `linux/amd64` container build. This is not yet a public release or
+  redistribution clearance.
 - **Authentication distribution decision remains explicit:** the user requires a
   normally installed receiver to be functional with the complete bundle. Local
   and HA acceptance already satisfy that through the private `/share` input.

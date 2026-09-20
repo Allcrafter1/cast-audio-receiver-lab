@@ -140,3 +140,8 @@ state; `/health` returned ready, the persistent route remained running and the
 Cast frontend advertised it again. The bundle remains outside the source tree
 and image. This validates local integrity and runtime loading, not future Google
 acceptance, non-revocation or redistribution rights.
+
+The same process later crossed a real midnight certificate boundary. Vibecast
+reported an in-place rotation of TLS, device-auth and discovery state, remained
+healthy and accepted later Cast connections without an App restart. This is the
+first deployed rotation acceptance for the completed bundle.

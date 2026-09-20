@@ -431,6 +431,11 @@ interfaces are still experimental.
 - Add one deployment guide for Home Assistant, OCI and native Linux; make the
   required private certificate input and fail-closed startup behavior explicit,
   and update the development runbook to the dev12 supervisor lifecycle.
+- Pass the first clean-source GitHub CI matrix across Python 3.11--3.13, runtime
+  wheel inspection, targeted Rust tests and a `linux/amd64` container build.
+- Validate one real midnight certificate-window rotation in the running Home
+  Assistant App: TLS/device-auth/discovery state rotated without restart and the
+  receiver continued accepting Cast connections.
 
 - Controls-4 experiment: associate sessions with their LAUNCH connection and
   stop them when that connection closes, independent of lingering subscribers.

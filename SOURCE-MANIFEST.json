@@ -26,9 +26,9 @@
       "sha256": "57d61edc4a7b995c3d99fdf77e29ee7b3252576491e697c682682051c96b054b"
     },
     {
-      "bytes": 32030,
+      "bytes": 32395,
       "path": "CHANGELOG.md",
-      "sha256": "2345ff8950686e0debf4644251435efc2a4714db555025662d5aa60153b072d5"
+      "sha256": "b984638629cd6983af44c283747eea9eee453a2ab2428c93032960c734dd7bcc"
     },
     {
       "bytes": 3018,
@@ -176,9 +176,9 @@
       "sha256": "cba8c7810c90723b7ecd9f4f5f87b388d3ac052d43a12a6b21d7f239017d0194"
     },
     {
-      "bytes": 101259,
+      "bytes": 101567,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "6b45597c238f5150055a55cec5c9e4bb5444f79c688d74d18479a1e9189a6239"
+      "sha256": "082dca102d5e65cf64780e059f29944e3d98d6a0f1aa35109ffa0676eb60fc74"
     },
     {
       "bytes": 4535,
@@ -261,9 +261,9 @@
       "sha256": "d769a4f83d828e89791da51bd99c8d1058b8e2f5211769712d739ca6e73868f2"
     },
     {
-      "bytes": 8172,
+      "bytes": 8472,
       "path": "docs/certificate-continuation-20260919.md",
-      "sha256": "339a68782cd1909eb8624ed6df0a2807ae2efdf201fd461d640d9dd4e9774a1d"
+      "sha256": "5aa98193ae958add3038700b7b90dce5aff823b776f344ae3038ea4a9f811efc"
     },
     {
       "bytes": 5503,
@@ -326,9 +326,9 @@
       "sha256": "8f803c34b8985ddb562e183f30ddb96223387d0423bd214097bb06cf81da16d9"
     },
     {
-      "bytes": 2570,
+      "bytes": 2886,
       "path": "docs/ha-acceptance-20260920.md",
-      "sha256": "0bfc48bdad65536d6889c2c1bdd3da4c249eb036badf1386543617f745ff011f"
+      "sha256": "acfdea0b88bfcd182ff68949104b110df94352e7071036f4b150bfcb96ed78db"
     },
     {
       "bytes": 3800,
