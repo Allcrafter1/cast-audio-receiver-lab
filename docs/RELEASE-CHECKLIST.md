@@ -4,6 +4,11 @@ This is a checklist, not a declaration that the project is ready for publication
 The development receiver and its private runtime inputs are separate from a
 redistributable release. The latest deployment is recorded in WORKING-PLAN.md.
 
+Latest evidence: [dev17 artifact review](release-artifact-review-dev17.md).
+Both current CI and the OCI artifact build pass. The artifact's 26 blob hashes
+and its SPDX/provenance subjects verify. Automatic inventory does not cover all
+native binaries; source/notice packaging and real bundle delivery remain open.
+
 ## dev13 review findings to retain
 
 - Runtime/UI/private HA fixes and automated/reference-RAOP evidence are recorded
@@ -67,8 +72,11 @@ repository rename or history rewrite is needed; no visibility change occurred.
 - [ ] Resolve source-distribution questions in THIRD_PARTY_NOTICES.md. Review
   combined binary/container distribution separately, especially airplay-cli's
   documented mixed-license/unclear-grant components.
-- [ ] Reconstruct and test from the intended clean public source, rather than
+- [x] Reconstruct and test from the intended clean public source, rather than
   relying on untracked files or the old remote vendor directory.
+  Clean staged source at 4a2ae2b passes GitHub Python/Rust/container CI; the
+  separate OCI artifact review build also passed. This does not check off the
+  native corresponding-source or real bundle distribution tasks.
 - [x] Document supported installation and private runtime-input requirements.
   Do not imply credential redistribution permission or future Google acceptance.
 - [ ] Add immutable release artifacts/tags only after the corresponding source,

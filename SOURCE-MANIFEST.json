@@ -216,9 +216,9 @@
       "sha256": "57d2ed0446f3be3f1e86f92d2393c21ff9ac6ed91e585fdf0764b4db8999fba7"
     },
     {
-      "bytes": 6701,
+      "bytes": 7236,
       "path": "docs/RELEASE-CHECKLIST.md",
-      "sha256": "ba46f63d1a0cf282a2b1d79e50de36aa82b53021bcc7a59e11b4f2fa1ba7a0fd"
+      "sha256": "d4a077096ca4383cc65bc22827b30eec0aa65de5d5da1f893b79a2e1c2b641ec"
     },
     {
       "bytes": 8678,
@@ -226,9 +226,9 @@
       "sha256": "e23a00b7a392aa4b072905e707510d91a413a14b18b66761044f324f8cf4edac"
     },
     {
-      "bytes": 134783,
+      "bytes": 137042,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "e72ce7a21b6f0d08db160d8c4e5a167cd0157b8e2115173b77a96c3eaa44f437"
+      "sha256": "ddb19b17d04baa374c7d8f38990f8b9ce5820fff51fed8784d3300087cc1d22a"
     },
     {
       "bytes": 4535,
@@ -439,6 +439,11 @@
       "bytes": 2190,
       "path": "docs/queue-start-diagnostics.md",
       "sha256": "e0ed459d22ff48a0a020793b5ac0e9de17c638e2b843557aa4a58c616218ad3c"
+    },
+    {
+      "bytes": 3245,
+      "path": "docs/release-artifact-review-dev17.md",
+      "sha256": "272eb4b65a7e0db45ce310c7a8f228fcfc548dad4e4a08cc2a5eeb64f487976f"
     },
     {
       "bytes": 6476,
@@ -1001,6 +1006,11 @@
       "sha256": "277a6d1c07511df5eca627805b27c5f43d65ee5fbce9922987fc982c327e2967"
     },
     {
+      "bytes": 3385,
+      "path": "tests/test_oci_review.py",
+      "sha256": "a44df700373588c731057b01100008adbe3205bd62843834827b1f874a20bae6"
+    },
+    {
       "bytes": 3156,
       "path": "tests/test_output_registry.py",
       "sha256": "ae153faac4cfb1905df290c79f1891304499ff5f668b1a05e418b90198bc8b35"
@@ -1184,6 +1194,11 @@
       "bytes": 6763,
       "path": "tools/import_shanocast_bundle.py",
       "sha256": "8a38a7df3a810e1caac5d7b81a9657d7c6d3d20323ec0e0bdf50c28ae60ff17e"
+    },
+    {
+      "bytes": 6146,
+      "path": "tools/inspect_oci_review.py",
+      "sha256": "ae7b90f5f37e8226776f20b436c151215a53ee3b2f14ff421a6e17bcbcbb69e6"
     },
     {
       "bytes": 2088,

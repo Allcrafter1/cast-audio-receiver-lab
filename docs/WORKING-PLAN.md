@@ -1,5 +1,36 @@
 # Working plan
 
+## Final artifact review — 2026-09-20 (authoritative release status)
+
+- Owner authorizes publication **if no release blockers remain**. Main repository
+  remains private; no image or authentication bundle has been publicly released.
+  The accepted historical discovery identifiers are not a remaining blocker.
+- CI at product commit `4a2ae2bef8add95d6687e49a84bedf756c185264` passed all
+  Python 3.11/3.12/3.13, Rust and container jobs (run 35519362352).
+- Private OCI review run 35519446102 also passed. Downloaded artifact checksum,
+  all 26 blob hashes and referenced layer sizes verify; SPDX and SLSA provenance
+  refer to image `sha256:ed309583fdcc2bcd8617b9d8bdbdee34c9d988bb7dbc99d6f1710b4665299b56`.
+  The scanner lists 352 package records. This is integrity/build evidence, not
+  blanket licence clearance: separate native executables are scanner blind spots.
+- New read-only `tools/inspect_oci_review.py` checks descriptor/subject integrity,
+  optional streamed blob integrity and bounded metadata without dumping build
+  arguments, extracting layers or running image code. Regression tests cover
+  corruption, duplicate entries, missing evidence and wrong subjects.
+- Final local suite: 248 tests completed successfully, 10 environment skips.
+  Allowlisted export: 259 files; current nine-commit history check reports no
+  findings and exactly one owner-approved historical identifier document.
+- Fork README is public and corrected. Follow-up documentation-only commit
+  `ae08681b2d617627d9e1a4edf2b0c9546ba567d9` adds the Chromium BSD text beside
+  cast_channel.proto and links it from README. Runtime pin remains e67628f;
+  runtime code is unchanged and main distribution already preserves BSD text.
+- Remaining concrete delivery work: corresponding-source/native notice package;
+  separately hosted real bundle and pinned installation path; published-image
+  installation/update/rollback verification. These must not be marked complete
+  merely because CI passes. See `release-artifact-review-dev17.md`.
+- Hardware breadth (HomePod, Yamaha, Sonos, concurrent outputs, small machines)
+  remains explicitly unverified, not a demand for universal hardware support
+  before an honestly labelled experimental release. HA stays on accepted dev16.
+
 ## Owner approval and fork correction — 2026-09-20
 
 - Owner accepts the identified non-credential discovery identifiers in old
