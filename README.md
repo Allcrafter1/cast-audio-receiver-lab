@@ -165,8 +165,7 @@ their own copyrights and licences. The project does not use Google's official
 Cast SDK or a receiver registered in the Cast developer console.
 
 Much of the implementation was developed collaboratively with GPT/Astra and
-other AI coding assistance. The initiator began with almost no programming
-experience; requirements, architecture and behavior were worked out together
+other AI coding assistance. I have almost no programming
+experience but requirements, architecture and behavior were worked out together
 and then tested repeatedly on real devices. Experienced review and contributions
-are very welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and never attach
-authentication bundles, keys, account tokens or signed media URLs to an issue.
+are very welcome. 
