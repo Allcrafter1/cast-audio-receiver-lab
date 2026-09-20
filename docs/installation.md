@@ -28,8 +28,10 @@ In Home Assistant, open **Settings → Apps → App store → Repositories**, ad
 install **Cast Audio Receiver Lab**. Only `amd64` is supported by this release.
 
 The source package under `cast-audio-receiver/` has passed a real HAOS/
-Supervisor build, install, ingress, LAN, local-audio restart and
-state-persistence test. It references the version-matched public GHCR image.
+Supervisor source build, install, ingress, LAN, local-audio restart and
+state-persistence test. The public repository and image were subsequently used
+for a real update that retained three configured route IDs and for a disposable
+clean first install. It references the version-matched public GHCR image.
 
 No bundle option is required for a clean install. To avoid the network download
 or use your own material, put a bundle at a persistent absolute path and set
@@ -75,8 +77,8 @@ For BYO material, additionally mount the file read-only and set
 `CAST_AUDIO_CERTS` to its container path.
 
 The UI is then available at `http://LINUX_LAN_IP:8788`. The published image has
-an attached GitHub Actions provenance/SBOM record; broader hardware and
-published-image rollback testing remain open.
+an attached GitHub Actions provenance/SBOM record; broader hardware and explicit
+older-image rollback testing remain open.
 
 ## Native Linux development install
 

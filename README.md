@@ -60,7 +60,7 @@ disabled in normal builds; its WebSocket/manifest/licence routes remain internal
 | --- | --- |
 | YouTube Music → local / legacy AirPlay | Earlier releases tested extensively on laptop and Redmi reference receiver; review candidate requires physical regression acceptance. |
 | Default Media Receiver | User-tested Home Assistant direct media. Not a promise of all Cast apps, DRM or Cast queue support. |
-| Home Assistant App | Experimental amd64 source install, ingress and persistence tested. User confirmed physical local output and embedded UI after the dev14 fixes. |
+| Home Assistant App | Public amd64 image update and clean repository install tested on HAOS; ingress, persistent route IDs, local output and embedded UI were also accepted during development. Explicit older-image rollback remains open. |
 | HomePod / native AirPlay 2 / Yamaha | Upstream sender paths exist; physical acceptance outstanding. |
 | DLNA | Discovery and local HTTP compatibility implemented. User confirmed YouTube Music on one older Samsung, alongside direct MP3 and HA-transcoded WebM/Opus tests; wider hardware coverage remains open. See [DLNA notes](docs/dlna.md). |
 | Sonos | Implemented with library and mocked tests; real hardware unverified. External renderers cannot pull internal-only manifest URLs. |
@@ -78,6 +78,8 @@ the legacy reference receiver; this is not evidence of HomePod compatibility.
 See [installation](docs/installation.md), [packaging](docs/packaging.md) and the
 [current runbook](docs/current-runbook.md). A native source install needs the
 frontend binary, runtime tools and valid user-supplied authentication material:
+
+[![Add the Cast Audio Receiver repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FAllcrafter1%2Fcast-audio-receiver-lab)
 
 ```bash
 cast-audio-receiver --frontend /path/to/vibecast \
