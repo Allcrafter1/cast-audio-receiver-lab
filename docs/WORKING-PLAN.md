@@ -166,7 +166,7 @@ internal implementation detail.
   a separate configurable `web_port` serves the trusted LAN. Options and the
   allocated port are read through the authenticated self-info API, avoiding a
   dependency on direct access to Supervisor's root-owned options file.
-- **Verified:** 200 Python tests complete successfully (19 explicit environment
+- **Verified:** 201 Python tests complete successfully (19 explicit environment
   skips in the current development environment). A clean dev12 wheel contains
   no historical modules, installs over the complete offline runtime lock and
   exposes the expected entrypoints. The
@@ -183,7 +183,7 @@ internal implementation detail.
 - **Private source staging:** an allowlisted UTF-8-only export with per-file hash
   manifest excludes `.state`, generated artifacts, device captures, key/cert
   file types and known private host markers. The exported tree independently
-  passes all 200 tests and was pushed as a new-history private GitHub repository
+  passes the full suite and was pushed as a new-history private GitHub repository
   at `Allcrafter1/cast-audio-receiver-lab`. CI is the next acceptance gate; this
   is not yet a public release or redistribution clearance.
 - **Authentication distribution decision remains explicit:** the user requires a

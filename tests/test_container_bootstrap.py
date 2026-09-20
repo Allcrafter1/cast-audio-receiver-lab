@@ -112,6 +112,20 @@ class ContainerBootstrapTests(unittest.TestCase):
                     root, uid=os.getuid(), gid=os.getgid()
                 )
 
+    def test_configured_missing_bundle_fails_instead_of_starting_unusable(self):
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary) / "data"
+            root.mkdir()
+            container_bootstrap.prepare_state(root, os.getuid(), os.getgid())
+            (root / "options.json").write_text(
+                json.dumps({"certificate_path": str(Path(temporary) / "missing.json")})
+            )
+
+            with self.assertRaisesRegex(ValueError, "regular file"):
+                container_bootstrap.import_certificate_bundle(
+                    root, uid=os.getuid(), gid=os.getgid()
+                )
+
 
 if __name__ == "__main__":
     unittest.main()

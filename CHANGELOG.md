@@ -35,7 +35,7 @@
   manifest. Its fresh export excludes private state/artifacts and passes the
   full suite. A private GitHub staging repository now exercises real CI without
   declaring the project publicly released.
-- Python suite: 200 tests complete successfully with 19 environment-dependent
+- Python suite: 201 tests complete successfully with 19 environment-dependent
   skips in the current development environment. Targeted
   Rust gate: 110 tests pass with one explicit live-network probe ignored.
 

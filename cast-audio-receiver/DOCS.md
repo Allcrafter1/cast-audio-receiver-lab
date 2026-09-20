@@ -5,12 +5,16 @@ This is the thin Home Assistant packaging layer for the same OCI image and
 not a separate implementation.
 
 The app is currently a **packaging preview**, not an installable public release:
-the referenced GHCR image has not been published. Place a compatible private
+the referenced GHCR image has not been published. A real HAOS/Supervisor source
+build, install, ingress/LAN, restart and persistent-route test has passed. Place a compatible private
 Cast authentication bundle at `/share/cast-audio-receiver/certs.json` before
 starting the App. The file is mounted read-only; an advanced configuration may
 select another absolute path. Private authentication material is intentionally
 not stored in this repository, entered into the web UI or exposed through
-diagnostics.
+diagnostics. Startup fails explicitly when the configured bundle is absent,
+invalid or unreadable; the App must never appear healthy as a nonfunctional Cast
+receiver. The owner's private test installation uses the complete validated
+773-window bundle through 2030-12-06.
 
 Home Assistant ingress opens the management UI without a second application
 login. Host networking is required for Cast and AirPlay discovery. Current

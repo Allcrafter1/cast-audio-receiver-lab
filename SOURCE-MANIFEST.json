@@ -11,9 +11,9 @@
       "sha256": "ad3c592c5c3126d357c6bc0dadfba2ce0aa751eda3493f76c4f1540ae5aebf53"
     },
     {
-      "bytes": 2038,
+      "bytes": 2059,
       "path": ".github/workflows/ci.yml",
-      "sha256": "b8ab4fb012bc2d9c1022fa9337679b1571c5bf6a2db7930c010f2e5d3efaad02"
+      "sha256": "cc7d48a89472d1befcd9f2a3ca58ab88b738301902adc8f80641057bf556e21f"
     },
     {
       "bytes": 1845,
@@ -28,7 +28,7 @@
     {
       "bytes": 31799,
       "path": "CHANGELOG.md",
-      "sha256": "70ad3dd678f4dcf43a802985bb65a5086c9299a84a1a0c4d0cc0db7c8c17f602"
+      "sha256": "5abdccf1da6eadf609b615b4117b4efdd6a65991db413e895f815201a0b6f097"
     },
     {
       "bytes": 3018,
@@ -56,9 +56,9 @@
       "sha256": "ecfe9dcfc423690b8724d1063d64d24965fe5e1bc71d7abf181d4bd0923979a9"
     },
     {
-      "bytes": 1738,
+      "bytes": 2101,
       "path": "cast-audio-receiver/DOCS.md",
-      "sha256": "f49e8d08570e84ac0efc239014741071c469b3ffffd6e6232ad2b5bfe8681adf"
+      "sha256": "269a2ac691e2ad410eda54bdda71fd4b6c26ebe063a20a4a8f2e7906ca61854e"
     },
     {
       "bytes": 755,
@@ -161,9 +161,9 @@
       "sha256": "57d2ed0446f3be3f1e86f92d2393c21ff9ac6ed91e585fdf0764b4db8999fba7"
     },
     {
-      "bytes": 4141,
+      "bytes": 4146,
       "path": "docs/RELEASE-CHECKLIST.md",
-      "sha256": "ae2cb35af21bf9f9e07aa7304702d42b512db823c1c0fcc20d5127066966ceaf"
+      "sha256": "6dcf45bd14a38ac8b9801e39d9bdabf7a7ab729d16277a77202e9973e43cb78b"
     },
     {
       "bytes": 6977,
@@ -171,9 +171,9 @@
       "sha256": "cba8c7810c90723b7ecd9f4f5f87b388d3ac052d43a12a6b21d7f239017d0194"
     },
     {
-      "bytes": 100882,
+      "bytes": 100883,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "536bdde7da50ba3588a5c1368cafedfe239cba0818064c6a3fa7fb86bc94d3f9"
+      "sha256": "e19d29aead7f8362a42e3bcedd617989967014fe927212c088701af28af148e4"
     },
     {
       "bytes": 4535,
@@ -801,9 +801,9 @@
       "sha256": "6f7af95762dcd3ad44218e0e90710fc3409bb645eef5d07a4c698dc130c1326a"
     },
     {
-      "bytes": 5031,
+      "bytes": 5668,
       "path": "tests/test_container_bootstrap.py",
-      "sha256": "b2d1290f7ceba917bd329b25736f20d7ded2976f5cd3e98c3643b9fc28e67fee"
+      "sha256": "95721faa8672812cd408c2bfbb509b1d625dcabe2f0676f72c7e7077e0d629f1"
     },
     {
       "bytes": 4314,
