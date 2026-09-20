@@ -1,4 +1,4 @@
-# Current architecture (dev13)
+# Current architecture (dev18)
 
 This document describes the active product path. Historical experiments live
 under `research/` and are not installed with the runtime wheel.
@@ -74,9 +74,9 @@ singleton policy, process arguments and backend construction. It is deliberately
 not an arbitrary runtime plugin loader; normal source changes are an acceptable
 cost for a new adapter.
 
-DLNA and Sonos currently let the physical target fetch the source URL. They do
-not yet add a relay/transcoder, because that would introduce another HTTP
-server, seek/range semantics, CPU cost and failure boundary. See
+DLNA uses direct target fetch when compatible and a bounded local HTTP relay for
+finite media that needs HTTPS termination or FFmpeg remux/transcode. Sonos still
+uses direct target fetch and remains hardware-unverified. See `dlna.md` and
 `network-outputs.md`.
 
 ## Component roles
@@ -91,20 +91,20 @@ server, seek/range semantics, CPU cost and failure boundary. See
 - **airplay-cli:** upstream AirPlay/RAOP transport, metadata and receiver events.
 - **async-upnp-client / SoCo:** optional DLNA and Sonos control transports.
 
-## Remaining release debt
+## Remaining experimental-release debt
 
 The architecture is now a reasonable open-source base: responsibilities are
 separated, lifecycle has one owner, protocols are versioned, extensions have
 narrow boundaries, and deterministic tests cover failure/cancellation paths.
-It is not release-finished. Remaining work is mostly product/release engineering:
+The first public experimental release has a built OCI image, source/notice
+archives, Home Assistant packaging and a separately released authentication
+bundle. Remaining work is primarily broader acceptance and maintenance:
 
-- build and smoke-test the OCI image on a Docker-capable host;
-- install/update/rollback-test the Home Assistant wrapper on real Supervisor;
-- finish complete dependency/SBOM/licence inventories;
+- install/update/rollback-test the **published image** on real Supervisor;
+- continue dependency/SBOM/licence review as dependencies change;
 - perform physical DLNA/Sonos and additional AirPlay target acceptance;
-- create a sanitized clean-history product repository and publish artifacts;
-- complete and privately provision the replaceable authentication bundle;
-- decide whether hardware evidence justifies a network-output relay/transcoder.
+- test parallel outputs, receiver-origin controls and weaker hardware;
+- add architectures only when their native AirPlay artifact/build is verified.
 
 The known fragile boundaries are Cast authentication policy, undocumented
 YouTube/Lounge behavior, yt-dlp extraction, signed source URLs, AirPlay upstream

@@ -70,8 +70,8 @@ This is an **experimental pre-release**. The core paths are usable and tested,
 but hardware coverage is deliberately limited and the Cast authentication path
 can be revoked independently of this code. The
 [working plan](docs/WORKING-PLAN.md) distinguishes implemented, automated-tested,
-deployed and user-confirmed work. airplay-cli v0.5.4 is the update candidate,
-not evidence of tested HomePod compatibility.
+deployed and user-confirmed work. airplay-cli v0.5.4 is pinned and tested against
+the legacy reference receiver; this is not evidence of HomePod compatibility.
 
 ## Install and configure
 

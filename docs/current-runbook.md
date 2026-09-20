@@ -71,8 +71,9 @@ guarantee.
 
 Choose persistent private directories outside the release tree. Keep an existing
 frontend data directory and manager routes to preserve identities and volume.
-The manager directory must have mode 0700. The certificate bundle is a separate
-private runtime input; this runbook does not provision a trusted identity.
+The manager directory must have mode 0700. With no `--certs` option and no
+existing state, the packaged release manifest acquires the separate bundle once.
+Use `--certs` for a local/BYO replacement; it always takes priority.
 For a new frontend state directory use `config/vibecast-audio.toml` as its
 `config.toml`; it aligns Eureka/streaming capability fields with audio-only
 operation. Do not overwrite an existing customized configuration blindly.
@@ -82,7 +83,6 @@ operation. Do not overwrite an existing customized configuration blindly.
   --frontend /absolute/release/vibecast \
   --cliairplay /absolute/tools/cliairplay \
   --data-dir /absolute/private/state \
-  --certs /absolute/private/certs.json \
   --web-port 8788
 ```
 

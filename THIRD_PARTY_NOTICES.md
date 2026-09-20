@@ -64,9 +64,8 @@ is `openssl-3.5.4`, while its actual gitlink remains
 `8ddacec11481a37302c19f4454e23299af399f83`. A normal recursive checkout uses
 the gitlink, not the hint. Its build script also skips existing static archives.
 Consequently, merely including that recursive checkout and invoking its build
-script does not yet establish matching source for the shipped library. Resolve
-this using documented upstream build provenance or a verified source-built
-artifact before distributing a project binary/image.
+script does not establish matching source for the shipped library. The release
+instead retains the explicit source archive described below.
 
 Follow-up history inspection found the matching 3.5.4 source gitlink in the
 immediately preceding proxy commit, with unchanged Linux archive/build files.

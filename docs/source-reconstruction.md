@@ -1,6 +1,6 @@
 # Reconstructing the Rust frontend
 
-## Current dev17 maintained source
+## Current dev18 maintained source
 
 Build commit `e67628fa72550095f92197550d60d8e94c503d4e` from
 `https://github.com/Allcrafter1/vibecast.git` directly. Exact input and fallback
@@ -13,7 +13,7 @@ byte-for-byte as a Git diff. README and AGENTS additionally explain the fork.
 Do **not** apply the overlay on top of this commit. The previous reconstruction
 instructions below are historical fallback recipes.
 
-## Current dev13 private review overlay
+## Historical dev13 private review overlay
 
 Start at the dev12 maintained commit below, then apply
 `patches/vibecast-dev13-internal-bridge.patch` once. Its exact digest/base are in
@@ -23,7 +23,7 @@ it contains no authentication material. The source changes are local review
 work, not a newly published fork revision. Do not apply it on top of itself or
 assume the old dev12 binary hash identifies the dev13 build.
 
-## Current dev12 source
+## Historical dev12 source
 
 The primary source is the reviewable maintained fork commit
 `f28befe02fe930db300294d6bf49cdf5fec5a747` in
@@ -33,7 +33,7 @@ fork commit. `patches/vibecast-0.6.0.dev12-complete.patch` remains a hash-locked
 fallback that reconstructs the same 109 build inputs from the upstream base; it
 is not stacked with historical patches.
 
-## Current dev11 snapshot
+## Historical dev11 snapshot
 
 `patches/vibecast-0.6.0.dev11-complete.patch` is the single full patch on the
 same upstream commit used below. It adds the artwork-only bridge report and

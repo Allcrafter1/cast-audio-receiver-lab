@@ -1,6 +1,6 @@
-"""Explicit, hash-pinned artifact acquisition; no embedded distribution URL.
+"""Explicit, hash-pinned authentication-artifact acquisition.
 
-The caller must obtain the manifest digest through a trusted release channel.
+The release pins a reviewed manifest and its digest; callers may supply another.
 This checks artifact integrity, not device identity validity or redistribution
 rights. The frontend remains responsible for validating the bundle contents.
 """

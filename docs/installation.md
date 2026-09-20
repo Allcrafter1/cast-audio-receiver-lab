@@ -21,7 +21,11 @@ replaced. Set `certificate_path` to use a local/BYO bundle instead.
 Certificate date coverage is not a guarantee of Google acceptance: server-side
 revocation or a protocol change can invalidate it earlier.
 
-## Home Assistant App preview
+## Home Assistant App
+
+In Home Assistant, open **Settings → Apps → App store → Repositories**, add
+`https://github.com/Allcrafter1/cast-audio-receiver-lab`, refresh the store and
+install **Cast Audio Receiver Lab**. Only `amd64` is supported by this release.
 
 The source package under `cast-audio-receiver/` has passed a real HAOS/
 Supervisor build, install, ingress, LAN, local-audio restart and
