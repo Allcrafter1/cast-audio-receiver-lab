@@ -2,13 +2,27 @@
 
 ## Native source delivery progress — 2026-09-20
 
+- Final local regression run: 256 tests completed successfully, 10 environment
+  skips; 271-file allowlisted source export. No change to the live HA receiver.
+  Remaining release work is explicitly the base-image/embedded-native notice
+  audit, public bundle availability/install path, and image update/rollback;
+  collected source archives are not to be confused with all three being done.
+
+- Python source collector verifies the exact 31 pinned container wheel hashes
+  against PyPI and finds an sdist for each. All sdists downloaded/hash-checked
+  without running setup/build code; 33 MB source ZIP and inventory uploaded to
+  private dev17 draft. The Deno wrapper and native wheel libraries remain an
+  explicit scope limit, not silently counted as complete native source coverage.
+  See `source-delivery.md` for artifacts and remaining component distinctions.
+
 - Native source archive and hash record retained in the PRIVATE main project's
   draft v0.6.0-dev17 release. Clean exported source runs 251 tests successfully
   (10 environment skips); history scan passes 11 commits/366 path versions.
-- Next source task: manual `source-review.yml` vendors the immutable frontend's
-  locked crates with Cargo, retains their notices, and must complete an offline
-  CLI build before uploading an archive. Workflow added; success is not yet
-  claimed. This does not change runtime dependencies or publish an image.
+- Manual `source-review.yml` run 35521105935 PASSED: immutable frontend plus
+  Cargo.lock-vendored crates builds the release CLI with --frozen. Downloaded
+  archive SHA-256 verified; 381 metadata packages, each declares a licence or
+  licence-file field. This is an inventory, not blanket compatibility clearance.
+  The archive is retained with the private release draft. Runtime is unchanged.
 
 - Added reproducible `tools/package_airplay_source.py`: nine pinned public
   component trees, preserved notices, explicit OpenSSL correction and standalone

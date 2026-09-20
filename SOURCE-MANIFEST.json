@@ -36,9 +36,9 @@
       "sha256": "57d61edc4a7b995c3d99fdf77e29ee7b3252576491e697c682682051c96b054b"
     },
     {
-      "bytes": 38179,
+      "bytes": 38417,
       "path": "CHANGELOG.md",
-      "sha256": "ac8e96e20ee9effe68855ef847947d03156b895e6abf28e4d86aa5704a85c1eb"
+      "sha256": "97ad4eb8ba9bd595db1c35ff3a97e7ae47fbfba5a2d5708ea57491a92012f4bf"
     },
     {
       "bytes": 3018,
@@ -66,9 +66,9 @@
       "sha256": "84041ea1e4f64460d1d2c0557ef8faa108c59704efe84009469a9902a97aa3a4"
     },
     {
-      "bytes": 8851,
+      "bytes": 9635,
       "path": "THIRD_PARTY_NOTICES.md",
-      "sha256": "361a50e4d2254f8440967d77a2149728fb7843a87272795905226e62c6d4d43e"
+      "sha256": "6f24006885cc4748293b9b4f0877a31069de43f55f9e6d2f7a74b0dec2d3c2cf"
     },
     {
       "bytes": 895,
@@ -144,6 +144,11 @@
       "bytes": 7500,
       "path": "config/container-linux-x86_64-cp312.wheels.json",
       "sha256": "1eb8144d635bb43f2b2cd401741277acf2c40ea8845bbc4a3dbcedacdbaec311"
+    },
+    {
+      "bytes": 18554,
+      "path": "config/container-python-source-references.json",
+      "sha256": "9e3364d0efeee0808c5c1a71c784aa47f9495b4d4534865b264a8cb5e565ae0b"
     },
     {
       "bytes": 1780,
@@ -241,9 +246,9 @@
       "sha256": "e23a00b7a392aa4b072905e707510d91a413a14b18b66761044f324f8cf4edac"
     },
     {
-      "bytes": 139552,
+      "bytes": 140502,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "dc97902f2a295b64bce76f51aaeb1ede7e61b354ec6a416cb136d6a4ab9eb53e"
+      "sha256": "a33594bb28ecb1b209a25588914ca0614caba6252c310d19f21f2ebedb0fa29c"
     },
     {
       "bytes": 4535,
@@ -481,6 +486,11 @@
       "sha256": "acd7c789bda32a9ae3990064d33bd8fc835fbdc094699bb7117f203fc0b182de"
     },
     {
+      "bytes": 3455,
+      "path": "docs/source-delivery.md",
+      "sha256": "bce0f049789bd5544697cd4f32b317950b72633ba9c5c126c299d33ecf147233"
+    },
+    {
       "bytes": 8780,
       "path": "docs/source-reconstruction.md",
       "sha256": "f7a4c9f9c079bed1ed4e84b3d2df5fdc470b072ddb070db61e7b0ce7af01c1f5"
@@ -509,6 +519,11 @@
       "bytes": 1657,
       "path": "licenses/Chromium-BSD.txt",
       "sha256": "931754224a0de7cf686aaf46ce0d2fbfab983435bc78fed3e9e23f3e47700aa1"
+    },
+    {
+      "bytes": 1074,
+      "path": "licenses/Deno-2.9.6-MIT.txt",
+      "sha256": "f62497fffecc0852960c8d3e6934b9db86d16396e9b604072e923892cae3a588"
     },
     {
       "bytes": 10175,
@@ -1061,6 +1076,11 @@
       "sha256": "6c7feaba754173283a406bdbae659d60d21a1704fe3cf73e25e77990be924cb5"
     },
     {
+      "bytes": 3605,
+      "path": "tests/test_python_source_inventory.py",
+      "sha256": "196571e96f93d98f317f7802476459ef3b3c5bbb147245f099e810f58b8b5183"
+    },
+    {
       "bytes": 4315,
       "path": "tests/test_release_records.py",
       "sha256": "39b96cbf688d6d6a628a1cfafd63b28123577ff58af6fcbf31b1be20ac5422f7"
@@ -1279,6 +1299,11 @@
       "bytes": 4665,
       "path": "tools/probe_mdns.py",
       "sha256": "6d586d6068203a1845a085b0fe6ef877afd496166b719a9252be95b42b6e0130"
+    },
+    {
+      "bytes": 5333,
+      "path": "tools/python_source_inventory.py",
+      "sha256": "aebc354ebcff036001059d7e8095e0ec1ed7bc0f5c3401341ebbb91982e45e99"
     },
     {
       "bytes": 670,

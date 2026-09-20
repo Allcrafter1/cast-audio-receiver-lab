@@ -1,0 +1,472 @@
+{
+  "schema": 1,
+  "packages": [
+    {
+      "name": "aiohappyeyeballs",
+      "version": "2.7.1",
+      "wheel_sha256": "9243213661e29250eb41368e5daa826fc017156c3b8a11440826b2e3ed376472",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "aiohappyeyeballs-2.7.1.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/ce/f4/eec0465c2f67b2664688d0240b3212d5196fd89e741df67ddb81f8d35658/aiohappyeyeballs-2.7.1.tar.gz",
+          "sha256": "065665c041c42a5938ed220bdcd7230f22527fbec085e1853d2402c8a3615d9d",
+          "size": 24757
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "aiohttp",
+      "version": "3.14.3",
+      "wheel_sha256": "543906c127fb1d929b95076db19b83fa2d46751006ff1e23b093aa5ac4d8db42",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "aiohttp-3.14.3.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/58/d9/22ce5786ac0c1653ae8b6c23bded02c1686d11f0dbb45b31ce128e0df985/aiohttp-3.14.3.tar.gz",
+          "sha256": "9491196535a88924a60afd5b5f434b5b203b6cc616250878dbdb223a8f7844bc",
+          "size": 7971213
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "aiosignal",
+      "version": "1.4.0",
+      "wheel_sha256": "053243f8b92b990551949e63930a839ff0cf0b0ebbe0597b0f3fb19e1a0fe82e",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "aiosignal-1.4.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/61/62/06741b579156360248d1ec624842ad0edf697050bbaf7c3e46394e106ad1/aiosignal-1.4.0.tar.gz",
+          "sha256": "f47eecd9468083c2029cc99945502cb7708b082c232f9aca65da147157b251c7",
+          "size": 25007
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "appdirs",
+      "version": "1.4.4",
+      "wheel_sha256": "a841dacd6b99318a741b166adb07e19ee71a274450e68237b4650ca1055ab128",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "appdirs-1.4.4.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/d7/d8/05696357e0311f5b5c316d7b95f46c669dd9c15aaeecbb48c7d0aeb88c40/appdirs-1.4.4.tar.gz",
+          "sha256": "7d5d0167b2b1ba821647616af46a749d1c653740dd0d2415100fe26e27afdf41",
+          "size": 13470
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "async_upnp_client",
+      "version": "0.48.1",
+      "wheel_sha256": "726ce14ad93a91bdf72b6ddd04c0b85a9ee95e84c996929690aa6cc57569d759",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "async_upnp_client-0.48.1.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/2f/20/a1fd2ca0d948d5227882b13cc32ce216d9fc9fcf3f3962f9936a00fffbf8/async_upnp_client-0.48.1.tar.gz",
+          "sha256": "86a7dc6192381a7dc6c06ffd21438c85c5cfacc9b98ce23735415cdf33383776",
+          "size": 116871
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "attrs",
+      "version": "26.1.0",
+      "wheel_sha256": "c647aa4a12dfbad9333ca4e71fe62ddc36f4e63b2d260a37a8b83d2f043ac309",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "attrs-26.1.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/9a/8e/82a0fe20a541c03148528be8cac2408564a6c9a0cc7e9171802bc1d26985/attrs-26.1.0.tar.gz",
+          "sha256": "d03ceb89cb322a8fd706d4fb91940737b6642aa36998fe130a9bc96c985eff32",
+          "size": 952055
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "brotli",
+      "version": "1.2.0",
+      "wheel_sha256": "072e7624b1fc4d601036ab3f4f27942ef772887e876beff0301d261210bca97f",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "brotli-1.2.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/f7/16/c92ca344d646e71a43b8bb353f0a6490d7f6e06210f8554c8f874e454285/brotli-1.2.0.tar.gz",
+          "sha256": "e310f77e41941c13340a95976fe66a8a95b01e783d430eeaf7a2f87e0a57dd0a",
+          "size": 7388632
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "certifi",
+      "version": "2026.7.22",
+      "wheel_sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "certifi-2026.7.22.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/a3/c2/24167ea9858356b47a87a50d39908bfdb72ceeefe0041586e704e5376b3a/certifi-2026.7.22.tar.gz",
+          "sha256": "741e2c3b351ddf169a738da9f2c048608ff7f2c5cc02f1ebc6b118bb090d5d55",
+          "size": 138112
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "charset-normalizer",
+      "version": "3.5.1",
+      "wheel_sha256": "b9af956078716df40d985fb0dfeb2c2120c5ca92ba4ff4b388acfd01cdc14d08",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "charset_normalizer-3.5.1.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/e5/3f/143b048436775b0f76ac3eec145c019e8173ccc2885c8f20319b996d5e83/charset_normalizer-3.5.1.tar.gz",
+          "sha256": "6117b84ea48435e5356dc737f5121485c30920ba43375fa7b434fd753df0eac3",
+          "size": 171764
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "defusedxml",
+      "version": "0.7.1",
+      "wheel_sha256": "a352e7e428770286cc899e2542b6cdaedb2b4953ff269a210103ec58f6198a61",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "defusedxml-0.7.1.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/0f/d5/c66da9b79e5bdb124974bfe172b4daf3c984ebd9c2a06e2b8a4dc7331c72/defusedxml-0.7.1.tar.gz",
+          "sha256": "1bb3032db185915b62d7c6209c5a8792be6a32ab2fedacc84e01b52c51aa3e69",
+          "size": 75520
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "deno",
+      "version": "2.9.6",
+      "wheel_sha256": "037458003a1c76382e41baa1cd152b3325d9a13b2678f75cc653c893c0b2dfec",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "deno-2.9.6.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/3b/fa/04bdb9b54ee425a9708c82c61e3acf5796405718756600c7aab79910b712/deno-2.9.6.tar.gz",
+          "sha256": "0dba7666e7d3db62ff1e73f7f69fc74b63a551a198c311d2ffb409d1dc96167f",
+          "size": 8167
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "frozenlist",
+      "version": "1.8.0",
+      "wheel_sha256": "494a5952b1c597ba44e0e78113a7266e656b9794eec897b19ead706bd7074383",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "frozenlist-1.8.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/2d/f5/c831fac6cc817d26fd54c7eaccd04ef7e0288806943f7cc5bbf69f3ac1f0/frozenlist-1.8.0.tar.gz",
+          "sha256": "3ede829ed8d842f6cd48fc7081d7a41001a56f1f38603f9d49bf3020d59a31ad",
+          "size": 45875
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "idna",
+      "version": "3.20",
+      "wheel_sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "idna-3.20.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/f5/08/8eea9d4b8302028f3abb2c0813953f7aec26d33b7a8960ed760e65ff29fa/idna-3.20.tar.gz",
+          "sha256": "a7db850025b95ded1eae8a46181a1a6c56c92c96f0e2b005d9ff8dc0210cab44",
+          "size": 216463
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "ifaddr",
+      "version": "0.2.0",
+      "wheel_sha256": "085e0305cfe6f16ab12d72e2024030f5d52674afad6911bb1eee207177b8a748",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "ifaddr-0.2.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/e8/ac/fb4c578f4a3256561548cd825646680edcadb9440f3f68add95ade1eb791/ifaddr-0.2.0.tar.gz",
+          "sha256": "cc0cbfcaabf765d44595825fb96a99bb12c79716b73b44330ea38ee2b0c4aed4",
+          "size": 10485
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "lxml",
+      "version": "6.1.3",
+      "wheel_sha256": "909f4e927bb051f7740d6367285fc60cdcfdaf0258c2dba4ff5ba7eadadc250c",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "lxml-6.1.3.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/23/ad/28ecd7cb894d172f3c9c80a075eeeb2017ac62e3632cee05a5f9493547eb/lxml-6.1.3.tar.gz",
+          "sha256": "45222d94ddd511536f3b2f7d9deae3b2339b4ce0f075f1ca25703b07cad9dd21",
+          "size": 4211198
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "multidict",
+      "version": "6.9.0",
+      "wheel_sha256": "6a5111a2bd824c821a3dd09da29680391b0caaa18fea7761358f4001e6898d1c",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "multidict-6.9.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/e7/59/84b6cad9ddfdd9471db727b0e987c60ecbdb6b206ba265e8c50e74a1ab80/multidict-6.9.0.tar.gz",
+          "sha256": "d7d32c0543494efbc9394e2b571725071d08e295993486bc9a43f6f89375ee01",
+          "size": 173221
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "mutagen",
+      "version": "1.48.1",
+      "wheel_sha256": "4f077fe87d3fc7fba259aa63d8c026b18382ca6a42ef37c61e16f1b1b5b82fe7",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "mutagen-1.48.1.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/df/70/1675da133ea92227da41bf5b24e1c66be597ff736a1533ade41da986852f/mutagen-1.48.1.tar.gz",
+          "sha256": "8f95637ab9f6f305cec6bd1294e197debe207998e3e068596563c74f86b0a173",
+          "size": 1276978
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "propcache",
+      "version": "0.5.4",
+      "wheel_sha256": "2814ecd8e818f487bee4b0f921bc4d1c176cc5fc71ac0f072d0fa67eda4ac14b",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "propcache-0.5.4.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/b3/9a/9fbf4e4ec0c2d7f1c32519fff782ef467859b8faa9fbc5331a96f6395d43/propcache-0.5.4.tar.gz",
+          "sha256": "ff6b113f50bc066a698db5d944d2c6dc7507168dd3341e255a8892fd0715a558",
+          "size": 61545
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "pycryptodomex",
+      "version": "3.23.0",
+      "wheel_sha256": "f489c4765093fb60e2edafdf223397bc716491b2b69fe74367b70d6999257a5c",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "pycryptodomex-3.23.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/c9/85/e24bf90972a30b0fcd16c73009add1d7d7cd9140c2498a68252028899e41/pycryptodomex-3.23.0.tar.gz",
+          "sha256": "71909758f010c82bc99b0abf4ea12012c98962fbf0583c2164f8b84533c2e4da",
+          "size": 4922157
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "python-didl-lite",
+      "version": "1.5.1",
+      "wheel_sha256": "ca2e965f3154018a9256caaed80930f89530484354ba62f15f91d2f7e84c4521",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "python_didl_lite-1.5.1.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/5d/1a/01752557edb9a1b7f627b26c04f8642700f4cfc596d7941df027852b1aff/python_didl_lite-1.5.1.tar.gz",
+          "sha256": "0cdb41ee962acb369d1afb72880cab8774fc1f812ada001016346ea13e0f27b7",
+          "size": 14511
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "requests",
+      "version": "2.34.2",
+      "wheel_sha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "requests-2.34.2.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/ac/c3/e2a2b89f2d3e2179abd6d00ebd70bff6273f37fb3e0cc209f48b39d00cbf/requests-2.34.2.tar.gz",
+          "sha256": "f288924cae4e29463698d6d60bc6a4da69c89185ad1e0bcc4104f584e960b9ed",
+          "size": 142856
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "soco",
+      "version": "0.31.2",
+      "wheel_sha256": "edd40ad47bc9ddb843a33021cd29aef3b52cc376b84dd2ffb913a3d15faf977b",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "soco-0.31.2.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/bb/2f/c8e5347bb6f28574b3fc66a376e172dcfa976b139b23ebe38d0d6c67bb86/soco-0.31.2.tar.gz",
+          "sha256": "0836e5515f85e45576c66d9745d0582c02306bde122d579a6afaa694ad5a0ffa",
+          "size": 746625
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "typing_extensions",
+      "version": "4.16.0",
+      "wheel_sha256": "481caa481374e813c1b176ada14e97f1f67a4539ce9cfeb3f350d78d6370c2e8",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "typing_extensions-4.16.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/f6/cc/6253133b5bb138fc3306cebfbda2c520f545d36b5be2c7255cc528bb45d6/typing_extensions-4.16.0.tar.gz",
+          "sha256": "dc983d19a509c94dba722ee6abd33940f7c05a89e243c47e907eb4db6f1a43e5",
+          "size": 113555
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "urllib3",
+      "version": "2.8.0",
+      "wheel_sha256": "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "urllib3-2.8.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/e3/05/b17359e1cefb4f909b5e40b1b90a496d987258916dbbf88e842c729f510e/urllib3-2.8.0.tar.gz",
+          "sha256": "63bf2ead4c879426ebf22ef2a781eeb4aa3b4ae798a0435506f8687fd5bb9b63",
+          "size": 458972
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "voluptuous",
+      "version": "0.16.0",
+      "wheel_sha256": "ee342095263e1b5afbd4d418cb5adc92810eebfd07696bb033a261210df33db4",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "voluptuous-0.16.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/92/f4/0738e6849858deae22218be3bbb8207ba83a96e9d0ec7e8e8cd67b30e5ca/voluptuous-0.16.0.tar.gz",
+          "sha256": "006535e22fed944aec17bef6e8725472476194743c87bd233e912eb463f8ff05",
+          "size": 54238
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "websockets",
+      "version": "17.1",
+      "wheel_sha256": "0c863507ada5805517ca6dff1c524dcd42942efe6304dacf06700878398d21a6",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "websockets-17.1.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/18/72/fba934cb3dff7a85d811820efffcd141ddd52b5a2a01637f64551373ff4d/websockets-17.1.tar.gz",
+          "sha256": "acfea4c20bf54384883ea33b1240fc1db4f52e190823a4e2b334bc3e8bfca96a",
+          "size": 187520
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "xmltodict",
+      "version": "1.0.4",
+      "wheel_sha256": "a4a00d300b0e1c59fc2bfccb53d7b2e88c32f200df138a0dd2229f842497026a",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "xmltodict-1.0.4.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/19/70/80f3b7c10d2630aa66414bf23d210386700aa390547278c789afa994fd7e/xmltodict-1.0.4.tar.gz",
+          "sha256": "6d94c9f834dd9e44514162799d344d815a3a4faec913717a9ecbfa5be1bb8e61",
+          "size": 26124
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "yarl",
+      "version": "1.25.1",
+      "wheel_sha256": "c6f117789d22dce188e5754e8bc65b7e6ebf8cb73963b9fa761f672a5883769d",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "yarl-1.25.1.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/75/16/e8be8e2fb175bbf41a0680381a319f1199fae256588241a2ac8677eafb49/yarl-1.25.1.tar.gz",
+          "sha256": "03dd38de09bc213e9a8b29761eec33ee1d5318dac0e49d8af36e4d27830e23a7",
+          "size": 246245
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "yt-dlp",
+      "version": "2026.8.19",
+      "wheel_sha256": "1d57897e94c6665a0a6f9bc54b34e584284e32c034ffab3a7df25d8f7b24eedf",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "yt_dlp-2026.8.19.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/1e/e0/832fa4ca334b766a06933a196066edc3dba37cdb6f14cd98d59bcc69a4b4/yt_dlp-2026.8.19.tar.gz",
+          "sha256": "9e213e48cea35c66b378e4447903f118f6392a5fa380a2b6d7070ec86f4e0af1",
+          "size": 3052025
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "yt-dlp-ejs",
+      "version": "0.8.0",
+      "wheel_sha256": "79300e5fca7f937a1eeede11f0456862c1b41107ce1d726871e0207424f4bdb4",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "yt_dlp_ejs-0.8.0.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/d3/e6/cceb9530e8f4e5940f6f7822d90e9d94f1b85343329a16baaf47bbbb3de1/yt_dlp_ejs-0.8.0.tar.gz",
+          "sha256": "d5fa1639f63b5c4af8d932495f60689d5370f1a095782c944f7f62a303eb104e",
+          "size": 96571
+        }
+      ],
+      "status": "sdist-referenced"
+    },
+    {
+      "name": "zeroconf",
+      "version": "0.151.3",
+      "wheel_sha256": "bbd2b73902a44426080190d653fa35638a93b6c6725c2be76888b4b614bc0b48",
+      "wheel_verified_against_pypi": true,
+      "sources": [
+        {
+          "filename": "zeroconf-0.151.3.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/2b/7f/bb22975bbbc04765920b766e433410422794568053bff0ab5b3f0bf0197c/zeroconf-0.151.3.tar.gz",
+          "sha256": "ce6c548e665759b6150cef4db9ab9d7bdd89857e90c513abd6b7340bdd7dbd6a",
+          "size": 223165
+        }
+      ],
+      "status": "sdist-referenced"
+    }
+  ],
+  "source_archives_downloaded": false,
+  "embedded_native_source_coverage_verified": false
+}

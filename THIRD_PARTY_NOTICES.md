@@ -79,6 +79,19 @@ or complete native dependency clearance.
 
 ## Python runtime dependencies
 
+The runtime wheel/source reference inventory is now checked against exact PyPI
+file hashes: `config/container-python-source-references.json`. All 31 container
+runtime wheels have source distributions, collected in the private release
+source archive. This is not proof of embedded native library coverage.
+
+In particular, **Deno is not just its Python launcher**. The exact executable
+from the reviewed OCI image reports Deno 2.9.6, V8 15.0.245.2-rusty and
+TypeScript 6.0.3. The upstream Deno v2.9.6 MIT text is preserved in
+`licenses/Deno-2.9.6-MIT.txt`, from
+https://github.com/denoland/deno/blob/v2.9.6/LICENSE.md . Retain its embedded
+third-party notices as a separate native-runtime review task; the Python
+wrapper's licence alone is not a complete Deno/V8/TypeScript inventory.
+
 The exact selected wheel filenames, hashes and declared license metadata for
 the tested CPython 3.12 and 3.13 environments are recorded separately in
 `config/management-linux-x86_64-cp312.wheels.json` and the corresponding cp313

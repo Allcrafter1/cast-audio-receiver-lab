@@ -9,6 +9,9 @@
   verify authenticated download integrity. No public/default acquisition yet.
 - Verify private OCI artifact descriptors, SBOM/provenance subjects and all blob
   hashes. Keep runtime/hardware acceptance separate from build integrity.
+- Vendor and offline-build the pinned Rust frontend sources in a manual review
+  workflow; collect hash-verified sdists for all 31 Python runtime dependencies
+  without executing package build hooks. Retain archives in the private draft.
 
 - Add Home Assistant icon/logo derived from the existing speaker SVG, with
   reviewed binary export pins and app-store README/changelog. Branding is live
