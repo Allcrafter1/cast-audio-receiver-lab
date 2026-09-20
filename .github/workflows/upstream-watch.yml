@@ -31,13 +31,21 @@ jobs:
           if [ "$pinned_airplay" != "$latest_airplay" ]; then
             notes="$notes\n- airplay-cli: pinned $pinned_airplay, latest release $latest_airplay"
           fi
+          title="Automated upstream review needed"
+          issue_number=$(gh issue list --state open --search "$title in:title" \
+            --json number,title \
+            --jq '.[] | select(.title == "Automated upstream review needed") | .number' \
+            | head -n 1)
           if [ -z "$notes" ]; then
             echo "Pinned upstreams are current." >> "$GITHUB_STEP_SUMMARY"
+            if [ -n "$issue_number" ]; then
+              gh issue close "$issue_number" \
+                --comment "All watched upstream pins are current; closing the stale automated report."
+            fi
             exit 0
           fi
           printf 'Upstream review requested:%b\n' "$notes" >> "$GITHUB_STEP_SUMMARY"
-          title="Automated upstream review needed"
-          if ! gh issue list --state open --search "$title in:title" --json title --jq '.[].title' | grep -Fxq "$title"; then
+          if [ -z "$issue_number" ]; then
             printf 'The weekly watcher found:%b\n\nReview changelogs, rebuild locks, run CI and hardware acceptance. Do not auto-merge protocol updates.\n' "$notes" \
               | gh issue create --title "$title" --body-file -
           fi

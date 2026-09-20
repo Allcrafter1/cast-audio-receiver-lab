@@ -1,139 +1,172 @@
 # Cast Audio Receiver Lab
 
-An experimental Linux **Cast-audio receiver and output bridge**: receive
-YouTube Music or supported direct-media Cast loads and play them locally or
-forward them to AirPlay. Each configured output appears as its own speaker.
-One web interface manages their names, targets and lifecycle.
+Cast **YouTube Music** and ordinary Cast media to outputs that Google does not
+normally expose as Cast speakers. Each configured local, AirPlay or DLNA output
+appears as its own audio receiver in Android and Home Assistant.
 
-This is not an official Google receiver, a universal Cast implementation, or a
-Music Assistant integration. Google Home adoption/groups and Spotify Cast are
-not supported. Service changes or revocation can break the experimental Cast
-device identity independently of software updates.
+We built this because YouTube Music on Android has no useful AirPlay path, while
+many perfectly good amplifiers and speakers do. What began as a protocol
+experiment is now a working Linux receiver, output bridge and Home Assistant
+App with one small management interface.
 
-## What comes from where?
+> [!WARNING]
+> This is experimental interoperability software, not an official Google,
+> Apple, Home Assistant or Music Assistant product. Cast authentication can be
+> revoked or changed independently of this code. Use it on a trusted LAN and
+> keep a known-working release available.
 
-This project is **built on Vibecast**, not a renamed independent implementation
-of its protocol work. [Nils Emil Svensson's MIT-licensed Vibecast](https://github.com/emilsvennesson/vibecast)
-supplies the Rust Cast frontend, discovery/session architecture, external-player
-protocol and original YouTube application. Our maintained fork adds audio-speaker
-capabilities, YouTube playback/queue/feedback changes, a generic Default Media
-Receiver, artwork/status corrections and an internal-only player bridge.
-Source pins and reconstructible patches record these changes.
+## Install in Home Assistant
 
-This repository adds the Python product layer: supervision, persistent speaker
-management, local mpv output, persistent AirPlay integration, experimental
-DLNA/Sonos outputs, square-artwork processing, diagnostics, tests and packaging.
-Music Assistant's **airplay-cli**, not our code, implements the AirPlay sender.
-FFmpeg decodes audio to PCM; yt-dlp resolves checked YouTube audio sources.
+[![Add the Cast Audio Receiver repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FAllcrafter1%2Fcast-audio-receiver-lab)
 
-See [architecture](docs/architecture-current.md),
-[project origin](docs/PROJECT-ORIGIN.md) and
-[credits and component licences](THIRD_PARTY_NOTICES.md). Thank you to all the
-upstream authors and researchers. Attribution does not imply endorsement.
-
-## Audio and control flow
+If the button does not open your instance, add this repository manually under
+**Settings → Apps → App store → Repositories**:
 
 ```text
-YouTube Music / supported direct-media Cast sender
-    → maintained Vibecast frontend (Rust)
-    → internal player bridge (WebSocket, loopback :8010)
-    → one Python adapter per configured speaker
-        ├─ mpv → local sound device
-        ├─ FFmpeg → PCM → airplay-cli → AirPlay receiver
-        ├─ DLNA: direct compatible HTTP, or local HTTP/remux/MP3 compatibility
-        └─ direct media URL → Sonos (experimental)
+https://github.com/Allcrafter1/cast-audio-receiver-lab
 ```
 
-Commands travel toward outputs; actual playback/volume/position and end/error
-events travel back. Artwork processing is separate from audio. The manager
-serves square covers to Cast/Home Assistant when its advertised artwork address
-is reachable. Accepting URLs does not make proprietary service apps/DRM work.
+Install **Cast Audio Receiver Lab**, start it and select **Open Web UI**. The
+same interface is also available on your trusted LAN at:
 
-The management UI is the **only user-facing interface**. It opens directly on
-the trusted LAN, without a login, on configurable port **8788**, or through HA
-ingress. Do not expose it to the Internet. The inherited Shaka browser player is
-disabled in normal builds; its WebSocket/manifest/licence routes remain internal.
+```text
+http://HOME_ASSISTANT_IP:8788
+```
 
-## Current status
+Port `8788` is the default and can be changed in the App configuration. The
+current release supports `amd64`; ARM is not release-validated yet.
 
-| Path | Evidence / limitations |
+## What it can do
+
+- Create a stable, audio-only Cast speaker for every configured output.
+- Receive YouTube Music with play/pause, seek, skip, volume, queue progression,
+  metadata and artwork feedback.
+- Receive direct HTTP(S) media, radio and local/TTS URLs through the Cast
+  Default Media Receiver path used by Home Assistant.
+- Play locally with mpv, forward to AirPlay with Music Assistant's
+  `airplay-cli`, or send to compatible DLNA renderers.
+- Discover AirPlay and DLNA targets, keep routes across restarts and manage them
+  from one LAN/ingress interface.
+- Report redacted health and support information without including credentials,
+  target addresses or signed media URLs.
+
+Sonos output is implemented but has only mocked coverage, not a real-hardware
+acceptance test. Spotify Cast, Bluetooth and Google Home speaker groups are not
+goals of this release. Spotify already has Spotify Connect; Google Home does not
+adopt this experimental device identity into native groups.
+
+## Why this is technically unusual
+
+A Cast receiver is more than an HTTP media player. It must advertise the right
+speaker capabilities over mDNS, establish the Cast V2 channel, pass device
+authentication, launch the application requested by the sender, translate its
+control model and continuously report real output state back to the phone.
+
+The project combines a maintained fork of
+[Vibecast](https://github.com/emilsvennesson/vibecast) with a Python product
+layer and real output transports. The important part is not merely obtaining an
+audio URL: the phone must continue to see a coherent Cast session while mpv,
+AirPlay or DLNA is actually doing the playback.
+
+```text
+YouTube Music / Home Assistant / another DMR sender
+                       │
+                       ▼
+       maintained Vibecast frontend (Rust)
+        discovery · TLS/auth · Cast sessions
+        YouTube/Lounge · Default Media Receiver
+                       │
+             player protocol v2 (loopback)
+                       │
+                       ▼
+          one Python adapter per speaker
+             ├─ mpv → local audio
+             ├─ FFmpeg → PCM → airplay-cli
+             ├─ HTTP relay/remux → DLNA
+             └─ direct media URL → Sonos (experimental)
+```
+
+Read [How it works](docs/how-it-works.md) for the story behind discovery,
+authentication, YouTube sessions, the output bridge, DIAL and the limits of the
+current approach. [Current architecture](docs/architecture-current.md) is the
+short maintainer map.
+
+## Current compatibility
+
+| Path | Current evidence |
 | --- | --- |
-| YouTube Music → local / legacy AirPlay | Earlier releases tested extensively on laptop and Redmi reference receiver; review candidate requires physical regression acceptance. |
-| Default Media Receiver | User-tested Home Assistant direct media. Not a promise of all Cast apps, DRM or Cast queue support. |
-| Home Assistant App | Public amd64 image update and clean repository install tested on HAOS; ingress, persistent route IDs, local output and embedded UI were also accepted during development. Explicit older-image rollback remains open. |
-| HomePod / native AirPlay 2 / Yamaha | Upstream sender paths exist; physical acceptance outstanding. |
-| DLNA | Discovery and local HTTP compatibility implemented. User confirmed YouTube Music on one older Samsung, alongside direct MP3 and HA-transcoded WebM/Opus tests; wider hardware coverage remains open. See [DLNA notes](docs/dlna.md). |
-| Sonos | Implemented with library and mocked tests; real hardware unverified. External renderers cannot pull internal-only manifest URLs. |
-| ARM / simultaneous targets / small devices | Not release-validated. |
+| YouTube Music → local audio | Extensively tested during development and through the published HA App. |
+| YouTube Music → AirPlay | Tested with the legacy AirReceiver reference target, including persistent sessions and controls. HomePod/native AirPlay 2 and Yamaha hardware still need acceptance tests. |
+| Home Assistant direct media / radio | Tested through the Default Media Receiver path. This does not imply support for every Cast app or DRM service. |
+| DLNA | Tested on an older Samsung TV, including its connection-approval flow; renderer compatibility still varies. |
+| Sonos | Implemented with deterministic tests; real hardware remains unverified. |
+| Parallel outputs / small devices / ARM | Useful community test and contribution areas, not release claims. |
 
-This is an **experimental pre-release**. The core paths are usable and tested,
-but hardware coverage is deliberately limited and the Cast authentication path
-can be revoked independently of this code. The
-[working plan](docs/WORKING-PLAN.md) distinguishes implemented, automated-tested,
-deployed and user-confirmed work. airplay-cli v0.5.4 is pinned and tested against
-the legacy reference receiver; this is not evidence of HomePod compatibility.
+See the [working plan](docs/WORKING-PLAN.md) for the distinction between
+implemented, automated-tested, deployed and user-confirmed work.
 
-## Install and configure
+## Authentication and first start
 
-See [installation](docs/installation.md), [packaging](docs/packaging.md) and the
-[current runbook](docs/current-runbook.md). A native source install needs the
-frontend binary, runtime tools and valid user-supplied authentication material:
+The repository and container image contain no embedded Cast credentials. On a
+clean first start, the pinned release manifest downloads a separately versioned
+experimental authentication bundle, verifies its exact size and SHA-256 digest,
+and stores it privately in persistent App state. A local replacement bundle can
+be configured instead, and existing state is never silently overwritten.
 
-[![Add the Cast Audio Receiver repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FAllcrafter1%2Fcast-audio-receiver-lab)
+That separation makes the material replaceable and withdrawable; it does not
+make the mechanism official or durable. A sender update, revocation or expiry
+can stop it working. See [bundle distribution](docs/bundle-distribution.md) and
+the authentication section in [How it works](docs/how-it-works.md).
 
-```bash
-cast-audio-receiver --frontend /path/to/vibecast \
-  --data-dir /var/lib/cast-audio-receiver --web-port 8788 \
-  --certs /private/path/certs.json
+## Container and native installs
+
+The published `amd64` image is:
+
+```text
+ghcr.io/allcrafter1/cast-audio-receiver:0.6.0-dev18
 ```
 
-Open the LAN URL to add, rename, disable or delete outputs. HA uses the same
-runtime with ingress and a configurable LAN port. The published amd64 image is
-`ghcr.io/allcrafter1/cast-audio-receiver:0.6.0-dev18`; see the installation
-guide before deploying this experimental release.
+It needs host networking for Cast/mDNS and target discovery, plus persistent
+`/data` storage. Native source installs additionally need the maintained Rust
+frontend and runtime tools. Follow [Installation and deployment](docs/installation.md)
+rather than starting the individual processes by hand.
 
-Authentication material is **not committed to source or embedded in images**.
-On a clean first start the pinned release manifest downloads the separately
-published experimental bundle once, verifies its size and SHA-256 digest and
-stores it privately. Existing state is never silently replaced and a local/BYO
-bundle remains supported. See [bundle distribution](docs/bundle-distribution.md).
-Separate distribution improves management/withdrawal, not the underlying legal
-or revocation position.
-
-The code does not use Google's official Cast SDK or a receiver registered in its
-developer console. This independently implemented protocol path does not mean
-Google/YouTube/Play service terms or reference-app conditions are irrelevant.
-
-## Development, maintenance and reporting
+## Development and maintenance
 
 ```bash
 python -m pip install -e '.[youtube,dlna,sonos]'
 PYTHONPATH=src:. python -m unittest discover -s tests -v
 ```
 
-See [testing](docs/TESTING.md), [maintenance](docs/maintenance.md),
-[source reconstruction](docs/source-reconstruction.md) and
-[release checklist](docs/RELEASE-CHECKLIST.md). Dependabot/upstream-watch identify
-updates; locks record selected artifacts. Protocol updates are reviewed, not
-silently installed into working systems.
+Useful maintainer documents:
 
-Use the redacted support summary plus expected/observed behavior. Never post
-keys, bundles, pairing/account credentials or signed media URLs. Historical
-[Python receiver research](research/legacy_python_receiver/README.md) is preserved
-outside normal runtime; its commands are not current installation instructions.
+- [Documentation map](docs/README.md)
+- [Testing and hardware acceptance](docs/TESTING.md)
+- [Maintenance, updates and support bundles](docs/maintenance.md)
+- [Reconstructing the maintained Vibecast source](docs/source-reconstruction.md)
+- [Release checklist](docs/RELEASE-CHECKLIST.md)
+- [Credits and third-party licences](THIRD_PARTY_NOTICES.md)
 
-## Licence and contributions
+Python runtime locks include reviewed wheel and source inventories and are
+updated as one unit; a requirements-only bot bump is intentionally not enough.
+Protocol and transport updates also need targeted regression tests.
 
-Original product code: **GPL-3.0-or-later**. Third-party code retains its own
-copyright/licence, including Vibecast MIT and Chromium protocol BSD notices.
-See [LICENSE](LICENSE), [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and
-`licenses/`. A code licence does not grant rights to unrelated credentials.
-Release assets retain the reviewed source and notice inventories; this remains
-an experimental project rather than a claim of universal compatibility.
+## Origin, licence and contributions
 
-Much of the code was developed collaboratively with **GPT/Astra and other AI
-coding assistance**. The initiator had almost no programming experience;
-requirements and architecture were discussed together and tested on real
-devices. This is not a substitute for experienced independent review.
-Contributions and critical reviews are welcome: [CONTRIBUTING.md](CONTRIBUTING.md).
-No endorsement from Google, Apple, Vibecast or Music Assistant is implied.
+This project would not exist without Vibecast, Shanocast and its research,
+Music Assistant's `airplay-cli`, FFmpeg, mpv, yt-dlp, Chromium's published Cast
+protocol sources and the researchers who documented Cast device authentication.
+The exact relationship and licences are recorded in
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Attribution does not imply
+endorsement.
+
+Original project code is **GPL-3.0-or-later**; third-party components retain
+their own copyrights and licences. The project does not use Google's official
+Cast SDK or a receiver registered in the Cast developer console.
+
+Much of the implementation was developed collaboratively with GPT/Astra and
+other AI coding assistance. The initiator began with almost no programming
+experience; requirements, architecture and behavior were worked out together
+and then tested repeatedly on real devices. Experienced review and contributions
+are very welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md) and never attach
+authentication bundles, keys, account tokens or signed media URLs to an issue.

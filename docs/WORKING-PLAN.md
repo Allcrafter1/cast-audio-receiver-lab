@@ -1,5 +1,23 @@
 # Working plan
 
+## Post-publication documentation and automation cleanup — 2026-09-20
+
+- Rewrite the repository landing page around the actual user journey: purpose,
+  capabilities, one-click HA installation, direct LAN URL/port and honest limits.
+- Add a separate technical narrative explaining discovery, device authentication,
+  YouTube/Lounge, DMR, the player bridge, outputs, DIAL and failure boundaries.
+  Keep exploit-style procedures and credential material out of user docs.
+- Fix the obsolete My Home Assistant redirect/badge identifier and regression-
+  test the checked link spelling plus local documentation targets.
+- Resolve bot issue #6 as stale because airplay-cli v0.5.4 is already pinned.
+  Make the watcher close its own stale issue when all watched pins are current.
+- Close Dependabot PR #7 rather than merge an incomplete requirements-only
+  update. Python locks, selected wheels and source inventories are one reviewed
+  release unit; remove automatic pip PRs that cannot preserve that invariant.
+- After documentation is public, mention the release only in existing threads
+  whose stated need is a Linux/HA Cast-audio receiver or Cast-to-AirPlay bridge.
+  Avoid unrelated or duplicate announcements.
+
 ## Publication execution status — 2026-09-20
 
 - Experimental prerelease `v0.6.0-dev18` is public. Anonymous GHCR manifest

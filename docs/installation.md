@@ -23,6 +23,8 @@ revocation or a protocol change can invalidate it earlier.
 
 ## Home Assistant App
 
+[![Add the Cast Audio Receiver repository to Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FAllcrafter1%2Fcast-audio-receiver-lab)
+
 In Home Assistant, open **Settings → Apps → App store → Repositories**, add
 `https://github.com/Allcrafter1/cast-audio-receiver-lab`, refresh the store and
 install **Cast Audio Receiver Lab**. Only `amd64` is supported by this release.

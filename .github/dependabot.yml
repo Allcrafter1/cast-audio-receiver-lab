@@ -1,12 +1,9 @@
 version: 2
 updates:
-  - package-ecosystem: pip
-    directory: /
-    schedule:
-      interval: weekly
-    groups:
-      python-runtime:
-        patterns: ["*"]
+  # Python runtime locks are curated together with exact wheel and source
+  # inventories. A requirements-only Dependabot PR is necessarily incomplete
+  # and is rejected by the release-record tests, so these updates follow the
+  # curated procedure in docs/maintenance.md instead.
   - package-ecosystem: docker
     directory: /
     schedule:
@@ -15,4 +12,3 @@ updates:
     directory: /
     schedule:
       interval: weekly
-

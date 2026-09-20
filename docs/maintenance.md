@@ -199,9 +199,13 @@ test future validity; use synthetic boundary tests instead.
 - CI runs Python 3.11–3.13, clean source-export/history/wheel checks, Rust tests
   and an amd64 container build. Manual workflows retain OCI SBOM/provenance and
   frozen Rust/native source archives.
-- Dependabot and `upstream-watch.yml` report dependency changes; production is
-  never upgraded unattended. Service-side changes may occur without a release,
-  so notifications are evidence to investigate, not availability monitoring.
+- Dependabot reports container and GitHub Actions changes, while
+  `upstream-watch.yml` follows the pinned Vibecast and airplay-cli releases.
+  Python runtime updates use the curated procedure above because requirements,
+  selected wheels and source inventories must change together; a generic
+  requirements-only PR is incomplete by construction. Production is never
+  upgraded unattended. Service-side changes may occur without a release, so
+  notifications are evidence to investigate, not availability monitoring.
 - `/health`, `/status` and `/api/support` provide bounded diagnostics without
   credential payloads. More failure categories may be added when incidents show
   that the current allowlisted output is insufficient.
