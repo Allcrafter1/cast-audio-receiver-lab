@@ -2,6 +2,14 @@
 
 ## Native source delivery progress — 2026-09-20
 
+- Native source archive and hash record retained in the PRIVATE main project's
+  draft v0.6.0-dev17 release. Clean exported source runs 251 tests successfully
+  (10 environment skips); history scan passes 11 commits/366 path versions.
+- Next source task: manual `source-review.yml` vendors the immutable frontend's
+  locked crates with Cargo, retains their notices, and must complete an offline
+  CLI build before uploading an archive. Workflow added; success is not yet
+  claimed. This does not change runtime dependencies or publish an image.
+
 - Added reproducible `tools/package_airplay_source.py`: nine pinned public
   component trees, preserved notices, explicit OpenSSL correction and standalone
   build instructions. No worktree edits, untracked files, Git database, runtime

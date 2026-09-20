@@ -21,6 +21,11 @@
       "sha256": "c7b2b651de7c856bced25b04a49dada61788ea51d16993d1e0b2bc85ce2e944f"
     },
     {
+      "bytes": 2609,
+      "path": ".github/workflows/source-review.yml",
+      "sha256": "1dd29d2b8da34139fd12e765126abf8a3272d6691301a4ca5a0dbf43f452ec61"
+    },
+    {
       "bytes": 1868,
       "path": ".github/workflows/upstream-watch.yml",
       "sha256": "3a4adfde8e9f73da188d524ddb22545c520e2030fd60cc287ccc17a4ee07c85a"
@@ -236,9 +241,9 @@
       "sha256": "e23a00b7a392aa4b072905e707510d91a413a14b18b66761044f324f8cf4edac"
     },
     {
-      "bytes": 139006,
+      "bytes": 139552,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "2777c3f79a9fc7b6fb2c2d8b34d203e17315a73cea6aeee245464e2e23e52955"
+      "sha256": "dc97902f2a295b64bce76f51aaeb1ede7e61b354ec6a416cb136d6a4ab9eb53e"
     },
     {
       "bytes": 4535,
@@ -324,6 +329,11 @@
       "bytes": 5192,
       "path": "docs/autonomous-dev4.md",
       "sha256": "d769a4f83d828e89791da51bd99c8d1058b8e2f5211769712d739ca6e73868f2"
+    },
+    {
+      "bytes": 2022,
+      "path": "docs/build-vendored-vibecast.md",
+      "sha256": "f860f4455d86f47b77e8b7c446a28d2c31ba637c21082c3a1c0aa03b9e1af8a7"
     },
     {
       "bytes": 4458,

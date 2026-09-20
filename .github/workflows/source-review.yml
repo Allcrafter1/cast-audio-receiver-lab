@@ -1,0 +1,61 @@
+name: Native source review
+
+# Explicit source-package verification, not a public release or runtime update.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.98.1
+      - name: Export immutable frontend source
+        shell: bash
+        run: |
+          set -euo pipefail
+          readarray -t pins < <(python3 -c 'import json; p=json.load(open("config/vibecast-frontend.lock.json")); print(p["repository"]); print(p["commit"])')
+          git clone --filter=blob:none "${pins[0]}" "$RUNNER_TEMP/frontend-git"
+          mkdir "$RUNNER_TEMP/vibecast-sources"
+          git -C "$RUNNER_TEMP/frontend-git" archive "${pins[1]}" | tar -x -C "$RUNNER_TEMP/vibecast-sources"
+          cp config/vibecast-frontend.lock.json "$RUNNER_TEMP/vibecast-sources/SOURCE-PIN.json"
+          cp licenses/Chromium-BSD.txt "$RUNNER_TEMP/vibecast-sources/crates/vibecast-proto/proto/LICENSE"
+          cp docs/build-vendored-vibecast.md "$RUNNER_TEMP/vibecast-sources/BUILD-SOURCE.md"
+      - name: Vendor locked dependency sources with upstream notices
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/vibecast-sources"
+          mkdir -p .cargo
+          cargo +1.98.1 vendor --locked --versioned-dirs vendor > .cargo/config.toml
+          cargo +1.98.1 metadata --offline --locked --format-version 1 > SOURCE-METADATA.json
+      - name: Prove CLI builds from vendored source without dependency downloads
+        shell: bash
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/source-build-target
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/vibecast-sources"
+          cargo +1.98.1 build --frozen --release -p vibecast-cli
+      - name: Package source and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP"
+          tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - vibecast-sources | gzip -n > vibecast-vendored-source.tar.gz
+          sha256sum vibecast-vendored-source.tar.gz > vibecast-vendored-source.tar.gz.sha256
+      - uses: actions/upload-artifact@v7
+        with:
+          name: vibecast-source-review-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/vibecast-vendored-source.tar.gz
+            ${{ runner.temp }}/vibecast-vendored-source.tar.gz.sha256
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error
