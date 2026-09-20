@@ -117,6 +117,7 @@ Supervisor and is the pre-publication acceptance path. Its temporary LAN Git
 service and separately supplied `/share` bundle are test infrastructure, not a
 release distribution mechanism.
 
-Only after a usable documented public repository exists, respond to the relevant
-Music Assistant discussions. State the experimental/revocable nature, welcome
-review/reuse, and do not promise to build a Music Assistant integration ourselves.
+- [x] After the documented public prerelease passed public-image and clean HA
+  installation checks, respond to the relevant Music Assistant discussion.
+  The posted note states the experimental/revocable nature, welcomes review and
+  reuse, and does not promise a Music Assistant integration from this project.

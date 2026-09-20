@@ -12,6 +12,10 @@
   and reported ready. That disposable install was removed and the persistent
   dev18 installation returned ready with all routes running. An explicit older-
   image rollback remains untested; an App-scoped pre-update backup exists.
+- The relevant Music Assistant discussion now links to the usable public
+  prerelease and explicitly describes the revocable/experimental limits, lack
+  of Google Home groups and absence of a promised Music Assistant integration:
+  https://github.com/music-assistant/support/discussions/2354#discussioncomment-18529993
 - The owner independently made the separate bundle repository public and
   published prerelease `2026.09.20`. Anonymous manifest/bundle acquisition,
   exact size/hash verification and mode-0600 import passed. Bundle bytes remain
