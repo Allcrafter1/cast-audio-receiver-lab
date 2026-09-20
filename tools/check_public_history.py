@@ -7,9 +7,16 @@ Run in a fresh clone so all intended public refs are present. Unreachable Git
 objects, other repositories, release assets and LFS content are outside scope.
 """
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import subprocess
+
+# Owner accepted these non-credential discovery IDs on 2026-09-20. Exact old
+# document only: do not exempt other files, later edits or any credential check.
+ACCEPTED_HISTORICAL_DOCUMENTS = {
+    ("docs/airplay-045-redmi-test.md", "00430838c0d2114cfe1bc152c0d5c071ded5d409b1f22f8a6d863c123833290f")
+}
 
 try:
     from tools.create_public_source_export import MAX_TEXT_FILE, _validate_text
@@ -33,6 +40,7 @@ def inspect(root):
             entries.add((mode, kind, oid, name.decode("utf-8")))
     issues = []
     checked = 0
+    accepted = 0
     for mode, kind, oid, name in sorted(entries):
         if mode != "100644" and mode != "100755":
             issues.append({"path": name, "reason": "non-regular Git entry requires review"})
@@ -42,13 +50,17 @@ def inspect(root):
             issues.append({"path": name, "reason": "oversized historical blob"})
             continue
         try:
-            _validate_text(Path(name), run_git(root, "cat-file", "blob", oid))
+            payload = run_git(root, "cat-file", "blob", oid)
+            exception = (name, hashlib.sha256(payload).hexdigest()) in ACCEPTED_HISTORICAL_DOCUMENTS
+            _validate_text(Path(name), payload, allow_documentation_identifiers=exception)
+            accepted += int(exception)
         except ValueError:
             # Do not echo matched content, even in a private diagnostic.
             issues.append({"path": name, "reason": "source-export safety check failed"})
         checked += 1
     return {"commits": len(commits), "path_versions": len(entries),
             "checked_blobs": checked, "issues": issues,
+            "accepted_historical_documents": accepted,
             "passed": bool(commits) and not issues,
             "manual_review_still_required": True}
 

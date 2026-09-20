@@ -1,6 +1,77 @@
 # Working plan
 
+## Owner approval and fork correction — 2026-09-20
+
+- Owner accepts the identified non-credential discovery identifiers in old
+  history. No repository rename or history rewrite is needed. Current docs
+  remain sanitized. History checker exempts only the exact accepted document
+  hash from the device-ID rule; private-key and other checks still run. Tests
+  cover modified documents and a key-containing explicitly listed document.
+- [x] Public fork README corrected and verified by GitHub README blob identity:
+  https://github.com/Allcrafter1/vibecast/blob/e67628fa72550095f92197550d60d8e94c503d4e/README.md
+  Maintained `cast-audio-receiver` branch is now the default; old upstream main
+  and history retained. README clearly distinguishes provenance, fork changes,
+  product/runtime responsibility, MIT licence, AI assistance and limitations.
+- Reviewed bridge overlay is incorporated in that commit. Its six-file Rust
+  diff matches the previously CI-tested overlay SHA-256 exactly. Product build
+  and CI now pin the commit directly; fallback base/patch remain recorded in
+  config/vibecast-frontend.lock.json. Do not apply the overlay twice.
+- Previous CI at private product commit 65b203c passed every job: Python
+  3.11/3.12/3.13, Rust, and container. New direct-commit build input and final
+  artifact/SBOM review still require a new build. Main product remains private;
+  no runtime image or authentication bundle was published.
+
+## Review correction — fork README and identifier scope, 2026-09-20
+
+- User correctly identifies a missing independent deliverable: the PUBLIC
+  `Allcrafter1/vibecast` README still presents the original upstream product,
+  upstream badges/releases and browser-player quick start. Updating the main
+  Python/product README did NOT complete the fork documentation task.
+- [x] Update the maintained fork README: identify this as the audio-oriented
+  frontend fork for Cast Audio Receiver Lab; credit/link upstream and preserve
+  MIT notices; distinguish upstream implementation, our changes and the Python
+  product's responsibilities; document exact committed behavior and any overlay
+  still applied by the product; mark inherited instructions as upstream-only;
+  do not advertise unrelated upstream releases as builds of this fork.
+- [ ] Verify the rendered public fork README and product README separately,
+  record their commit URLs, and check installation links against actual release
+  availability. Neither documentation task closes the other.
+- Privacy finding clarified: the historical report contains two MAC-formatted
+  AirReceiver discovery IDs for two services on the same reference Android
+  phone, plus user-selected receiver aliases. They are NOT passwords/private
+  keys, and are not established to be the phone's physical Wi-Fi MAC address.
+  The removed historical session UUID is also not established to be an access
+  credential. Do not describe these findings as credential leakage.
+- User permits disclosure of speaker models. Whether the specific discovery
+  IDs may remain in old history is a separate, low-risk privacy choice, not a
+  technical requirement to rename/recreate the repository. Previous proposed
+  rename remains unexecuted; do not treat it as mandatory. If accepted, retain
+  existing history with a narrow documented exception, keeping current docs
+  sanitized and credential/material checks strict.
+
 ## Publication preparation — dev17 candidate, 2026-09-20
+
+- **Publication blocker found by manual review:** an old reference-test report
+  contains real device identifiers in the private staging Git history. Current
+  source now uses documentation placeholders and omits a historical session ID.
+  The strengthened documentation-ID check rejects that older blob. Earlier
+  bounded scan passes did not establish complete privacy clearance.
+- Do not flip the existing staging repository public or force-rewrite/delete its
+  history. Prepare a fresh clean-history export instead. Preserving the staging
+  repository privately under a new name and creating the public project at its
+  current URL needs the owner's naming/rename decision before external changes.
+- App icon verified live by Supervisor response digest. Quellcode-build of
+  airplay-cli passes the upstream suite and --check. CI on private 65b203c:
+  Python 3.11/3.12/3.13 and Rust passed; container job still running at this check.
+
+- Clean release staging commit 65b203c pushed to the existing PRIVATE main
+  repository after 243 local and clean-checkout tests passed (10 skips).
+  Reachable-history scan: eight commits, 331 path/blob versions, no findings
+  under the bounded rules. GitHub Python 3.11/3.12/3.13 jobs pass; Rust/container
+  jobs must finish before this is called a fully verified CI release candidate.
+- Added explicit manual OCI artifact-review workflow with BuildKit SBOM and
+  provenance, SHA-256 and seven-day artifact retention. No image push, public
+  release, private bundle download or visibility change in that workflow.
 
 - HA branding implemented from the existing project SVG: reviewed 128 px icon
   and 256 px logo, exact digest allowlist for binary exports, App README/changelog

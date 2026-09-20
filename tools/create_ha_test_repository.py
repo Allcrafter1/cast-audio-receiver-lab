@@ -20,7 +20,6 @@ FILES = (
     "README.md",
     "LICENSE",
     "THIRD_PARTY_NOTICES.md",
-    "patches/vibecast-dev13-internal-bridge.patch",
     "tests/test_mpv_integration.py",
     "tests/test_dlna_media.py",
     "config/container-build-cp312.lock.txt",

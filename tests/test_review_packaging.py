@@ -39,12 +39,16 @@ class ReviewPackagingTests(unittest.TestCase):
         self.assertNotIn('credentials: "omit"', script)
         self.assertIn('cache: "no-store"', script)
 
-    def test_frontend_overlay_is_exact_and_used_by_builds(self):
+    def test_frontend_overlay_is_exact_and_promoted_commit_used_by_builds(self):
         lock = json.loads((ROOT / "config/vibecast-0.6.0.dev13-overlay.lock.json").read_text())
         self.assertEqual(hashlib.sha256((ROOT / lock["patch"]).read_bytes()).hexdigest(), lock["patch_sha256"])
+        current = json.loads((ROOT / "config/vibecast-frontend.lock.json").read_text())
+        self.assertEqual(current["reconstruction_base"], lock["base_commit"])
+        self.assertEqual(current["reconstruction_overlay_sha256"], lock["patch_sha256"])
         for path in ["Containerfile", ".github/workflows/ci.yml"]:
-            self.assertIn(lock["patch"], (ROOT / path).read_text())
-            self.assertIn(lock["base_commit"], (ROOT / path).read_text())
+            text = (ROOT / path).read_text()
+            self.assertIn(current["commit"], text)
+            self.assertNotIn("git apply", text)
 
     def test_airplay_asset_and_container_pin_match(self):
         lock = json.loads((ROOT / "config/cliairplay-linux-x86_64.lock.json").read_text())

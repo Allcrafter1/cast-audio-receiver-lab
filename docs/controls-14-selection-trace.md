@@ -41,7 +41,7 @@ contents/intent of those later raw messages. Another burst at 13:01 also shows
 Zerrissen selected, superseded and the final parsed selection loading correctly.
 
 Date 2026-09-13; times below Europe/Berlin (receiver log UTC + 2).
-Session 7942df04-54d2-478c-af41-32ef4f961740.
+Session identifier omitted from public documentation.
 
 | Time | Incoming Lounge sequence | Resulting selection/action |
 | --- | --- | --- |

@@ -8,6 +8,12 @@ from tools.create_public_source_export import _validate_text, create
 
 
 class PublicSourceExportTests(unittest.TestCase):
+    def test_documentation_device_identifiers_require_placeholders(self):
+        path = Path("docs/device.md")
+        _validate_text(path, b"Device 02:00:00:00:00:01")
+        with self.assertRaisesRegex(ValueError, "device identifier"):
+            _validate_text(path, b"Device 12:34:56:78:9A:BC")
+
     def test_only_reviewed_branding_binary_is_allowed(self):
         root = Path(__file__).parents[1]
         path = Path("cast-audio-receiver/icon.png")

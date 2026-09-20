@@ -1,0 +1,43 @@
+name: Release artifact review
+
+# Explicit private review run; never pushes an image, creates a public release,
+# downloads a Cast bundle or changes repository visibility.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - run: python3 tools/check_public_history.py .
+      - uses: docker/setup-buildx-action@v4
+      - name: Build review image with dependency and provenance attestations
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Containerfile
+          platforms: linux/amd64
+          push: false
+          outputs: type=oci,dest=${{ runner.temp }}/cast-audio-review.oci.tar
+          sbom: true
+          provenance: mode=max
+          tags: cast-audio-receiver:review
+      - name: Record artifact integrity
+        working-directory: ${{ runner.temp }}
+        run: sha256sum cast-audio-review.oci.tar > cast-audio-review.oci.tar.sha256
+      - uses: actions/upload-artifact@v7
+        with:
+          name: cast-audio-review-${{ github.sha }}
+          path: |
+            ${{ runner.temp }}/cast-audio-review.oci.tar
+            ${{ runner.temp }}/cast-audio-review.oci.tar.sha256
+          retention-days: 7
+          compression-level: 0
+          if-no-files-found: error

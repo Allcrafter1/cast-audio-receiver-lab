@@ -32,6 +32,15 @@ redistributable release. The latest deployment is recorded in WORKING-PLAN.md.
 
 ## Before making a repository public
 
+**Privacy choice, not a credential leak:** an older reference-test report in
+the PRIVATE staging history contains two MAC-formatted AirReceiver discovery
+IDs and receiver aliases. These are not passwords or private keys, and are not
+proven physical Wi-Fi MAC addresses. Current docs are sanitized. The owner has
+accepted retaining these individual discovery IDs in history on 2026-09-20.
+A path-and-SHA-256-specific exception skips only the device-ID rule for that
+exact document, never credential checks. Current docs use placeholders. No
+repository rename or history rewrite is needed; no visibility change occurred.
+
 - [ ] Review the exact export AND Git history for private data. Do not simply
   push the dirty development checkout. Exclude `.state`, private credentials,
   APKs, packet captures, account/pairing data and unreviewed logs.
@@ -48,6 +57,13 @@ redistributable release. The latest deployment is recorded in WORKING-PLAN.md.
   archives too. A grep-based secret scan alone is not sufficient clearance.
 - [ ] Verify attribution for the actual code/research used, without inventing
   endorsements. Retain upstream license texts.
+- [x] Update and verify the README in **Allcrafter1/vibecast**, independently of
+  the main product README: fork purpose, changes, upstream attribution/MIT,
+  relationship to the Python manager, accurate committed/overlay behavior and
+  build instructions. Upstream release links/badges must not imply fork builds.
+  Record the reviewed public commit URL; the product README alone is not done.
+  Verified at commit `e67628fa72550095f92197550d60d8e94c503d4e`; maintained
+  `cast-audio-receiver` is the default branch, original upstream main retained.
 - [ ] Resolve source-distribution questions in THIRD_PARTY_NOTICES.md. Review
   combined binary/container distribution separately, especially airplay-cli's
   documented mixed-license/unclear-grant components.

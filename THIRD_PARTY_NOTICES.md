@@ -33,6 +33,12 @@ added as implementation credits; do not invent attribution or endorsements.
 
 ## AirPlay native licence evidence and remaining release check
 
+Current maintained Vibecast build input is commit
+`e67628fa72550095f92197550d60d8e94c503d4e`, recorded in
+`config/vibecast-frontend.lock.json`. It incorporates the previously separate
+bridge overlay and corrects the fork README. The older commit in the provenance
+table remains the integration base; MIT notices remain unchanged.
+
 The airplay-cli v0.5.4 notice records mixed component licences. Its statement that
 libraop has no licence is now stale: upstream commit
 `4fe461a809eadd5230e3b587a3b3c948f90d9617` adds Philippe's MIT statement while

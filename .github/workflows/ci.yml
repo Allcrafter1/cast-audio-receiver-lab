@@ -58,8 +58,7 @@ jobs:
       - name: Reconstruct maintained Vibecast source
         run: |
           git clone https://github.com/Allcrafter1/vibecast.git /tmp/vibecast
-          git -C /tmp/vibecast checkout --detach f28befe02fe930db300294d6bf49cdf5fec5a747
-          git -C /tmp/vibecast apply "$GITHUB_WORKSPACE/patches/vibecast-dev13-internal-bridge.patch"
+          git -C /tmp/vibecast checkout --detach e67628fa72550095f92197550d60d8e94c503d4e
       - name: Test changed frontend crates
         working-directory: /tmp/vibecast
         run: >-

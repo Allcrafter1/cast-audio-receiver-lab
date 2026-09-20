@@ -19,7 +19,8 @@ extractor versions and includes FFmpeg/mpv. It never bakes `/data` or a private
 authentication bundle into an image layer.
 
 The image also installs the optional DLNA and Sonos adapter dependencies; those
-adapters remain opt-in and hardware-unverified.
+adapters remain opt-in. One older Samsung DLNA renderer is user-confirmed;
+Sonos and wider hardware acceptance remain unverified.
 
 The container starts through a minimal state bootstrap because Home Assistant
 and ordinary container engines may mount `/data` as root-owned. The bootstrap
@@ -55,6 +56,15 @@ Before publishing an image:
 3. scan the final image and source export for private state/secrets;
 4. produce an SBOM and attach source/licence notices;
 5. test rollback plus real Cast, Default Media Receiver and at least one output.
+
+`Release artifact review` is a manual GitHub workflow that exports an amd64 OCI
+image with BuildKit SBOM and provenance attestations, plus an archive SHA-256.
+Artifacts are retained for seven days and inherit repository access controls.
+It does not publish to GHCR, create a release, download credentials or change
+repository visibility. An SBOM is a component inventory, not licence clearance
+or a vulnerability verdict; inspect its recorded versions/source obligations
+before publishing an image. Provenance records the resolved build inputs even
+while base-image tags are not yet permanently pinned.
 
 For pre-publication acceptance, `tools/create_ha_test_repository.py` produces a
 minimal source-only App repository whose adjacent Dockerfile is built by the

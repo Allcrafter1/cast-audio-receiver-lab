@@ -109,7 +109,7 @@ def _source_files() -> list[tuple[Path, Path]]:
     return selected
 
 
-def _validate_text(relative: Path, payload: bytes) -> str:
+def _validate_text(relative: Path, payload: bytes, *, allow_documentation_identifiers=False) -> str:
     if relative.as_posix() in BRANDING_SHA256:
         digest = hashlib.sha256(payload).hexdigest()
         if digest != BRANDING_SHA256[relative.as_posix()]:
@@ -128,6 +128,12 @@ def _validate_text(relative: Path, payload: bytes) -> str:
     for pattern in FORBIDDEN_CONTENT:
         if pattern.search(text):
             raise ValueError(f"private marker in release source: {relative}")
+    if not allow_documentation_identifiers and relative.parts and relative.parts[0] == "docs":
+        for address in re.findall(r"\b(?:[0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}\b", text):
+            if address.upper() not in {
+                "AA:BB:CC:DD:EE:FF", "02:00:00:00:00:01", "02:00:00:00:00:02"
+            }:
+                raise ValueError(f"non-placeholder device identifier in documentation: {relative}")
     return hashlib.sha256(payload).hexdigest()
 
 

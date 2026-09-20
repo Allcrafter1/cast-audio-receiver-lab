@@ -7,8 +7,11 @@ intentionally omitted.
 
 Discovery distinguishes two identities on the same phone:
 
-- Teufel(Audio),91:AC:6D:79:34:61,RAOP6000,et=0,1,cn=0,1.
-- Teufel,91:AC:6D:79:34:60,RAOP+AirPlay7000,AppleTV3,1-style advertisement.
+- Reference(Audio),02:00:00:00:00:01,RAOP6000,et=0,1,cn=0,1.
+- Reference,02:00:00:00:00:02,RAOP+AirPlay7000,AppleTV3,1-style advertisement.
+
+The names and locally administered device identifiers above are documentation
+placeholders, not the reference phone's actual identifiers.
 
 First target is explicitly the6000 audio service. Do not merge these two logical
 receivers merely because their IP matches. Do not disturb Samsung certificate

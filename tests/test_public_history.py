@@ -1,10 +1,33 @@
 import unittest
+import hashlib
 from unittest.mock import patch
 
 from tools.check_public_history import inspect
 
 
 class HistoryTests(unittest.TestCase):
+    def test_owner_exception_is_exact_and_never_exempts_private_keys(self):
+        path = "docs/reference.md"
+        body = b"Device 12:34:56:78:9A:BC"
+        def git(root, *args):
+            if args[0] == "rev-list": return b"commit\n"
+            if args[0] == "ls-tree": return b"100644 blob 1\tdocs/reference.md\0"
+            if args[1] == "-s": return str(len(body)).encode()
+            return body
+        with patch("tools.check_public_history.run_git", side_effect=git):
+            self.assertFalse(inspect("unused")["passed"])
+            accepted = {(path, hashlib.sha256(body).hexdigest())}
+            with patch("tools.check_public_history.ACCEPTED_HISTORICAL_DOCUMENTS", accepted):
+                result = inspect("unused")
+                self.assertTrue(result["passed"])
+                self.assertEqual(result["accepted_historical_documents"], 1)
+                body += b" modified"
+                self.assertFalse(inspect("unused")["passed"])
+            body = b"-----BEGIN PRIVATE " + b"KEY-----"
+            accepted = {(path, hashlib.sha256(body).hexdigest())}
+            with patch("tools.check_public_history.ACCEPTED_HISTORICAL_DOCUMENTS", accepted):
+                self.assertFalse(inspect("unused")["passed"])
+
     def test_scans_old_blob_not_only_current_tree(self):
         def git(root, *args):
             if args[0] == "rev-list": return b"new\nold\n"

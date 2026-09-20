@@ -9,6 +9,3 @@ dist
 third_party
 research
 patches
-!patches/
-patches/*
-!patches/vibecast-dev13-internal-bridge.patch

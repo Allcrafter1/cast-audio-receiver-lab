@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/Allcrafter1/vibecast.git",
+  "commit": "e67628fa72550095f92197550d60d8e94c503d4e",
+  "branch_for_review": "cast-audio-receiver",
+  "rust_toolchain": "1.98.1",
+  "reconstruction_base": "f28befe02fe930db300294d6bf49cdf5fec5a747",
+  "reconstruction_overlay": "patches/vibecast-dev13-internal-bridge.patch",
+  "reconstruction_overlay_sha256": "660e536d026cb57681c3ea0534cb331ec91da8a75df08849d2f62819d74ed7c1",
+  "note": "Committed Rust changes exactly match the already tested base plus overlay; README and agent guide additionally identify the maintained fork. Do not apply the overlay to this commit."
+}

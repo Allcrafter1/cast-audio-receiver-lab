@@ -5,15 +5,13 @@
 # rather than pretending that another architecture is supported.
 FROM --platform=linux/amd64 rust:1.98-bookworm AS vibecast-builder
 ARG VIBECAST_REPOSITORY=https://github.com/Allcrafter1/vibecast.git
-ARG VIBECAST_COMMIT=f28befe02fe930db300294d6bf49cdf5fec5a747
+ARG VIBECAST_COMMIT=e67628fa72550095f92197550d60d8e94c503d4e
 RUN apt-get update \
     && apt-get install -y --no-install-recommends clang cmake git \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 RUN git clone --filter=blob:none "${VIBECAST_REPOSITORY}" . \
     && git checkout --detach "${VIBECAST_COMMIT}"
-COPY patches/vibecast-dev13-internal-bridge.patch /tmp/frontend.patch
-RUN git apply --check /tmp/frontend.patch && git apply /tmp/frontend.patch
 RUN cargo build --locked --release -p vibecast-cli
 
 FROM --platform=linux/amd64 python:3.12-slim-bookworm AS python-builder
