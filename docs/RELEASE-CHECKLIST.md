@@ -77,8 +77,10 @@ repository rename or history rewrite is needed; no visibility change occurred.
   native corresponding-source or real bundle distribution tasks.
 - [x] Document supported installation and private runtime-input requirements.
   Do not imply credential redistribution permission or future Google acceptance.
-- [ ] Add immutable dev18 release artifacts/tag after the corresponding source,
-  dependency records and license review match.
+- [x] Add immutable dev18 prerelease artifacts/tag after the corresponding
+  source, dependency records and license review match. Release assets include
+  the recorded image digest and corresponding source archives; the separate
+  bundle remains outside the product Git history and image.
 
 ## Before calling the release generally usable
 
@@ -88,7 +90,13 @@ repository rename or history rewrite is needed; no visibility change occurred.
 - [ ] Test concurrent outputs and receiver-origin control/feedback to YT Music.
 - [x] Validate a real HAOS/Supervisor source build, installation, initial start,
   ingress/LAN access, restart and persistent route ID/state.
-- [ ] Validate published-image update and rollback while retaining state and IDs.
+- [x] Validate anonymous published-image acquisition, an existing-install update
+  and a clean public-repository install while retaining the existing instance's
+  state and IDs. The disposable clean install also exercised first-download
+  bundle acquisition.
+- [ ] Validate an explicit downgrade to an older published image and return to
+  current while retaining state and IDs. A pre-update App backup exists, but it
+  was not destructively restored merely to claim this check.
 - [ ] Measure resource use on intended smaller platforms. x86_64 results do not
   establish ARM compatibility or its dependency/native-binary availability.
 - [x] Verify the final certificate inventory independently: 773 distinct,

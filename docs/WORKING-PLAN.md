@@ -2,6 +2,16 @@
 
 ## Publication execution status — 2026-09-20
 
+- Experimental prerelease `v0.6.0-dev18` is public. Anonymous GHCR manifest
+  acquisition returned the recorded digest
+  `sha256:4c336373f76be7d05d0ea40c45c64b16158415681cdae7c9d67810f941f2c965`.
+  A real HAOS Supervisor accepted the public repository as an image-based App,
+  updated the existing installation from dev16 to dev18 and retained all three
+  route IDs/configurations. A separate clean install from the public repository
+  started with an empty App data directory, acquired the pinned external bundle
+  and reported ready. That disposable install was removed and the persistent
+  dev18 installation returned ready with all routes running. An explicit older-
+  image rollback remains untested; an App-scoped pre-update backup exists.
 - The owner independently made the separate bundle repository public and
   published prerelease `2026.09.20`. Anonymous manifest/bundle acquisition,
   exact size/hash verification and mode-0600 import passed. Bundle bytes remain
@@ -9,8 +19,9 @@
 - dev18 local suite passed 260 tests (10 skips); CI run 35522674582 passed.
   Candidate image workflow 35522486246 passed and published digest
   `sha256:4c336373f76be7d05d0ea40c45c64b16158415681cdae7c9d67810f941f2c965`.
-  Anonymous image pull and the published-image HA update/rollback remain the
-  final deployment checks; source publication may proceed independently.
+  Anonymous image pull, published-image HA update and clean public-repository
+  install now pass. Explicit image-version rollback remains a later operational
+  check rather than a blocker for the labelled experimental prerelease.
 - The first-download path is now real: explicit/BYO paths take priority, an
   existing bundle is never replaced, and only an empty clean installation uses
   the pinned public manifest. Withdrawal affects new installs, not local copies.
