@@ -1,14 +1,10 @@
 # Current development runbook
 
-Current deployed development release: **0.6.0.dev11** for Python and the
-artwork-capable Rust frontend, staged under `.state/manager-dev11`. Use the
-complete frontend patch/source lock; older per-feature supplements are
-historical alternatives.
-Management remains at the configured LAN URL (development laptop port8788).
-Dev11 was built from the verified `.state/artwork-build` checkout, reusing the
-artifact cache at `vendor/vibecast-src/target`. The older `vendor/vibecast-src`
-source directory is stale and is NOT the source of the current release; do not
-rebuild it and assume it matches the running binary.
+Current packaged development release: **0.6.0.dev12**. It adds one supervisor,
+the static output registry, output-control protocol v2, operational endpoints,
+container/HA packaging and the maintained Vibecast fork on top of the accepted
+dev11 artwork path. The old laptop deployment and build directories remain
+historical evidence; do not treat them as the source of the packaged release.
 
 This is a Linux development installation, not a finished distribution or HA
 App/add-on. Keep the prior working release and private state available. Do not
@@ -21,10 +17,11 @@ mix old standalone Python receiver commands with the current Vibecast frontend.
    YouTube uses its service-specific control/metadata path and checked yt-dlp
    source extraction. The Default Media Receiver takes a direct HTTP(S) URL
    without invoking yt-dlp. It is not a browser executing arbitrary Web Receivers.
-2. **Speaker manager:** local HTTP UI, durable route IDs/names/configuration,
-   one independently supervised Python adapter per enabled route. It does not
-   currently supervise the Rust frontend itself.
-3. **Adapter:** normalized playback/status boundary. mpv performs local playback;
+2. **Runtime supervisor:** starts the Rust frontend, waits for its player bridge,
+   then starts the speaker manager. It owns bounded manager-first shutdown.
+3. **Speaker manager:** local HTTP UI, durable route IDs/names/configuration,
+   one independently supervised Python adapter per enabled route.
+4. **Adapter:** normalized playback/status boundary. mpv performs local playback;
    AirPlay uses FFmpeg's 44.1kHz stereo 16-bit PCM and pinned airplay-cli.
    AirPlay transport persists across track changes, with bounded FLUSH/drain and
    reconnect fallback. STOP still closes playback.
@@ -70,7 +67,7 @@ lock, following [source reconstruction](source-reconstruction.md). Never stack
 the historical cumulative snapshots. Keep binary/source/dependency hashes with
 the release; source reconstruction is not a bit-identical build guarantee.
 
-## Start the two services
+## Start the supervised runtime
 
 Choose persistent private directories outside the release tree. Keep an existing
 frontend data directory and manager routes to preserve identities and volume.
@@ -81,20 +78,12 @@ For a new frontend state directory use `config/vibecast-audio.toml` as its
 operation. Do not overwrite an existing customized configuration blindly.
 
 ```sh
-/absolute/release/vibecast \
+/absolute/release/.venv/bin/cast-audio-receiver \
+  --frontend /absolute/release/vibecast \
+  --cliairplay /absolute/tools/cliairplay \
+  --data-dir /absolute/private/state \
   --certs /absolute/private/certs.json \
-  --data-dir /absolute/private/frontend \
-  --model 'Audio Speaker' --bind-host 0.0.0.0
-```
-
-In a second terminal/service, using the prepared Python environment:
-
-```sh
-/absolute/release/.venv/bin/cast-speaker-manager \
-  --state-dir /absolute/private/speakers \
-  --bridge ws://127.0.0.1:8010/player \
-  --host 0.0.0.0 --port 8788 \
-  --cliairplay /absolute/tools/cliairplay
+  --web-port 8788
 ```
 
 Open `http://LINUX-LAN-IP:8788` directly. Add the local output or explicitly scan
@@ -160,10 +149,9 @@ Do not overwrite identities or restore an unrelated empty routes file. No state
 schema migration is introduced by dev4. A rollback cannot undo server-side
 revocation or a YouTube protocol change.
 
-The development launch is not crash-proof service packaging. A manager SIGKILL
-can leave descendants; production deployment needs service/cgroup ownership.
-That requirement belongs to the planned HA/OCI packaging rather than a silent
-change to the laptop's service configuration now.
+Native development still benefits from systemd/cgroup ownership. The OCI/HA
+path adds `tini`, one supervisor and bounded process-group shutdown; it is the
+preferred lifecycle for deployment tests.
 
 For incidents use [maintenance](maintenance.md): record versions/hashes, isolate
 the failed stage and redact private material before sharing logs. The resource

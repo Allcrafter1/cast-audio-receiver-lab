@@ -13,6 +13,8 @@ class PublicSourceExportTests(unittest.TestCase):
             target = Path(temporary) / "export"
             report = create(target)
             self.assertTrue((target / "Containerfile").is_file())
+            self.assertTrue((target / "SECURITY.md").is_file())
+            self.assertTrue((target / "docs/installation.md").is_file())
             self.assertTrue((target / "src/cast_audio_lab/runtime.py").is_file())
             self.assertTrue((target / "research/legacy_python_receiver/README.md").is_file())
             self.assertFalse((target / ".state").exists())

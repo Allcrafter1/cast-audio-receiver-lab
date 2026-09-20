@@ -32,7 +32,7 @@ redistributable release. The latest deployment is recorded in WORKING-PLAN.md.
   documented mixed-license/unclear-grant components.
 - [ ] Reconstruct and test from the intended clean public source, rather than
   relying on untracked files or the old remote vendor directory.
-- [ ] Document supported installation and private runtime-input requirements.
+- [x] Document supported installation and private runtime-input requirements.
   Do not imply credential redistribution permission or future Google acceptance.
 - [ ] Add immutable release artifacts/tags only after the corresponding source,
   dependency records and license review match.

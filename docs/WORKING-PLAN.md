@@ -166,7 +166,7 @@ internal implementation detail.
   a separate configurable `web_port` serves the trusted LAN. Options and the
   allocated port are read through the authenticated self-info API, avoiding a
   dependency on direct access to Supervisor's root-owned options file.
-- **Verified:** 201 Python tests complete successfully (19 explicit environment
+- **Verified:** 201 Python tests complete successfully (20 explicit environment
   skips in the current development environment). A clean dev12 wheel contains
   no historical modules, installs over the complete offline runtime lock and
   exposes the expected entrypoints. The
@@ -193,6 +193,11 @@ internal implementation detail.
   Git history/image inclusion requires a separate rights/security review rather
   than silently publishing reusable credentials. Packaging must make this split
   obvious and avoid presenting a nonfunctional install as complete.
+- **Installation boundary documented:** `docs/installation.md` now describes the
+  shared supervisor for HA, OCI and native Linux, the fail-closed certificate
+  requirement, owner-private full bundle, persistent state, verification and
+  rollback boundary. The old runbook now uses dev12's single supervisor rather
+  than obsolete manually managed frontend/manager processes.
 
 ## Certificate continuation — 2026-09-19
 

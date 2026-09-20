@@ -35,6 +35,7 @@ Current automated coverage and pending user checks:
 [DMR metadata correction](docs/dmr-metadata-dev5.md),
 [dev4 verification](docs/autonomous-dev4.md),
 [working plan](docs/WORKING-PLAN.md),
+[installation and deployment](docs/installation.md),
 [maintenance](docs/maintenance.md),
 [speaker management](docs/speaker-management.md), and the
 [first real Home Assistant acceptance run](docs/ha-acceptance-20260920.md).
@@ -42,6 +43,13 @@ Authentication bundles are private runtime inputs, not included public assets.
 Cast trust/revocation, YouTube control/extraction and target firmware can break
 compatibility independently of our version. Long certificate validity is not a
 guarantee of future service acceptance.
+
+A functional Cast deployment requires that input: startup fails explicitly if
+the configured bundle is missing or unreadable rather than presenting a dead
+speaker as healthy. The owner's private Home Assistant installation uses the
+validated 773-window bundle through 2030-12-06. Whether the same reusable
+third-party authentication material may be redistributed in a public repository
+or image is a separate unresolved release gate; it is never silently uploaded.
 
 Artwork conversion is centralized in `cast_audio_lab.artwork`: all current
 AirPlay covers are decoded through a lossless intermediate, center-cropped to a
@@ -117,10 +125,11 @@ cast-audio-receiver --frontend /path/to/vibecast \
 ```
 
 The manager then opens directly on the LAN at port 8788. Add local or discovered
-AirPlay outputs there. See [the current runbook](docs/current-runbook.md) for
-the still-manual development installation. OCI and Home Assistant source
-packaging now exist; a public image, one-click repository URL and
-update/rollback acceptance are still release milestones.
+AirPlay outputs there. See [installation and deployment](docs/installation.md)
+for the Home Assistant, OCI and native boundaries and the
+[current runbook](docs/current-runbook.md) for source development. OCI and Home
+Assistant source packaging now exist; a public image, one-click repository URL
+and update/rollback acceptance are still release milestones.
 
 ## AirPlay output (first implementation)
 

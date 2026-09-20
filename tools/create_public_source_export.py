@@ -27,6 +27,7 @@ ROOT_FILES = (
     "Containerfile",
     "LICENSE",
     "README.md",
+    "SECURITY.md",
     "THIRD_PARTY_NOTICES.md",
     "pyproject.toml",
     "repository.yaml",

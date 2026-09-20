@@ -35,7 +35,7 @@
   manifest. Its fresh export excludes private state/artifacts and passes the
   full suite. A private GitHub staging repository now exercises real CI without
   declaring the project publicly released.
-- Python suite: 201 tests complete successfully with 19 environment-dependent
+- Python suite: 201 tests complete successfully with 20 environment-dependent
   skips in the current development environment. Targeted
   Rust gate: 110 tests pass with one explicit live-network probe ignored.
 
@@ -427,6 +427,10 @@ The project uses semantic versioning while the protocol and configuration
 interfaces are still experimental.
 
 ## Unreleased
+
+- Add one deployment guide for Home Assistant, OCI and native Linux; make the
+  required private certificate input and fail-closed startup behavior explicit,
+  and update the development runbook to the dev12 supervisor lifecycle.
 
 - Controls-4 experiment: associate sessions with their LAUNCH connection and
   stop them when that connection closes, independent of lingering subscribers.
