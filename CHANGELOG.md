@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0.dev20 — bilingual interface and ARM64 build candidate
+
+- Add a Deutsch/English switch at the top right. Translate headings, controls,
+  status, discovery results, confirmation dialogs and errors. Remember the
+  browser-local choice; preserve drafts and discovered targets when switching.
+- Use browser language initially (German or English fallback). Switching still
+  works when browser storage is unavailable, including embedded HA views.
+- Add native ARM64 and x86_64 image build/test jobs, architecture-specific pinned
+  AirPlay assets and Python wheel hashes, and downloadable OCI review artifacts.
+- Keep the HA store on the available dev18 image until explicit publication;
+  source/dev builds are dev20. No image or release is published by CI/review.
+
 ## 0.6.0.dev19 — YouTube Music repeat
 
 - Speed up repeat-one by reusing the current resolved stream description for

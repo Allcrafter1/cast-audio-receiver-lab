@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/music-assistant/airplay-cli",
+  "version": "v0.5.4",
+  "source_commit": "431c5c582eef9307c4e39c50a0ea65e970bc1128",
+  "asset": "cliairplay-linux-aarch64",
+  "sha256": "1ce9160a8a9abb1b2263dfbf5ed59551dd1205b2336a024e9e33c903c201a310",
+  "checksums_sha256": "0df2ba3ac02f5c8f48fcd05f219480968aeb19566be5d3a26d6e7480fb29f235",
+  "license": "GPL-3.0",
+  "scope": "Linux ARM64 candidate; native build and startup checks do not establish physical AirPlay acceptance"
+}

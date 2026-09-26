@@ -1,6 +1,6 @@
 name: Release artifact review
 
-# Explicit private review run; never pushes an image, creates a public release,
+# Explicit build-artifact run; never pushes an image, creates a public release,
 # downloads a Cast bundle or changes repository visibility.
 on:
   workflow_dispatch:
@@ -10,7 +10,17 @@ permissions:
 
 jobs:
   image:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            ha_arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            ha_arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -23,7 +33,8 @@ jobs:
         with:
           context: .
           file: Containerfile
-          platforms: linux/amd64
+          platforms: linux/${{ matrix.arch }}
+          build-args: BUILD_ARCH=${{ matrix.ha_arch }}
           push: false
           outputs: type=oci,dest=${{ runner.temp }}/cast-audio-review.oci.tar
           sbom: true
@@ -32,9 +43,11 @@ jobs:
       - name: Record artifact integrity
         working-directory: ${{ runner.temp }}
         run: sha256sum cast-audio-review.oci.tar > cast-audio-review.oci.tar.sha256
+      - name: Verify OCI blobs, SBOM and provenance
+        run: python3 tools/inspect_oci_review.py "${{ runner.temp }}/cast-audio-review.oci.tar" --summary --verify-blobs
       - uses: actions/upload-artifact@v7
         with:
-          name: cast-audio-review-${{ github.sha }}
+          name: cast-audio-review-${{ matrix.arch }}-${{ github.sha }}
           path: |
             ${{ runner.temp }}/cast-audio-review.oci.tar
             ${{ runner.temp }}/cast-audio-review.oci.tar.sha256

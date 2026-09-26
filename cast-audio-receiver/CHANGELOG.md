@@ -1,5 +1,13 @@
 # App changelog
 
+## 0.6.0-dev20 — candidate, not published
+
+- Switch between Deutsch and English at the top right. The browser remembers
+  your choice; unsaved input and discovered devices survive language changes.
+- Translate controls, status, discovery, errors and confirmation dialogs.
+- Prepare native x86_64 and ARM64 test builds. The App store remains on dev18
+  until the corresponding image is explicitly published.
+
 ## 0.6.0-dev19 — YouTube Music repeat
 
 - Reduce the pause when repeating a title by reusing its recently resolved

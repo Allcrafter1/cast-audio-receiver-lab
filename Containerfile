@@ -1,9 +1,8 @@
 # syntax=docker/dockerfile:1.7
 
-# Version-recorded container candidate. cliairplay v0.5.4 is the verified
-# Linux x86_64 candidate (physical regression acceptance pending); fail
-# rather than pretending that another architecture is supported.
-FROM --platform=linux/amd64 rust:1.98-bookworm AS vibecast-builder
+# Native amd64/arm64 builds use the same sources and package versions, with
+# separately verified native assets and wheel hashes for each target.
+FROM rust:1.98-bookworm AS vibecast-builder
 ARG VIBECAST_REPOSITORY=https://github.com/Allcrafter1/vibecast.git
 ARG VIBECAST_COMMIT=35ffe1b5ceca4962903a4f217cb18ef7d3dfb071
 RUN apt-get update \
@@ -14,7 +13,7 @@ RUN git clone --filter=blob:none "${VIBECAST_REPOSITORY}" . \
     && git checkout --detach "${VIBECAST_COMMIT}"
 RUN cargo build --locked --release -p vibecast-cli
 
-FROM --platform=linux/amd64 python:3.12-slim-bookworm AS python-builder
+FROM python:3.12-slim-bookworm AS python-builder
 WORKDIR /src
 COPY config/container-build-cp312.lock.txt /tmp/build-requirements.txt
 RUN python -m pip install --no-cache-dir --disable-pip-version-check \
@@ -25,21 +24,29 @@ COPY licenses/ ./licenses/
 COPY src/ ./src/
 RUN python -m pip wheel --no-deps --no-build-isolation --wheel-dir /tmp/wheels .
 
-FROM --platform=linux/amd64 debian:bookworm-slim AS airplay-fetch
+FROM debian:bookworm-slim AS airplay-fetch
+ARG TARGETARCH
 ARG CLIAIRPLAY_VERSION=v0.5.4
 ARG CLIAIRPLAY_SHA256=1ac56a15fb548f07a1dae94be16d4bea308420a0ec0cd04238023e44345fc1c9
+ARG CLIAIRPLAY_ARM64_SHA256=1ce9160a8a9abb1b2263dfbf5ed59551dd1205b2336a024e9e33c903c201a310
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
-RUN curl --fail --location --proto '=https' --tlsv1.2 \
-      "https://github.com/music-assistant/airplay-cli/releases/download/${CLIAIRPLAY_VERSION}/cliairplay-linux-x86_64" \
+RUN case "$TARGETARCH" in \
+      amd64) airplay_asset=cliairplay-linux-x86_64; airplay_sha="$CLIAIRPLAY_SHA256" ;; \
+      arm64) airplay_asset=cliairplay-linux-aarch64; airplay_sha="$CLIAIRPLAY_ARM64_SHA256" ;; \
+      *) echo "Unsupported target architecture" >&2; exit 1 ;; \
+    esac \
+    && curl --fail --location --proto '=https' --tlsv1.2 \
+      "https://github.com/music-assistant/airplay-cli/releases/download/${CLIAIRPLAY_VERSION}/${airplay_asset}" \
       --output /tmp/cliairplay \
-    && echo "${CLIAIRPLAY_SHA256}  /tmp/cliairplay" | sha256sum --check --strict \
+    && echo "${airplay_sha}  /tmp/cliairplay" | sha256sum --check --strict \
     && chmod 0755 /tmp/cliairplay
 
-FROM --platform=linux/amd64 python:3.12-slim-bookworm
-ARG BUILD_VERSION=0.6.0-dev19
-ARG BUILD_ARCH=amd64
+FROM python:3.12-slim-bookworm
+ARG TARGETARCH
+ARG BUILD_VERSION=0.6.0-dev20
+ARG BUILD_ARCH=${TARGETARCH}
 LABEL org.opencontainers.image.title="Cast Audio Receiver Lab"
 LABEL org.opencontainers.image.description="Experimental Cast audio receiver with modular local and AirPlay outputs"
 LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
@@ -52,9 +59,14 @@ RUN apt-get update \
        ca-certificates ffmpeg libstdc++6 libssl3 mpv tini \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/cast-audio-receiver
-COPY config/container-linux-x86_64-cp312.lock.txt /tmp/runtime-requirements.txt
-RUN python -m pip install --no-cache-dir --disable-pip-version-check \
-      --require-hashes -r /tmp/runtime-requirements.txt
+COPY config/container-linux-*-cp312.lock.txt /tmp/runtime-locks/
+RUN case "$TARGETARCH" in \
+      amd64) wheel_arch=x86_64 ;; \
+      arm64) wheel_arch=aarch64 ;; \
+      *) echo "Unsupported target architecture" >&2; exit 1 ;; \
+    esac \
+    && python -m pip install --no-cache-dir --disable-pip-version-check \
+      --only-binary=:all: --require-hashes -r "/tmp/runtime-locks/container-linux-${wheel_arch}-cp312.lock.txt"
 COPY --from=python-builder /tmp/wheels/cast_audio_receiver_lab-*.whl /tmp/
 RUN python -m pip install --no-cache-dir --disable-pip-version-check \
       --no-deps /tmp/cast_audio_receiver_lab-*.whl \

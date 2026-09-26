@@ -13,7 +13,8 @@ class WebRequestTests(unittest.TestCase):
 const fs = require('fs'), vm = require('vm'), assert = require('assert');
 (async () => {
   const context = vm.createContext({
-    document: {getElementById: () => ({})},
+    document: {getElementById: () => ({}), querySelectorAll: () => [], documentElement: {}},
+    navigator: {language: 'en'},
     fetch: () => new Promise(() => {}), setInterval: () => {},
   });
   vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), context);

@@ -1,5 +1,23 @@
 # Working plan
 
+## German/English UI and native ARM64/x86_64 builds — 2026-09-26
+
+- Owner explicitly defers image publication. Implement/test the language switch,
+  push source and build both architectures. ARM is taken as ARM64/aarch64.
+- Bilingual UI implemented without a framework or runtime dependency. Preserve
+  drafts/discoveries, browser-local language preference, translated live status,
+  dialogs and errors; storage failure and ingress are covered.
+- Chromium tests passed on desktop/mobile and root/ingress paths. Existing
+  Python suite passed 263 tests (10 skips); architecture gate added afterward.
+- Native ARM64 build uses the same 31 Python versions with separately downloaded
+  and hashed wheels and the official pinned aarch64 AirPlay binary. CI and the
+  artifact-review workflow now have native amd64/arm64 jobs. Builds pending.
+- Restore store metadata to the actually available dev18 image so source pushes
+  do not advertise an un-downloadable App update. Build version is dev20;
+  publication workflow now reads its version from the source project instead.
+- No image publication, App update or live receiver replacement in this task.
+  Details: `language-and-arm64.md`.
+
 ## Repeat-one preparation and HA update status — 2026-09-26
 
 - Owner asks whether HA can update, asks for release notes, and requests reduced

@@ -59,6 +59,21 @@ class ReviewPackagingTests(unittest.TestCase):
         self.assertIn("ARG CLIAIRPLAY_VERSION=" + lock["version"], container)
         self.assertIn("ARG CLIAIRPLAY_SHA256=" + lock["sha256"], container)
 
+    def test_arm64_uses_the_same_versions_with_its_own_artifacts(self):
+        config = ROOT / "config"
+        x86 = json.loads((config / "container-linux-x86_64-cp312.wheels.json").read_text())
+        arm = json.loads((config / "container-linux-aarch64-cp312.wheels.json").read_text())
+        self.assertEqual({p["name"]: p["version"] for p in x86},
+                         {p["name"]: p["version"] for p in arm})
+        for wheel in arm:
+            self.assertNotIn("x86_64", wheel["filename"])
+            self.assertTrue(wheel["filename"].endswith("-any.whl") or "aarch64" in wheel["filename"])
+        native = json.loads((config / "cliairplay-linux-aarch64.lock.json").read_text())
+        original = json.loads((config / "cliairplay-linux-x86_64.lock.json").read_text())
+        self.assertEqual(native["version"], original["version"])
+        self.assertEqual(native["source_commit"], original["source_commit"])
+        self.assertIn("ARG CLIAIRPLAY_ARM64_SHA256=" + native["sha256"], (ROOT / "Containerfile").read_text())
+
     def test_network_output_buttons_belong_to_their_own_group(self):
         groups = Groups()
         groups.feed((ROOT / "src/cast_audio_lab/web/index.html").read_text())

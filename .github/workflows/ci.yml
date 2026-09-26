@@ -76,7 +76,17 @@ jobs:
         run: cargo fmt --all -- --check
 
   container:
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            ha_arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            ha_arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -85,6 +95,31 @@ jobs:
         with:
           context: .
           file: Containerfile
-          platforms: linux/amd64
+          platforms: linux/${{ matrix.arch }}
+          build-args: BUILD_ARCH=${{ matrix.ha_arch }}
           push: false
+          load: true
           tags: cast-audio-receiver:ci
+      - name: Check native runtime without private state or network
+        run: |
+          docker run --rm --network none --entrypoint /bin/sh cast-audio-receiver:ci -ec '
+            vibecast --help >/dev/null
+            cliairplay --check
+            deno --version
+            python -c "import platform, aiohttp, lxml, zeroconf, async_upnp_client, soco; print(platform.machine())"
+          '
+
+  browser:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: Prepare isolated browser test tool
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser-tests" --no-package-lock --ignore-scripts playwright@1.63.0
+          "$RUNNER_TEMP/browser-tests/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Test German and English on desktop, mobile and ingress paths
+        run: NODE_PATH="$RUNNER_TEMP/browser-tests/node_modules" node tests/browser_ui.cjs
