@@ -14,7 +14,12 @@
   additional resolver process, dependency or output architecture change.
 - Frontend `35ffe1b`: 51 YouTube tests pass, one live probe ignored. Tests cover
   repeated reuse, unchanged timestamp, freshness, codec/title mismatch, Stop
-  and preserving manual Next. Compatible build/live acceptance are pending.
+  and preserving manual Next. Product pin/notes pushed as `b3ff707`. Compatible
+  release built and deployed as a frontend-only hotfix; both routes are ready.
+  Owner confirms repeat is faster and manual Next still works. Receiver logs
+  confirm current-stream reuse followed by prefetched Next. Live acceptance is
+  complete for this follow-up; image publication remains separate.
+- GitHub CI `36269656983` passed Python 3.11/3.12/3.13, Rust and container build.
 
 ## YouTube Music repeat — 2026-09-26
 

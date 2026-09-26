@@ -16,7 +16,20 @@ opens the stream and output buffering still applies; this is not gapless playbac
 
 The YouTube suite passes 51 tests (one explicit live probe ignored), including
 repeated reuse without a new resolver request, preserving a pending Next,
-freshness, codec/title mismatch and Stop. Follow-up live acceptance is pending.
+freshness, codec/title mismatch and Stop. The owner confirmed faster repeat and
+working manual Next on the selected test host. Receiver logs independently show
+`reusing current YouTube media for repeat`, followed by the existing
+`using prefetched YouTube media` path for Next. No new resolver request occurs
+for that repeat. This is a functional comparison, not a measured latency claim.
+GitHub CI run `36269656983` passed all Python versions, Rust and container build
+for product `b3ff707` with this frontend pin.
+
+The optimized binary was built successfully and activated on the same selected
+test host. Both routes report ready. Active SHA-256:
+`7ffe87c31237ffa31c6b3587044e36c9f50ca7ff7f267469ba5bc45c4b121b39`.
+The previously confirmed repeat binary is retained separately as
+`vibecast-repeat-original.rollback` (hash `d9a15d33…a02a1888`). The container
+still uses its dev18 base image/manager; this is another frontend-only hotfix.
 
 HA distribution status: dev19 release notes exist in both changelogs, but the
 versioned container image has not yet been published. The version field alone

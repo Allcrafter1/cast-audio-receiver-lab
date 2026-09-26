@@ -5,6 +5,7 @@
 - Reduce the pause when repeating a title by reusing its recently resolved
   stream. The next title stays prepared for manual skipping. Stream opening
   and output buffering still apply; this is not gapless audio playback.
+- Joint receiver test confirmed faster repeat and working manual Next.
 
 - Enable the sender's repeat control and synchronize Off, One and All modes.
 - Repeat the current title at natural EOF or wrap the playlist; manual Next
