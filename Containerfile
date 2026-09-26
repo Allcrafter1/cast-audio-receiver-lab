@@ -5,7 +5,7 @@
 # rather than pretending that another architecture is supported.
 FROM --platform=linux/amd64 rust:1.98-bookworm AS vibecast-builder
 ARG VIBECAST_REPOSITORY=https://github.com/Allcrafter1/vibecast.git
-ARG VIBECAST_COMMIT=1bc5f2edb8c4566ebeeef8d48574e174c849175d
+ARG VIBECAST_COMMIT=35ffe1b5ceca4962903a4f217cb18ef7d3dfb071
 RUN apt-get update \
     && apt-get install -y --no-install-recommends clang cmake git \
     && rm -rf /var/lib/apt/lists/*

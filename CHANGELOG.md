@@ -2,6 +2,11 @@
 
 ## 0.6.0.dev19 — YouTube Music repeat
 
+- Speed up repeat-one by reusing the current resolved stream description for
+  up to ten minutes, avoiding another YouTube/yt-dlp lookup while preserving
+  next-title preparation. No audio download cache or extra resolver process.
+  Old entries fall back to normal resolution; Stop clears the cached entry.
+
 - Advertise Lounge multi-state repeat support so the sender can enable its
   repeat button. Accept and report Off, One and All, including the sender's
   initial mode when casting an existing playlist.

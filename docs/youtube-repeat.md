@@ -1,5 +1,29 @@
 # YouTube Music repeat — dev19
 
+## Repeat-one stream preparation
+
+Follow-up frontend `35ffe1b5ceca4962903a4f217cb18ef7d3dfb071` retains the current
+resolved stream description in memory. A distinct repeat-one EOF command reuses
+that description at position zero with autoplay, without another metadata/yt-dlp
+resolution. The already prepared next title stays available for manual Next.
+
+This adds no decoder, resolver process, audio-file cache or dependency. The
+existing ten-minute freshness rule applies from the original resolution time,
+including media obtained through prefetch; repeating never renews that age.
+Expired entries and changed codec preferences use the normal cancellable
+resolver. Stop or another load clears the old current entry. The decoder still
+opens the stream and output buffering still applies; this is not gapless playback.
+
+The YouTube suite passes 51 tests (one explicit live probe ignored), including
+repeated reuse without a new resolver request, preserving a pending Next,
+freshness, codec/title mismatch and Stop. Follow-up live acceptance is pending.
+
+HA distribution status: dev19 release notes exist in both changelogs, but the
+versioned container image has not yet been published. The version field alone
+does not establish that an App update can download and install the new version.
+
+## Original repeat functionality and joint test
+
 The previous frontend did not advertise `mlm` (multi-state loop mode), ignored
 `setLoopMode`, and always advanced at natural EOF. This accounts for the disabled
 repeat control and the missing playback behavior.
@@ -24,8 +48,8 @@ the existing queue-extension behavior. The ordinary selection/resolution path
 keeps playback and Lounge indices synchronized and retains cancellation. This
 does not add generic Default Media Receiver queue/repeat support.
 
-Frontend source: `1bc5f2edb8c4566ebeeef8d48574e174c849175d` on the maintained
-`Allcrafter1/vibecast` branch. The product container and CI pin this exact commit.
+Initial frontend source: `1bc5f2edb8c4566ebeeef8d48574e174c849175d` on the maintained
+`Allcrafter1/vibecast` branch; the product now pins the preparation follow-up above.
 
 Automated checks cover capability advertisement, valid/invalid commands, initial
 mode, feedback, empty queues, end-of-queue behavior, and an asynchronous EOF

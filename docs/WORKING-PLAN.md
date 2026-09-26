@@ -1,5 +1,21 @@
 # Working plan
 
+## Repeat-one preparation and HA update status — 2026-09-26
+
+- Owner asks whether HA can update, asks for release notes, and requests reduced
+  repeat-one delay unless it needs a significant architecture change.
+- Correction: dev19 is advertised in App metadata and has changelog entries,
+  but its image has not been published. The live test host has a frontend-only
+  hotfix. Do not call an HA update ready before the versioned image is available.
+- Small frontend-only optimization: retain one current stream description with
+  the original resolution timestamp and existing ten-minute freshness bound.
+  Explicit repeat EOF reuses it, preserving the next-title preparation. Stop,
+  another load, mismatched title or codec invalidates reuse. No audio-file cache,
+  additional resolver process, dependency or output architecture change.
+- Frontend `35ffe1b`: 51 YouTube tests pass, one live probe ignored. Tests cover
+  repeated reuse, unchanged timestamp, freshness, codec/title mismatch, Stop
+  and preserving manual Next. Compatible build/live acceptance are pending.
+
 ## YouTube Music repeat — 2026-09-26
 
 - Owner requests diagnosis, implementation and GitHub push, then explicitly

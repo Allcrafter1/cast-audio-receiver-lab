@@ -2,6 +2,10 @@
 
 ## 0.6.0-dev19 — YouTube Music repeat
 
+- Reduce the pause when repeating a title by reusing its recently resolved
+  stream. The next title stays prepared for manual skipping. Stream opening
+  and output buffering still apply; this is not gapless audio playback.
+
 - Enable the sender's repeat control and synchronize Off, One and All modes.
 - Repeat the current title at natural EOF or wrap the playlist; manual Next
   still advances when repeating one title.
