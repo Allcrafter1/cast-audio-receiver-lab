@@ -46,5 +46,20 @@ Future publication must verify images first, then update App version/architectur
 metadata. The current publication workflow still publishes only amd64; publishing
 a combined multiarch manifest remains part of that future release step.
 
-Local/browser checks and native build/artifact results are recorded in the
-working plan. No dev19/dev20 image publication is authorized in this task.
+## Verified candidate and downloads
+
+Source commit: `670c80a044f5a9d401084362ded690e1add62114` (dev20).
+Local Python checks completed 264 tests successfully with 10 skips; Chromium
+passed the desktop/mobile, DE/EN, persistence, ingress and interaction checks.
+[CI run](https://github.com/Allcrafter1/cast-audio-receiver-lab/actions/runs/36271012310)
+passed all seven jobs, including native runtime smoke tests on both platforms.
+[Artifact review](https://github.com/Allcrafter1/cast-audio-receiver-lab/actions/runs/36271012452)
+successfully built both candidates and verified their OCI blobs and attestations.
+
+- [x86_64 / amd64 archive](https://github.com/Allcrafter1/cast-audio-receiver-lab/actions/runs/36271012452/artifacts/10915277766)
+- [ARM64 / aarch64 archive](https://github.com/Allcrafter1/cast-audio-receiver-lab/actions/runs/36271012452/artifacts/10915552304)
+
+Each download contains an OCI image archive and its SHA-256 file. Artifacts
+expire on 2026-10-03 (seven-day retention); these are build candidates, not a
+published registry release. No dev19/dev20 image publication or live UI
+deployment was performed or authorized in this task.

@@ -8,10 +8,16 @@
   drafts/discoveries, browser-local language preference, translated live status,
   dialogs and errors; storage failure and ingress are covered.
 - Chromium tests passed on desktop/mobile and root/ingress paths. Existing
-  Python suite passed 263 tests (10 skips); architecture gate added afterward.
+  Python suite completed 264 tests successfully (10 skips), including the
+  architecture gate.
 - Native ARM64 build uses the same 31 Python versions with separately downloaded
   and hashed wheels and the official pinned aarch64 AirPlay binary. CI and the
-  artifact-review workflow now have native amd64/arm64 jobs. Builds pending.
+  artifact-review workflow now have native amd64/arm64 jobs. Both builds passed.
+- Implementation `670c80a` is pushed to main. CI `36271012310` passed all seven
+  jobs (Rust, browser, three Python versions and both native container smoke
+  tests). Review run `36271012452` built and verified both OCI archives including
+  blob checksums, SBOM and provenance. Download links and expiry are recorded in
+  `language-and-arm64.md`; physical ARM speaker acceptance remains untested.
 - Restore store metadata to the actually available dev18 image so source pushes
   do not advertise an un-downloadable App update. Build version is dev20;
   publication workflow now reads its version from the source project instead.
