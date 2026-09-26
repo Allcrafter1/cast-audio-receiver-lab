@@ -75,7 +75,7 @@ jobs:
           docker run --rm --network none --entrypoint vibecast "$image" --help
           docker run --rm --network none --entrypoint cliairplay "$image" --check
           docker run --rm --network none --entrypoint deno "$image" --version
-          docker run --rm --network none --entrypoint python "$image" -c 'import cast_audio_lab, cryptography, aiohttp, platform; print(cast_audio_lab.__version__, platform.machine())'
+          docker run --rm --network none --entrypoint python "$image" -c 'import cast_audio_lab, aiohttp, lxml, zeroconf, async_upnp_client, soco, platform; print(cast_audio_lab.__version__, platform.machine())'
       - name: Record platform digest
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}

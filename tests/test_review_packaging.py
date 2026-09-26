@@ -35,6 +35,8 @@ class ReviewPackagingTests(unittest.TestCase):
         self.assertIn('push-by-digest=true', workflow)
         self.assertIn('BUILD_VERSION=${{ steps.version.outputs.tag }}', workflow)
         self.assertIn('Verify native runtime before promoting', workflow)
+        self.assertIn('aiohttp, lxml, zeroconf, async_upnp_client, soco', workflow)
+        self.assertNotIn('import cast_audio_lab, cryptography', workflow)
         self.assertIn('needs: image', workflow)
         self.assertIn("for arch in ('amd64', 'arm64'):", workflow)
         self.assertIn("{('linux', 'amd64'), ('linux', 'arm64')} <= platforms", workflow)
