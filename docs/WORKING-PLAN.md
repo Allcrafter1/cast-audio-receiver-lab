@@ -7,7 +7,28 @@
 - Publish native amd64/arm64 images by digest, smoke-test both, then assemble
   the versioned multiarch manifest. Verify public retrieval before changing
   store metadata. Preserve the old receiver container and private state backup.
-- Deployment, public verification and App promotion are pending.
+- Publication run `36272017913` passed both native image builds, runtime smoke
+  tests and multiarch manifest publication for source `06b4ecd`. CI
+  `36272018247` passed all seven jobs. An initial publication attempt stopped
+  before promotion because its added smoke test imported a non-runtime module;
+  the test was corrected, without adding a product dependency.
+- Anonymous manifest/config retrieval verified both architectures, versions,
+  labels and digests. A full anonymous amd64 pull on the selected host passed.
+  Multiarch digest:
+  `sha256:7ceabbf06a1d6bc91cf9d54339c04ff81bc642e09403f9361dfe68ece7f7db52`.
+- Full dev20 image deployed on the selected x86_64 receiver, replacing the
+  historical dev18-plus-hotfix container. All three route configurations are
+  unchanged; both enabled outputs are ready with zero restarts. Existing host
+  networking, PulseAudio bindings, 1 GiB memory/1.25 GiB swap and 128 PID limits
+  remain. Old container and private consistent state backup are retained.
+- Live Chromium checks pass DE/EN, reload persistence, unsaved drafts, mobile
+  layout and zero configuration writes/JS errors. Local suite: 265 tests,
+  10 skips; synthetic browser regressions also pass. No new audible playback
+  or physical ARM acceptance is claimed by these deployment checks.
+- Promote App metadata to dev20 for amd64/aarch64 only after the above gates.
+  Updated release notes, install docs and source evidence accompany promotion.
+  Vendored frontend source run `36272062424` passed the frozen/offline build;
+  downloaded archive checksum and source pin match. Details: `release-dev20.md`.
 
 ## German/English UI and native ARM64/x86_64 builds — 2026-09-26
 

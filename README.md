@@ -34,7 +34,8 @@ http://HOME_ASSISTANT_IP:8788
 ```
 
 Port `8788` is the default and can be changed in the App configuration. The
-current release supports `amd64`; ARM is not release-validated yet.
+current release supports `amd64` and `aarch64` (64-bit ARM). ARM64 has native
+build/runtime checks; physical ARM speaker acceptance remains untested.
 
 ## What it can do
 
@@ -120,10 +121,10 @@ the authentication section in [How it works](docs/how-it-works.md).
 
 ## Container and native installs
 
-The published `amd64` image is:
+The published multiarch (`amd64` / `arm64`) image is:
 
 ```text
-ghcr.io/allcrafter1/cast-audio-receiver:0.6.0-dev18
+ghcr.io/allcrafter1/cast-audio-receiver:0.6.0-dev20
 ```
 
 It needs host networking for Cast/mDNS and target discovery, plus persistent

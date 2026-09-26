@@ -38,13 +38,12 @@ no emulation or cross-architecture library substitution is used.
   provenance as seven-day GitHub Actions artifacts. It does not push to GHCR,
   create a release, fetch runtime Cast credentials or change a live receiver.
 
-Build success is not physical ARM speaker acceptance. The published HA App
-remains amd64/dev18; ARM64 install support is not advertised by the store yet.
-The image publication workflow reads the candidate version from pyproject.toml,
-so it cannot overwrite dev18 because the store deliberately stays on dev18.
-Future publication must verify images first, then update App version/architecture
-metadata. The current publication workflow still publishes only amd64; publishing
-a combined multiarch manifest remains part of that future release step.
+Build success is not physical ARM speaker acceptance. The dev20 publication
+workflow builds amd64/arm64 on native runners, pushes by digest, smoke-tests both
+images and only then creates the versioned multiarch manifest. It reads the
+version from pyproject.toml, independently of App store promotion. The store is
+updated only after public retrieval and the selected x86_64 receiver deployment
+are verified. See the working plan for final publication evidence.
 
 ## Verified candidate and downloads
 
@@ -61,5 +60,7 @@ successfully built both candidates and verified their OCI blobs and attestations
 
 Each download contains an OCI image archive and its SHA-256 file. Artifacts
 expire on 2026-10-03 (seven-day retention); these are build candidates, not a
-published registry release. No dev19/dev20 image publication or live UI
-deployment was performed or authorized in this task.
+published registry release. Publication and live deployment were initially
+deferred; the owner subsequently authorized them as a separate rollout step.
+The persistent installation reference is now the dev20 GHCR tag, not these
+expiring review archives.

@@ -1,12 +1,14 @@
 # App changelog
 
-## 0.6.0-dev20 — candidate, not published
+## 0.6.0-dev20 — experimental pre-release
 
 - Switch between Deutsch and English at the top right. The browser remembers
   your choice; unsaved input and discovered devices survive language changes.
 - Translate controls, status, discovery, errors and confirmation dialogs.
-- Prepare native x86_64 and ARM64 test builds. The App store remains on dev18
-  until the corresponding image is explicitly published.
+- Publish native x86_64 and ARM64 images. ARM64 passes native build/runtime
+  checks; physical ARM speaker testing remains open. 32-bit ARM is unsupported.
+- Includes the dev19 YouTube Music Repeat modes and faster single-title repeat
+  described below. Existing speaker configurations and identities are retained.
 
 ## 0.6.0-dev19 — YouTube Music repeat
 

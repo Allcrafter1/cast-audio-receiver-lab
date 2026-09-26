@@ -1,7 +1,8 @@
 # Installation and deployment
 
 The project is an experimental pre-release. The tested deployment is Linux
-`amd64`; a versioned GHCR image and Home Assistant repository metadata are
+`amd64`; native `arm64` build/runtime checks also pass, but physical ARM speaker
+acceptance remains open. A versioned multiarch GHCR image and HA metadata are
 published from this repository. All delivery forms run the same `cast-audio-receiver`
 supervisor and therefore do not maintain separate playback implementations.
 
@@ -27,7 +28,9 @@ revocation or a protocol change can invalidate it earlier.
 
 In Home Assistant, open **Settings → Apps → App store → Repositories**, add
 `https://github.com/Allcrafter1/cast-audio-receiver-lab`, refresh the store and
-install **Cast Audio Receiver Lab**. Only `amd64` is supported by this release.
+install **Cast Audio Receiver Lab**. This release supports `amd64` and `aarch64`
+(64-bit ARM), not 32-bit ARM. To update an existing installation, refresh the
+store, choose version **0.6.0-dev20**, and retain the App backup option.
 
 The source package under `cast-audio-receiver/` has passed a real HAOS/
 Supervisor source build, install, ingress, LAN, local-audio restart and
@@ -58,7 +61,7 @@ preserve `/data`.
 ## Local OCI build
 
 The checked-in `Containerfile` builds the maintained Vibecast fork, the Python
-manager and pinned `cliairplay` in one `linux/amd64` image:
+manager and pinned `cliairplay` in a native `linux/amd64` or `linux/arm64` image:
 
 ```sh
 docker build -f Containerfile -t cast-audio-receiver:local .
@@ -72,7 +75,7 @@ private state before permanently dropping to UID/GID 1000:
 docker run --rm --network host \
   -v /absolute/cast-audio-state:/data \
   -e CAST_AUDIO_WEB_PORT=8788 \
-  ghcr.io/allcrafter1/cast-audio-receiver:0.6.0-dev18
+  ghcr.io/allcrafter1/cast-audio-receiver:0.6.0-dev20
 ```
 
 For BYO material, additionally mount the file read-only and set

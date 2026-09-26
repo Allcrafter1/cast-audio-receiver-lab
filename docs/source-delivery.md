@@ -21,7 +21,14 @@ preserves crate notices, and requires a frozen release build before uploading
 the archive. Build and dependency sources are distinct from the compiler and
 system-tool prerequisites. See `build-vendored-vibecast.md`.
 
-Run **35521105935** passed its frozen/offline CLI release build. Downloaded
+Dev20 run **36272062424** passed its frozen/offline CLI release build for pinned
+frontend `35ffe1b5ceca4962903a4f217cb18ef7d3dfb071`. The downloaded archive matches
+its SHA-256 sidecar:
+`a3b71ea3aa05818bb19ba720a696860044c5f79bbb8dba0c3db3fc20d0a87f83`.
+It is retained with the dev20 release, alongside the image digest/manifest.
+
+Historical dev18 run **35521105935** also passed its frozen/offline CLI build.
+Its older
 `vibecast-vendored-source.tar.gz` matches its SHA-256 sidecar:
 `411dfcea28df2d73216b180c3cd8c8c1066c49e270b8d9a12dac4634ef47b824`.
 The dependency sources and notices are retained; this does not imply that

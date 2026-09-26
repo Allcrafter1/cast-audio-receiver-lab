@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0.dev20 — bilingual interface and ARM64 build candidate
+## 0.6.0.dev20 — bilingual interface and ARM64 pre-release
 
 - Add a Deutsch/English switch at the top right. Translate headings, controls,
   status, discovery results, confirmation dialogs and errors. Remember the
@@ -9,8 +9,11 @@
   works when browser storage is unavailable, including embedded HA views.
 - Add native ARM64 and x86_64 image build/test jobs, architecture-specific pinned
   AirPlay assets and Python wheel hashes, and downloadable OCI review artifacts.
-- Keep the HA store on the available dev18 image until explicit publication;
-  source/dev builds are dev20. No image or release is published by CI/review.
+- Publish the versioned multiarch image only after both native runtime checks;
+  promote the HA App to dev20 for amd64/aarch64 after public-image verification
+  and the selected x86_64 receiver update. CI/review alone never publishes.
+- Includes the dev19 Repeat fixes below. ARM64 physical speaker testing remains
+  open; native build/runtime tests are not broader hardware certification.
 
 ## 0.6.0.dev19 — YouTube Music repeat
 

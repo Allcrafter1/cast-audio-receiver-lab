@@ -31,9 +31,10 @@ The previously confirmed repeat binary is retained separately as
 `vibecast-repeat-original.rollback` (hash `d9a15d33…a02a1888`). The container
 still uses its dev18 base image/manager; this is another frontend-only hotfix.
 
-HA distribution status: dev19 release notes exist in both changelogs, but the
-versioned container image has not yet been published. The version field alone
-does not establish that an App update can download and install the new version.
+HA distribution: dev19 was never independently published. Its Repeat fixes are
+included in the dev20 multiarch App update alongside the bilingual interface.
+The earlier hotfix-only deployment above is historical; the dev20 working-plan
+entry records the full-image deployment and public-image verification.
 
 ## Original repeat functionality and joint test
 
