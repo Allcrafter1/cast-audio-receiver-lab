@@ -1,5 +1,29 @@
 # Working plan
 
+## HA update discovery and repeatable release workflow — 2026-09-26
+
+- Read-only live diagnosis: HA had dev18 installed from the old LAN test
+  repository; the public repository already advertised dev20 as a separate,
+  uninstalled App. This was not stale public metadata or a user refresh error.
+- Owner explicitly authorized migration, then separately authorized scoped
+  backup import into only the new App. Original and final stopped-App backups
+  retained; old installation stopped/manual, public App dev20 started/auto.
+  Scoped archive used new App metadata and old data, excluding Supervisor and
+  HA components. Original options restored through the supported App API.
+- Three route configs, installation identity and private authentication file
+  compare byte-identically after migration. Two enabled routes ready; disabled
+  route remains disabled. Live Chromium DE/EN/persistence/mobile tests and
+  HA-ingress health/routes requests pass. No new audible acceptance is claimed.
+- Measured prior publish: ~5m18s; native build/push 4m20s amd64 and 3m19s arm64
+  in parallel. Failed extra smoke test and uncached repeat builds/manual release
+  steps caused avoidable delay. Build caches, late version labels, a pin-keyed
+  source cache and explicit one-dispatch release orchestration are implemented.
+- Preparation/plan are separate from publish. Successful exact-SHA CI, source
+  integrity, public image identity and both platforms gate App promotion; existing
+  tags/moving main are refused. No new product release or receiver deployment
+  is part of validating this automation. Workflow/testing results pending.
+  Operational instructions and recovery boundaries: `release-runbook.md`.
+
 ## Authorized dev20 rollout and App publication — 2026-09-26
 
 - Owner now authorizes deployment on the selected existing test host and

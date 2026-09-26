@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main]
   pull_request:
@@ -100,6 +101,10 @@ jobs:
           push: false
           load: true
           tags: cast-audio-receiver:ci
+          cache-from: |
+            type=gha,scope=ci-${{ matrix.arch }}
+            type=gha,scope=publish-${{ matrix.arch }}
+          cache-to: type=gha,scope=ci-${{ matrix.arch }},mode=max,timeout=2m,ignore-error=true
       - name: Check native runtime without private state or network
         run: |
           docker run --rm --network none --entrypoint /bin/sh cast-audio-receiver:ci -ec '

@@ -40,6 +40,9 @@ jobs:
           sbom: true
           provenance: mode=max
           tags: cast-audio-receiver:review
+          cache-from: |
+            type=gha,scope=ci-${{ matrix.arch }}
+            type=gha,scope=publish-${{ matrix.arch }}
       - name: Record artifact integrity
         working-directory: ${{ runner.temp }}
         run: sha256sum cast-audio-review.oci.tar > cast-audio-review.oci.tar.sha256

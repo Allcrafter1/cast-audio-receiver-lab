@@ -4,7 +4,8 @@ An experimental audio-only Cast receiver for YouTube Music and supported direct
 media. Create named speakers that play locally or forward to AirPlay, DLNA or
 Sonos. Manage them through **Open Web UI** in Home Assistant or the local network.
 
-- Linux amd64 only at present.
+- Linux amd64 and 64-bit ARM (aarch64); ARM64 passes native build/runtime checks,
+  while physical ARM speaker acceptance remains open.
 - Valid, separately supplied Cast authentication material is required.
 - Direct LAN management has no login: trusted networks only, never expose it
   to the Internet.

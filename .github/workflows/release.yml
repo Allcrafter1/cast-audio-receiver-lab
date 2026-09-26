@@ -1,0 +1,79 @@
+name: Release App
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Exact candidate image version, e.g. 0.6.0-dev21'
+        required: true
+        type: string
+      publish:
+        description: 'Publish images, promote App metadata and create prerelease'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+  packages: write
+
+concurrency:
+  group: release-app
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check version and reviewed release notes
+        env:
+          CANDIDATE_TAG: ${{ inputs.version }}
+        run: python3 tools/release.py plan --expected-tag "$CANDIDATE_TAG"
+      - name: Refuse overwrites and require successful CI
+        if: inputs.publish
+        env:
+          CANDIDATE_TAG: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 tools/release.py guard --expected-tag "$CANDIDATE_TAG"
+          python3 tools/release.py wait-ci --expected-tag "$CANDIDATE_TAG"
+
+  image:
+    needs: preflight
+    if: inputs.publish
+    uses: ./.github/workflows/publish-image.yml
+
+  source:
+    needs: preflight
+    if: inputs.publish
+    uses: ./.github/workflows/source-review.yml
+
+  promote:
+    needs: [image, source]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: published-image-digest-${{ github.sha }}
+          path: ${{ runner.temp }}/release-assets
+      - uses: actions/download-artifact@v8
+        with:
+          name: vibecast-source-review-${{ github.sha }}
+          path: ${{ runner.temp }}/release-assets
+      - name: Verify public images and sources, then promote App and release
+        env:
+          CANDIDATE_TAG: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          python3 tools/release.py promote --expected-tag "$CANDIDATE_TAG"
+          --assets "$RUNNER_TEMP/release-assets" --execute

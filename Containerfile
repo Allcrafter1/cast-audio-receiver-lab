@@ -45,15 +45,6 @@ RUN case "$TARGETARCH" in \
 
 FROM python:3.12-slim-bookworm
 ARG TARGETARCH
-ARG BUILD_VERSION=0.6.0-dev20
-ARG BUILD_ARCH=${TARGETARCH}
-LABEL org.opencontainers.image.title="Cast Audio Receiver Lab"
-LABEL org.opencontainers.image.description="Experimental Cast audio receiver with modular local and AirPlay outputs"
-LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
-LABEL org.opencontainers.image.source="https://github.com/Allcrafter1/cast-audio-receiver-lab"
-LABEL io.hass.version="${BUILD_VERSION}"
-LABEL io.hass.type="app"
-LABEL io.hass.arch="${BUILD_ARCH}"
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        ca-certificates ffmpeg libstdc++6 libssl3 mpv tini \
@@ -86,6 +77,16 @@ RUN groupadd --gid 1000 cast-audio \
     && useradd --uid 1000 --gid 1000 --create-home --shell /usr/sbin/nologin cast-audio \
     && mkdir -p /data/private && chown -R 1000:1000 /data
 ENV HOME=/home/cast-audio
+# Release metadata must not invalidate dependency installation/build layers.
+ARG BUILD_VERSION=0.6.0-dev20
+ARG BUILD_ARCH=${TARGETARCH}
+LABEL org.opencontainers.image.title="Cast Audio Receiver Lab"
+LABEL org.opencontainers.image.description="Experimental Cast audio receiver with modular local and AirPlay outputs"
+LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
+LABEL org.opencontainers.image.source="https://github.com/Allcrafter1/cast-audio-receiver-lab"
+LABEL io.hass.version="${BUILD_VERSION}"
+LABEL io.hass.type="app"
+LABEL io.hass.arch="${BUILD_ARCH}"
 VOLUME ["/data"]
 EXPOSE 8008 8009 8788
 ENTRYPOINT ["/usr/bin/tini", "--", "cast-audio-bootstrap"]

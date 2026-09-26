@@ -24,10 +24,19 @@ the application deliberately has no second login layer.
 `http://192.168.1.20:8788` if Cast clients should receive locally processed
 square cover URLs. Leave it empty if that address is not stable.
 
-Only `amd64` is declared because that is the architecture for which the pinned
-AirPlay sender binary and current physical tests exist. Adding an architecture
-requires a corresponding verified `cliairplay` artifact/build and a full
-receiver test; editing the architecture list alone is not support.
+`amd64` and `aarch64` (64-bit ARM) have native image builds, architecture-specific
+pinned AirPlay assets/wheels and runtime checks. Physical ARM speaker acceptance
+remains open. 32-bit ARM is not supported.
+
+## If an update does not appear
+
+Check the repository of the **installed** App, not only the App store. An old
+local/test repository and the public GitHub repository create separate App
+identities even when their displayed names match. A public release does not
+update an installation belonging to another repository. Do not uninstall the
+old App or start a duplicate against the same ports to resolve this. Back up and
+migrate its data/identities first; the public repository is
+`https://github.com/Allcrafter1/cast-audio-receiver-lab`.
 # Local audio and embedded interface
 
 The app uses Home Assistant's shared PulseAudio service (`audio: true`), not

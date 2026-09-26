@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — release tooling
+
+- Add an explicit Release App workflow for checked native image/source builds,
+  public readback, App-version promotion and release/source-asset publication.
+- Reuse architecture-separated BuildKit and pin-keyed source-build caches;
+  move version labels after dependency layers. Keep all release verification gates.
+- Document old-test-repository versus public-App identity and scoped migration.
+
 ## 0.6.0.dev20 — bilingual interface and ARM64 pre-release
 
 - Add a Deutsch/English switch at the top right. Translate headings, controls,

@@ -3,6 +3,7 @@ name: Native source review
 # Explicit source-package verification, not a public release or runtime update.
 on:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
@@ -16,6 +17,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.98.1
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ${{ runner.temp }}/source-build-target
+          key: source-linux-amd64-rust198-${{ hashFiles('config/vibecast-frontend.lock.json') }}
       - name: Export immutable frontend source
         shell: bash
         run: |
