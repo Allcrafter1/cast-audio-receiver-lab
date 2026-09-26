@@ -43,8 +43,9 @@ persisted choice, unsaved inputs, mobile layout and all three displayed routes,
 with no configuration writes or JavaScript errors. This is not a new audible
 playback acceptance test. Prior joint Repeat acceptance remains recorded in
 `youtube-repeat.md`. ARM64 has native runtime checks but no physical speaker
-or real ARM HAOS acceptance claim. The dev20 App update itself has not been
-installed on a separate HAOS host during this rollout.
+or real ARM HAOS acceptance claim. The initial rollout did not install dev20 on
+a separate HAOS host; the later migration below supersedes that limitation for
+the selected x86_64 HAOS host.
 
 ## App and source release
 
@@ -61,3 +62,25 @@ passed the frozen/offline frontend build. The retained source archive matches
 pin `35ffe1b5ceca4962903a4f217cb18ef7d3dfb071` and SHA-256
 `a3b71ea3aa05818bb19ba720a696860044c5f79bbb8dba0c3db3fc20d0a87f83`.
 See `source-delivery.md` for unchanged dependency source assets and limitations.
+
+## Later HA repository migration
+
+The owner's HA installation still belonged to the old local test repository;
+the public store already showed dev20 as a separate, uninstalled App. Matching
+display names do not imply matching repository/App identities, so refreshing
+the store could not update the old installation.
+
+After explicit migration and scoped-restore approval, original and final
+stopped-App backups were retained. A fresh public App installation supplied
+its own Supervisor metadata/identity, while the previous App supplied its data.
+The migration archive excluded HA, shared folders and Supervisor configuration;
+only the new App was selected for restore. User options were reapplied through
+the supported App configuration API. The old App remains stopped with manual
+boot as a recovery option, rather than running a duplicate receiver.
+
+The new public App reports dev20 installed/latest and ready through HA ingress.
+All three route configurations, frontend installation identity and private
+authentication material compare byte-identically to the stopped old App backup.
+Both enabled routes are running; the disabled route stays disabled. Live
+DE/EN, persistence, unsaved-input and mobile browser checks pass, as do ingress
+health/route requests. No new audible playback or physical ARM test is implied.

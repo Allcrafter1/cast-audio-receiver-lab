@@ -21,7 +21,16 @@
 - Preparation/plan are separate from publish. Successful exact-SHA CI, source
   integrity, public image identity and both platforms gate App promotion; existing
   tags/moving main are refused. No new product release or receiver deployment
-  is part of validating this automation. Workflow/testing results pending.
+  is part of validating this automation. Implementation pushed as `a1f079d`.
+  Local suite: 278 tests completed, 10 skips; actionlint 1.7.12 passes.
+  Read-only Release App run `36273886576` passed. Real dev20 tag overwrite
+  refusal and anonymous image verification pass. CI `36273870651` passed all
+  seven jobs; the targeted amd64 rerun also passed with Rust/layer cache hits.
+- Measured same-source amd64 build step: 5m19s cold (including first cache
+  export) versus 20s warm; whole container job 5m45s versus 37s. Both architecture
+  caches exist. This is not an end-to-end release timing or an ARM warm benchmark.
+  Full automated publication remains unexercised until the next approved version;
+  existing dev20 was not republished to test it.
   Operational instructions and recovery boundaries: `release-runbook.md`.
 
 ## Authorized dev20 rollout and App publication — 2026-09-26

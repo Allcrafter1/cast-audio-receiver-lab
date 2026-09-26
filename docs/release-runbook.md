@@ -55,6 +55,21 @@ cache miss remains a valid clean build. No test gate is removed to gain speed.
 The initial cache fill can be slower. Warm-build savings must be measured, not
 promised as a fixed number for every release.
 
+Measured in CI run **36273870651**, same source `a1f079d`: amd64 build step
+**5m19s cold → 20s warm**, complete container job **5m45s → 37s**. The cold step
+includes the initial 1m47s cache export; the warm run reports cache hits including
+the Rust release build. Both native builds and subsequent runtime checks pass.
+This is an unchanged-source, non-publishing container benchmark, not a promise
+for a full release or every code change. ARM64 cache creation passed; its warm
+speed was not separately benchmarked.
+
+Validation also includes 278 local tests (10 environment skips), actionlint,
+read-only **Release App** run `36273886576`, anonymous readback of the actual
+dev20 index/configs, and rejection of its existing release tag before any write.
+No dev21 was created and dev20 was not republished just to test orchestration.
+The full automated publication path will first execute for a newly approved
+version; individual gates and existing publication/source workflows are tested.
+
 ## Recovery boundaries
 
 - Before manifest creation, a failed platform cannot promote the App. Fix the
