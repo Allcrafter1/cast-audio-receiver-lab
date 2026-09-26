@@ -28,6 +28,18 @@ class Groups(HTMLParser):
 
 
 class ReviewPackagingTests(unittest.TestCase):
+    def test_publication_waits_for_both_native_smoke_tests(self):
+        workflow = (ROOT / '.github/workflows/publish-image.yml').read_text()
+        self.assertIn('runner: ubuntu-24.04-arm', workflow)
+        self.assertIn('ha_arch: aarch64', workflow)
+        self.assertIn('push-by-digest=true', workflow)
+        self.assertIn('BUILD_VERSION=${{ steps.version.outputs.tag }}', workflow)
+        self.assertIn('Verify native runtime before promoting', workflow)
+        self.assertIn('needs: image', workflow)
+        self.assertIn("for arch in ('amd64', 'arm64'):", workflow)
+        self.assertIn("{('linux', 'amd64'), ('linux', 'arm64')} <= platforms", workflow)
+        self.assertNotIn('platforms: linux/amd64\n', workflow)
+
     def test_ha_audio_and_ingress_session_are_enabled(self):
         config = (ROOT / "cast-audio-receiver/config.yaml").read_text()
         self.assertIn("\naudio: true\n", config)

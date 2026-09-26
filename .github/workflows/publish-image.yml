@@ -14,7 +14,17 @@ concurrency:
 jobs:
   image:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            ha_arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            ha_arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
@@ -40,29 +50,98 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push versioned candidate
+      - name: Build and push native candidate by digest
         id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           file: Containerfile
-          platforms: linux/amd64
-          push: true
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            BUILD_ARCH=${{ matrix.ha_arch }}
+            BUILD_VERSION=${{ steps.version.outputs.tag }}
+          outputs: type=image,name=ghcr.io/allcrafter1/cast-audio-receiver,push-by-digest=true,name-canonical=true,push=true
           sbom: true
           provenance: mode=max
-          tags: ghcr.io/allcrafter1/cast-audio-receiver:${{ steps.version.outputs.tag }}
           labels: |
             org.opencontainers.image.source=https://github.com/Allcrafter1/cast-audio-receiver-lab
             org.opencontainers.image.revision=${{ github.sha }}
-      - name: Record digest
+      - name: Verify native runtime before promoting
+        env:
+          IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          image="ghcr.io/allcrafter1/cast-audio-receiver@$IMAGE_DIGEST"
+          docker pull "$image"
+          docker run --rm --network none --entrypoint vibecast "$image" --help
+          docker run --rm --network none --entrypoint cliairplay "$image" --check
+          docker run --rm --network none --entrypoint deno "$image" --version
+          docker run --rm --network none --entrypoint python "$image" -c 'import cast_audio_lab, cryptography, aiohttp, platform; print(cast_audio_lab.__version__, platform.machine())'
+      - name: Record platform digest
         env:
           IMAGE_DIGEST: ${{ steps.build.outputs.digest }}
           IMAGE_TAG: ${{ steps.version.outputs.tag }}
         run: |
           printf 'Image: `ghcr.io/allcrafter1/cast-audio-receiver:%s`\n\nDigest: `%s`\n' "$IMAGE_TAG" "$IMAGE_DIGEST" >> "$GITHUB_STEP_SUMMARY"
-          printf '%s\n' "$IMAGE_DIGEST" > image-digest.txt
+          printf '%s\n' "$IMAGE_DIGEST" > image-digest-${{ matrix.arch }}.txt
+      - uses: actions/upload-artifact@v7
+        with:
+          name: native-image-digest-${{ matrix.arch }}-${{ github.sha }}
+          path: image-digest-${{ matrix.arch }}.txt
+          retention-days: 30
+
+  manifest:
+    needs: image
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-image-digest-*-${{ github.sha }}
+          path: digests
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish versioned multiarch manifest after both smoke tests
+        run: |
+          python3 - <<'PY'
+          import json, re, subprocess, tomllib
+          from pathlib import Path
+          version = tomllib.loads(Path('pyproject.toml').read_text())['project']['version']
+          match = re.fullmatch(r'([0-9]+\.[0-9]+\.[0-9]+)\.dev([0-9]+)', version)
+          if not match:
+              raise SystemExit('Unsupported release version')
+          image = 'ghcr.io/allcrafter1/cast-audio-receiver'
+          tag = image + ':' + match.group(1) + '-dev' + match.group(2)
+          sources = []
+          for arch in ('amd64', 'arm64'):
+              digest = Path(f'digests/image-digest-{arch}.txt').read_text().strip()
+              if not re.fullmatch(r'sha256:[0-9a-f]{64}', digest):
+                  raise SystemExit('Invalid platform digest')
+              sources.append(image + '@' + digest)
+          subprocess.run(['docker', 'buildx', 'imagetools', 'create', '-t', tag, *sources], check=True)
+          raw = subprocess.check_output(['docker', 'buildx', 'imagetools', 'inspect', '--raw', tag])
+          manifest = json.loads(raw)
+          platforms = {(item['platform']['os'], item['platform']['architecture'])
+                       for item in manifest['manifests']}
+          if not {('linux', 'amd64'), ('linux', 'arm64')} <= platforms:
+              raise SystemExit('Published manifest is missing an architecture')
+          import os
+          description = subprocess.check_output(['docker', 'buildx', 'imagetools', 'inspect', tag], text=True)
+          digest = re.search(r'^Digest:\s+(sha256:[0-9a-f]{64})$', description, re.MULTILINE).group(1)
+          Path('image-digest.txt').write_text(digest + '\n')
+          Path('image-manifest.json').write_bytes(raw)
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as output:
+              output.write(f'Image: `{tag}`\n\nDigest: `{digest}`\n\nPlatforms: linux/amd64, linux/arm64\n')
+          PY
       - uses: actions/upload-artifact@v7
         with:
           name: published-image-digest-${{ github.sha }}
-          path: image-digest.txt
+          path: |
+            image-digest.txt
+            image-manifest.json
           retention-days: 30

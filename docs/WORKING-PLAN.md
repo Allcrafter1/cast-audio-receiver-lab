@@ -1,5 +1,14 @@
 # Working plan
 
+## Authorized dev20 rollout and App publication — 2026-09-26
+
+- Owner now authorizes deployment on the selected existing test host and
+  publication of the Home Assistant App update, superseding the earlier hold.
+- Publish native amd64/arm64 images by digest, smoke-test both, then assemble
+  the versioned multiarch manifest. Verify public retrieval before changing
+  store metadata. Preserve the old receiver container and private state backup.
+- Deployment, public verification and App promotion are pending.
+
 ## German/English UI and native ARM64/x86_64 builds — 2026-09-26
 
 - Owner explicitly defers image publication. Implement/test the language switch,
