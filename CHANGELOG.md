@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0.dev19 — YouTube Music repeat
+
+- Advertise Lounge multi-state repeat support so the sender can enable its
+  repeat button. Accept and report Off, One and All, including the sender's
+  initial mode when casting an existing playlist.
+- Restart the current title on natural completion in One mode; wrap the queue
+  in All mode. Manual Next still advances in One mode. Reuse ordinary playlist
+  loading and cancellation; changing the mode alone does not reload audio.
+- Add protocol, queue-boundary and asynchronous EOF/control regression tests.
+  Physical sender acceptance is recorded separately in `docs/youtube-repeat.md`.
+
 ## 0.6.0.dev18 — initial-release installation candidate
 
 - First container start can acquire the separately distributed, release-pinned

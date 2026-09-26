@@ -1,5 +1,18 @@
 # Working plan
 
+## YouTube Music repeat — 2026-09-26
+
+- Owner requests diagnosis, implementation and GitHub push, then explicitly
+  authorizes deployment and a joint test on the existing SSH test host.
+- Root cause: Lounge `mlm` capability, `setLoopMode` handling and
+  `onLoopModeChanged` feedback were absent; EOF always dispatched Next.
+- Implement session-local Off/One/All, initial playlist mode and feedback.
+  Reuse normal selection for repeat-one EOF and repeat-all wrap so the resolver
+  cancellation and playback queue stay synchronized. Manual Next ignores One.
+- Work is isolated from the original development checkout's unrelated changes.
+  Tests, build, deployment and user acceptance are tracked separately in
+  `youtube-repeat.md`; live acceptance is pending.
+
 ## Post-publication documentation and automation cleanup — 2026-09-20
 
 - Rewrite the repository landing page around the actual user journey: purpose,

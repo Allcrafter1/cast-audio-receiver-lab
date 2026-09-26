@@ -1,5 +1,11 @@
 # App changelog
 
+## 0.6.0-dev19 — YouTube Music repeat
+
+- Enable the sender's repeat control and synchronize Off, One and All modes.
+- Repeat the current title at natural EOF or wrap the playlist; manual Next
+  still advances when repeating one title.
+
 ## 0.6.0-dev18 — experimental pre-release
 
 - Add verified one-time acquisition of the separately published authentication

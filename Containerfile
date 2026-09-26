@@ -5,7 +5,7 @@
 # rather than pretending that another architecture is supported.
 FROM --platform=linux/amd64 rust:1.98-bookworm AS vibecast-builder
 ARG VIBECAST_REPOSITORY=https://github.com/Allcrafter1/vibecast.git
-ARG VIBECAST_COMMIT=e67628fa72550095f92197550d60d8e94c503d4e
+ARG VIBECAST_COMMIT=1bc5f2edb8c4566ebeeef8d48574e174c849175d
 RUN apt-get update \
     && apt-get install -y --no-install-recommends clang cmake git \
     && rm -rf /var/lib/apt/lists/*
@@ -38,7 +38,7 @@ RUN curl --fail --location --proto '=https' --tlsv1.2 \
     && chmod 0755 /tmp/cliairplay
 
 FROM --platform=linux/amd64 python:3.12-slim-bookworm
-ARG BUILD_VERSION=0.6.0-dev18
+ARG BUILD_VERSION=0.6.0-dev19
 ARG BUILD_ARCH=amd64
 LABEL org.opencontainers.image.title="Cast Audio Receiver Lab"
 LABEL org.opencontainers.image.description="Experimental Cast audio receiver with modular local and AirPlay outputs"

@@ -1,3 +1,3 @@
 """Experimental, audio-only Cast V2 receiver."""
 
-__version__ = "0.6.0.dev18"
+__version__ = "0.6.0.dev19"
