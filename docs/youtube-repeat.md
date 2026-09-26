@@ -33,6 +33,29 @@ followed by a duplicate EOF and manual Next. Rust: 149 passed across seven crate
 one explicit live resolver test ignored. Python: 263 tests completed successfully,
 10 environment skips. Live acceptance remains pending.
 
+Deployment for the joint test on 2026-09-26:
+
+- GitHub CI run `36268427174` passed Python 3.11/3.12/3.13, Rust and container.
+- Compatible optimized CLI built with `rust:1.98-bookworm`, locked dependencies,
+  two build jobs and a 4 GiB memory ceiling. The built Lounge source hash matches
+  the committed file exactly.
+- Replaced only the frontend binary in the existing test receiver container;
+  its base image and Python manager still identify as dev18. This is a live
+  frontend hotfix, not a published dev19 image or a complete dev19 installation.
+- Candidate `--help` succeeded inside the container before activation. After
+  restart, health reports ready and both enabled routes are running. Existing
+  memory/PID limits and persistent state remain in place.
+- Active frontend SHA-256:
+  `d9a15d33622775cbb1854b85a88efbff524047416b9e2b307b81c012a02a1888`.
+  Previous frontend retained outside the container as `vibecast-dev18.rollback`,
+  SHA-256 `b89dc9f7fd2cf9db5295d11c172767ca1bcfa2ef7e3d65c466688dbd1ccd1321`.
+  Rollback: stop this container, copy that binary back to
+  `/usr/local/bin/vibecast`, then start the same container. Recreating from its
+  original dev18 image also removes the hotfix, so use the new source pin for
+  future builds.
+- The owner has been asked to reconnect YouTube Music and verify the controls;
+  audible repeat and queue-wrap acceptance remain pending.
+
 Manual acceptance on the owner's selected test host:
 
 1. Disconnect and reconnect YouTube Music so it receives the new capabilities.

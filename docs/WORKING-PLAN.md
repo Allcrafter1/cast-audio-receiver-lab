@@ -10,8 +10,13 @@
   Reuse normal selection for repeat-one EOF and repeat-all wrap so the resolver
   cancellation and playback queue stay synchronized. Manual Next ignores One.
 - Work is isolated from the original development checkout's unrelated changes.
-  Tests, build, deployment and user acceptance are tracked separately in
-  `youtube-repeat.md`; live acceptance is pending.
+  Frontend `1bc5f2e` and product `b007598` are pushed. All five GitHub CI jobs in
+  run `36268427174` passed; 149 Rust tests passed (one live probe ignored), and
+  the Python suite completed 263 tests successfully (10 skips).
+- Compatible release built and activated as a frontend-only hotfix in the
+  owner's selected test container, retaining its dev18 manager/image, state and
+  limits. Health and both routes are ready; previous binary is saved for rollback.
+  Build/deployment hashes and outstanding user acceptance: `youtube-repeat.md`.
 
 ## Post-publication documentation and automation cleanup — 2026-09-20
 
