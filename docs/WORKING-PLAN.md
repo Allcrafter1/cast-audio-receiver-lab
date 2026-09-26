@@ -25,7 +25,9 @@
   layout and zero configuration writes/JS errors. Local suite: 265 tests,
   10 skips; synthetic browser regressions also pass. No new audible playback
   or physical ARM acceptance is claimed by these deployment checks.
-- Promote App metadata to dev20 for amd64/aarch64 only after the above gates.
+- App metadata promoted to dev20 for amd64/aarch64 in `75ea620` after the above
+  gates; anonymous readback confirms the public version/architectures. Prerelease
+  `v0.6.0-dev20` is public with all four source/digest attachments uploaded.
   Updated release notes, install docs and source evidence accompany promotion.
   Vendored frontend source run `36272062424` passed the frozen/offline build;
   downloaded archive checksum and source pin match. Details: `release-dev20.md`.

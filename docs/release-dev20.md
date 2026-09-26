@@ -48,8 +48,11 @@ installed on a separate HAOS host during this rollout.
 
 ## App and source release
 
-App metadata is promoted to dev20 for amd64/aarch64 only after public retrieval
-and deployment checks. Existing App options and persistent data layout are
+App metadata was promoted to dev20 for amd64/aarch64 in `75ea620` after public
+retrieval and deployment checks; anonymous readback confirms both architectures
+and the version. The [dev20 prerelease](https://github.com/Allcrafter1/cast-audio-receiver-lab/releases/tag/v0.6.0-dev20)
+is public with source archive/checksum and image digest/manifest assets uploaded.
+Existing App options and persistent data layout are
 unchanged. Release/update notes include the Repeat fixes inherited from dev19,
 the DE/EN interface and the ARM64 limitations.
 
