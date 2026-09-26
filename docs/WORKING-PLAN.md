@@ -16,7 +16,9 @@
 - Compatible release built and activated as a frontend-only hotfix in the
   owner's selected test container, retaining its dev18 manager/image, state and
   limits. Health and both routes are ready; previous binary is saved for rollback.
-  Build/deployment hashes and outstanding user acceptance: `youtube-repeat.md`.
+  Owner confirms all modes selectable, One-mode replay, manual Next and All-mode
+  wrap to the first playlist title. Repeat acceptance is complete on the selected
+  host. Build/deployment hashes and rollback details: `youtube-repeat.md`.
 
 ## Post-publication documentation and automation cleanup — 2026-09-20
 

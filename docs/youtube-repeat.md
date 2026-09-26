@@ -31,7 +31,7 @@ Automated checks cover capability advertisement, valid/invalid commands, initial
 mode, feedback, empty queues, end-of-queue behavior, and an asynchronous EOF
 followed by a duplicate EOF and manual Next. Rust: 149 passed across seven crates,
 one explicit live resolver test ignored. Python: 263 tests completed successfully,
-10 environment skips. Live acceptance remains pending.
+10 environment skips. Live acceptance results are recorded below.
 
 Deployment for the joint test on 2026-09-26:
 
@@ -53,8 +53,12 @@ Deployment for the joint test on 2026-09-26:
   `/usr/local/bin/vibecast`, then start the same container. Recreating from its
   original dev18 image also removes the hotfix, so use the new source pin for
   future builds.
-- The owner has been asked to reconnect YouTube Music and verify the controls;
-  audible repeat and queue-wrap acceptance remain pending.
+- Owner confirmed all three modes are selectable after reconnecting, and
+  confirmed audible One-mode replay plus manual Next. The matching receiver
+  trace shows the same queue index reloaded at time zero, then the next index
+  loaded through the normal prefetch path. Owner also confirmed that All mode
+  restarts the first playlist title after the final title finishes. All requested
+  repeat scenarios passed the joint test; broader hardware coverage is unchanged.
 
 Manual acceptance on the owner's selected test host:
 
@@ -65,5 +69,6 @@ Manual acceptance on the owner's selected test host:
 5. With a short known queue, verify All wraps from its last title to the first.
 6. Turn Repeat off and check normal queue progression, pause, seek and disconnect.
 
-Build/test, deployment and owner confirmation are separate milestones; no
-physical acceptance is claimed until these steps have been observed.
+Build/test, deployment and owner confirmation are separate milestones. The joint
+test confirmed mode selection, One-mode EOF, manual Next and All-mode queue wrap.
+No additional hardware or unrelated feature acceptance is implied.
