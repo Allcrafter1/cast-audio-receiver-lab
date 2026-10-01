@@ -1,5 +1,17 @@
 # Working plan
 
+## Issue #13 AirPlay early-stop investigation — 2026-10-01
+
+- Reviewed the dev20 report and current main `4444f2d`. The command-pipe failure
+  occurs at helper startup; it does not establish the preceding early-stop
+  cause. Decoder/truncation, transport exit and next-load failure remain distinct
+  hypotheses requiring the separate per-route adapter log.
+- Existing AirPlay suite passes 41 tests in the prepared management environment.
+  Bare system Python lacks websockets; it is not the test environment.
+- Prepared `issue-13-airplay-test.md` with direct/bridge comparison, log locations
+  and event interpretation. Physical reproduction remains pending. No runtime
+  fix, version bump, publication or live device change is claimed. Keep #13 open.
+
 ## HA update discovery and repeatable release workflow — 2026-09-26
 
 - Read-only live diagnosis: HA had dev18 installed from the old LAN test
