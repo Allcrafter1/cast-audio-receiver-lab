@@ -5,6 +5,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
+import re
 import signal
 import sys
 import time
@@ -13,9 +14,16 @@ from urllib.parse import urlsplit
 from .output_registry import adapter_arguments
 
 
+LOG = logging.getLogger(__name__)
+_DIAGNOSTIC_SOURCE = " cast_audio_lab.airplay: AIRPLAY_DIAGNOSTIC "
+_DIAGNOSTIC_FIELD = re.compile(r"^[a-z_]+=[a-zA-Z0-9_.:-]{1,64}$")
+
+
 class RouteManager:
-    def __init__(self, store, *, bridge="ws://127.0.0.1:8010/player", cliairplay="cliairplay", spawn=None):
+    def __init__(self, store, *, bridge="ws://127.0.0.1:8010/player", cliairplay="cliairplay",
+                 log_level="INFO", spawn=None):
         self.store, self.bridge, self.cliairplay = store, bridge, cliairplay
+        self.log_level = log_level.upper()
         self.spawn = spawn or asyncio.create_subprocess_exec
         self.routes = []
         self.tasks, self.states = {}, {}
@@ -27,7 +35,8 @@ class RouteManager:
 
     def command(self, route):
         argv = [sys.executable, "-m", "cast_audio_lab.vibecast_player", "--bridge", self.bridge,
-                "--player-id", route.id, "--name="+route.name, "--backend", route.backend]
+                "--player-id", route.id, "--name="+route.name, "--backend", route.backend,
+                "--log-level", self.log_level]
         if self.artwork_endpoint and self.artwork_public_url:
             argv += ['--artwork-endpoint', self.artwork_endpoint,
                      '--artwork-public-url', self.artwork_public_url]
@@ -154,10 +163,29 @@ class RouteManager:
         }
 
     async def _drain(self, stream, handler):
-        while chunk := await stream.read(8192):
+        while chunk := await stream.readline():
+            message = chunk.decode(errors="replace").rstrip()
             record = logging.LogRecord("adapter", logging.INFO, "", 0,
-                                       chunk.decode(errors="replace").rstrip(), (), None)
+                                       message, (), None)
             handler.emit(record)
+            marker = message.find(_DIAGNOSTIC_SOURCE)
+            if marker < 0:
+                continue
+            # Only the adapter's allowlist-formatted diagnostic payload reaches
+            # the shared Add-on log. Its unrestricted private log stays local.
+            diagnostic = message[marker + len(_DIAGNOSTIC_SOURCE):]
+            fields = diagnostic.split()
+            if (len(diagnostic) > 1024 or len(fields) < 2
+                    or not all(_DIAGNOSTIC_FIELD.fullmatch(field) for field in fields)
+                    or fields[0] not in {"level=debug", "level=info", "level=warning"}
+                    or not fields[1].startswith("event=")):
+                continue
+            level = logging.DEBUG
+            if diagnostic.startswith("level=warning "):
+                level = logging.WARNING
+            elif diagnostic.startswith("level=info "):
+                level = logging.INFO
+            LOG.log(level, "AIRPLAY_DIAGNOSTIC %s", diagnostic)
 
     async def _stop(self, process):
         # Each adapter gets its own process group; decoder descendants inherit it.

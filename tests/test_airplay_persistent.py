@@ -1,5 +1,6 @@
 import asyncio
 import unittest
+from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 from cast_audio_lab.airplay import AirPlayAudioBackend, AirPlayTarget
@@ -83,6 +84,19 @@ class PersistentAirPlayTests(unittest.IsolatedAsyncioTestCase):
             await b._prepare_transport(True)
             teardown.assert_awaited_once()
 
+    async def test_failed_flush_diagnostic_identifies_fallback_stage(self):
+        b = self.backend()
+        b._cli = Mock(returncode=None)
+        b._cli.stdin.transport.get_write_buffer_size.return_value = 0
+        with patch.object(b, '_stop_track', new_callable=AsyncMock), \
+                patch.object(b, '_flush_transport', side_effect=TimeoutError), \
+                patch.object(b, '_stop_pipeline', new_callable=AsyncMock), \
+                self.assertLogs('cast_audio_lab.airplay', level='DEBUG') as logs:
+            await b._prepare_transport(True)
+        output = '\n'.join(logs.output)
+        self.assertIn('event=transport_prepare mode=warm', output)
+        self.assertIn('event=warm_transition result=cold_fallback stage=first_flush', output)
+
     async def test_real_flush_wait_is_not_satisfied_by_old_ack(self):
         b = self.backend()
         b._cli = Mock(returncode=None)
@@ -93,6 +107,44 @@ class PersistentAirPlayTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(task.done())
             await self.events(b, '[STATUS] flushed\n')
             await asyncio.wait_for(task, 1)
+
+    async def test_sender_error_wakes_flush_and_keeps_safe_reason(self):
+        b = self.backend()
+        b._cli = Mock(returncode=None)
+        with patch.object(b, '_command', new_callable=AsyncMock), \
+                self.assertLogs('cast_audio_lab.airplay', level='DEBUG') as logs:
+            task = asyncio.create_task(b._flush_transport())
+            await asyncio.sleep(0)
+            await self.events(
+                b,
+                '[STATUS] error code=flush_failed http=453 detail=private-value\n',
+            )
+            with self.assertRaisesRegex(RuntimeError, 'during flush'):
+                await task
+        output = '\n'.join(logs.output)
+        self.assertIn('event=sender_error phase=flushing sender_code=flush_failed sender_http=453', output)
+        self.assertNotIn('private-value', output)
+
+    async def test_startup_exit_waits_for_structured_sender_reason(self):
+        b = self.backend()
+        b._cli = Mock(returncode=1)
+
+        async def report_reason():
+            await asyncio.sleep(0)
+            await self.events(
+                b,
+                '[STATUS] error code=connect_failed http=401 detail=private-value\n',
+            )
+
+        reporter = asyncio.create_task(report_reason())
+        with patch('cast_audio_lab.airplay.os.open', side_effect=OSError), \
+                self.assertLogs('cast_audio_lab.airplay', level='WARNING') as logs:
+            with self.assertRaisesRegex(
+                RuntimeError, 'code=connect_failed http=401'
+            ):
+                await b._open_command_pipe(Path('/not-used'))
+        await reporter
+        self.assertNotIn('private-value', '\n'.join(logs.output))
 
     async def test_finish_uses_decoded_samples_and_transport_clock_not_duration(self):
         b = self.backend()

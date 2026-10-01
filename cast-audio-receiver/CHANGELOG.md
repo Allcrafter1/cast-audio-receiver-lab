@@ -1,5 +1,15 @@
 # App changelog
 
+## 0.6.0-dev21 — AirPlay diagnostics
+
+- The Add-on `log_level: debug` setting now reaches AirPlay output adapters.
+- AirPlay failures in the normal Add-on log now identify decoder truncation,
+  expected versus decoded duration, sender error codes, FLUSH timeout/failure,
+  warm-to-cold reconnect fallback and unexpected transport closure.
+- Shared diagnostics omit stream URLs, titles, device addresses, credentials
+  and unrestricted helper output. This version is intended to make one debug
+  reproduction sufficient for diagnosing the reported end-of-track failure.
+
 ## 0.6.0-dev20 — experimental pre-release
 
 - Switch between Deutsch and English at the top right. The browser remembers

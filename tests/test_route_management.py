@@ -1,6 +1,7 @@
 import asyncio
 from dataclasses import replace
 import json
+import logging
 import os
 from pathlib import Path
 import sys
@@ -65,6 +66,45 @@ class StoreTests(unittest.TestCase):
                 Route.parse(bad)
         with self.assertRaises(ValueError):
             validate_routes([original.private(), original.private()])
+
+    def test_debug_level_reaches_adapter_command(self):
+        manager = RouteManager(self.store, log_level="debug")
+        command = manager.command(route())
+        self.assertEqual(command[command.index("--log-level") + 1], "DEBUG")
+
+
+class DiagnosticRelayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_safe_adapter_diagnostics_reach_shared_debug_log(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = RouteManager(RouteStore(directory), log_level="DEBUG")
+            reader = asyncio.StreamReader()
+            reader.feed_data(
+                b"private adapter detail token=secret\n"
+                b"2026-10-01 DEBUG cast_audio_lab.airplay: AIRPLAY_DIAGNOSTIC "
+                b"level=debug event=sender_progress elapsed_ms=1200 decoded_ms=2400\n"
+            )
+            reader.feed_eof()
+            handler = logging.NullHandler()
+            with self.assertLogs('cast_audio_lab.route_manager', level='DEBUG') as logs:
+                await manager._drain(reader, handler)
+        output = '\n'.join(logs.output)
+        self.assertIn('event=sender_progress elapsed_ms=1200 decoded_ms=2400', output)
+        self.assertNotIn('token=secret', output)
+
+    async def test_warning_diagnostic_is_visible_without_debug_logging(self):
+        with tempfile.TemporaryDirectory() as directory:
+            manager = RouteManager(RouteStore(directory))
+            reader = asyncio.StreamReader()
+            reader.feed_data(
+                b"2026-10-01 WARNING cast_audio_lab.airplay: AIRPLAY_DIAGNOSTIC "
+                b"level=warning event=decoder_end "
+                b"outcome=truncated expected_ms=200000 decoded_ms=160000\n"
+            )
+            reader.feed_eof()
+            with self.assertLogs('cast_audio_lab.route_manager', level='INFO') as logs:
+                await manager._drain(reader, logging.NullHandler())
+        self.assertIn('WARNING:', logs.output[0])
+        self.assertIn('outcome=truncated', logs.output[0])
 
 
 class ProcessTests(unittest.IsolatedAsyncioTestCase):

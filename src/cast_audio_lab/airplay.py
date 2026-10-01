@@ -26,6 +26,35 @@ from .artwork import prepare_square_artwork
 
 LOG = logging.getLogger(__name__)
 _LINE_RE = re.compile(r"^\[(?P<kind>STATUS|EVENT)\]\s+(?P<body>.*)$")
+_SAFE_TOKEN_RE = re.compile(r"^[a-zA-Z0-9_.:-]{1,64}$")
+_DIAGNOSTIC_MARKER = "AIRPLAY_DIAGNOSTIC"
+
+
+def _safe_token(value: object, default: str = "unknown") -> str:
+    """Keep shared diagnostics useful without relaying receiver-controlled text."""
+
+    text = str(value)
+    return text if _SAFE_TOKEN_RE.fullmatch(text) else default
+
+
+def _milliseconds(value: float | None) -> int | str:
+    if value is None or not math.isfinite(value):
+        return "unknown"
+    return round(value * 1000)
+
+
+def _diagnostic(level: int, event: str, **values: object) -> None:
+    """Emit an allowlist-only line that the route manager may safely relay."""
+
+    severity = {
+        logging.DEBUG: "debug",
+        logging.INFO: "info",
+        logging.WARNING: "warning",
+    }.get(level, "warning")
+    fields = [f"level={severity}", f"event={_safe_token(event)}"]
+    for key, value in values.items():
+        fields.append(f"{_safe_token(key)}={_safe_token(value)}")
+    LOG.log(level, "%s %s", _DIAGNOSTIC_MARKER, " ".join(fields))
 
 
 @dataclass(frozen=True, slots=True)
@@ -246,6 +275,12 @@ class AirPlayAudioBackend(NullAudioBackend):
         self._track_start = 0.0
         self._decoder_reader: asyncio.Task[None] | None = None
         self._flushed = asyncio.Event()
+        self._transport_failed = asyncio.Event()
+        self._structured_error = asyncio.Event()
+        self._transport_error_code = "none"
+        self._transport_error_http = "none"
+        self._transport_phase = "idle"
+        self._flush_sequence = 0
         self._track_started = False
         self._start_pending = False
         self._prepared_artwork_url: str | None = None
@@ -255,6 +290,15 @@ class AirPlayAudioBackend(NullAudioBackend):
     ) -> None:
         async with self._lock:
             reusable = self.persistent and self._status.idle_reason != "ERROR"
+            _diagnostic(
+                logging.DEBUG,
+                "load_begin",
+                reusable=int(reusable),
+                transport=int(self._cli is not None),
+                start_ms=_milliseconds(max(0.0, start_time)),
+                duration_ms=_milliseconds(self.metadata.duration),
+                autoplay=int(autoplay),
+            )
             self._track_started = False
             self._start_pending = False
             self._status.state = "BUFFERING"
@@ -287,7 +331,15 @@ class AirPlayAudioBackend(NullAudioBackend):
                     await self._command("ACTION=PAUSE")
                     self._status.state = "PAUSED"
                     self._emit_status()
-            except BaseException:
+            except BaseException as exc:
+                _diagnostic(
+                    logging.DEBUG if isinstance(exc, asyncio.CancelledError) else logging.WARNING,
+                    "load_failed",
+                    phase=self._transport_phase,
+                    error=type(exc).__name__,
+                    sender_code=self._transport_error_code,
+                    sender_http=self._transport_error_http,
+                )
                 # Includes cancellation: partially started helpers must not live
                 # past the failed load or prevent the next connection attempt.
                 await self._stop_pipeline()
@@ -355,12 +407,23 @@ class AirPlayAudioBackend(NullAudioBackend):
         assert self._decoder.stderr is not None
         self._decoder_reader = asyncio.create_task(self._read_ffmpeg_log(self._decoder.stderr))
         self._pump_task = asyncio.create_task(self._pump_pcm(self._decoder.stdout, self._cli.stdin))
+        _diagnostic(logging.DEBUG, "decoder_started", start_ms=_milliseconds(start_time))
 
     async def _prepare_transport(self, reusable: bool) -> None:
         if not reusable or self._cli is None or self._cli.returncode is not None:
+            _diagnostic(
+                logging.DEBUG,
+                "transport_prepare",
+                mode="cold",
+                reusable=int(reusable),
+                sender_present=int(self._cli is not None),
+                sender_running=int(self._cli is not None and self._cli.returncode is None),
+            )
             await self._stop_pipeline()
             return
+        _diagnostic(logging.DEBUG, "transport_prepare", mode="warm")
         await self._stop_track()
+        stage = "first_flush"
         try:
             assert self._cli.stdin is not None
             writer = self._cli.stdin
@@ -370,6 +433,7 @@ class AirPlayAudioBackend(NullAudioBackend):
             buffered = writer.transport.get_write_buffer_size() > 0
             await self._flush_transport()
             if buffered:
+                stage = "writer_drain"
                 await asyncio.wait_for(writer.drain(), 2)
                 # drain() only guarantees the low watermark, not an empty pipe.
                 deadline = asyncio.get_running_loop().time() + 2
@@ -377,20 +441,62 @@ class AirPlayAudioBackend(NullAudioBackend):
                     if asyncio.get_running_loop().time() >= deadline:
                         raise TimeoutError("AirPlay writer did not drain")
                     await asyncio.sleep(0.01)
+                stage = "second_flush"
                 await self._flush_transport()
             LOG.info("AirPlay transport reused pid=%s", self._cli.pid)
-        except (OSError, TimeoutError, RuntimeError):
+            _diagnostic(
+                logging.INFO,
+                "warm_transition",
+                result="reused",
+                buffered=int(buffered),
+                flushes=2 if buffered else 1,
+            )
+            self._transport_phase = "connected"
+        except (OSError, TimeoutError, RuntimeError) as exc:
             LOG.warning("AirPlay warm transition failed; reconnecting")
+            _diagnostic(
+                logging.WARNING,
+                "warm_transition",
+                result="cold_fallback",
+                stage=stage,
+                error=type(exc).__name__,
+                sender_code=self._transport_error_code,
+                sender_http=self._transport_error_http,
+            )
             await self._stop_pipeline()
 
     async def _flush_transport(self) -> None:
+        self._flush_sequence += 1
+        sequence = self._flush_sequence
+        self._transport_phase = "flushing"
         self._flushed.clear()
+        _diagnostic(logging.DEBUG, "flush_sent", sequence=sequence)
         await self._command("ACTION=FLUSH")
-        await asyncio.wait_for(self._flushed.wait(), 2)
+        flushed = asyncio.create_task(self._flushed.wait())
+        failed = asyncio.create_task(self._transport_failed.wait())
+        try:
+            done, _ = await asyncio.wait(
+                {flushed, failed}, timeout=2, return_when=asyncio.FIRST_COMPLETED
+            )
+            if failed in done and self._transport_failed.is_set():
+                raise RuntimeError("cliairplay reported an error during flush")
+            if flushed not in done:
+                raise TimeoutError("cliairplay did not acknowledge flush")
+        finally:
+            for task in (flushed, failed):
+                task.cancel()
+            await asyncio.gather(flushed, failed, return_exceptions=True)
         if self._cli is None or self._cli.returncode is not None:
             raise RuntimeError("AirPlay transport ended during flush")
+        _diagnostic(logging.DEBUG, "flush_acknowledged", sequence=sequence)
 
     async def _start_transport(self) -> None:
+        self._transport_phase = "connecting"
+        self._transport_error_code = "none"
+        self._transport_error_http = "none"
+        self._transport_failed.clear()
+        self._structured_error.clear()
+        _diagnostic(logging.DEBUG, "sender_start", protocol=self.target.protocol)
         temporary_directory = tempfile.TemporaryDirectory(prefix="cast-airplay-")
         self._temporary_directory = temporary_directory
         command_pipe = Path(temporary_directory.name) / "commands"
@@ -415,7 +521,9 @@ class AirPlayAudioBackend(NullAudioBackend):
             asyncio.create_task(self._watch_cli(self._cli)),
         ]
         self._command_fd = await self._open_command_pipe(command_pipe)
+        self._transport_phase = "connected"
         LOG.info("AirPlay transport created pid=%s", self._cli.pid)
+        _diagnostic(logging.INFO, "sender_ready", protocol=self.target.protocol)
 
     async def _open_command_pipe(self, path: Path) -> int:
         deadline = asyncio.get_running_loop().time() + 5.0
@@ -424,13 +532,34 @@ class AirPlayAudioBackend(NullAudioBackend):
                 return os.open(path, os.O_WRONLY | os.O_NONBLOCK)
             except OSError:
                 if self._cli is None or self._cli.returncode is not None:
-                    raise RuntimeError("cliairplay exited before opening command pipe")
+                    # Give the stdout/stderr readers a scheduling turn to retain
+                    # the structured failure emitted immediately before exit.
+                    if not self._structured_error.is_set():
+                        with contextlib.suppress(TimeoutError):
+                            await asyncio.wait_for(self._structured_error.wait(), 0.2)
+                    raise RuntimeError(
+                        "cliairplay startup failed "
+                        f"code={self._transport_error_code} "
+                        f"http={self._transport_error_http}"
+                    )
                 if asyncio.get_running_loop().time() >= deadline:
                     raise TimeoutError("cliairplay did not open its command pipe")
                 await asyncio.sleep(0.05)
 
     async def _watch_cli(self, process: asyncio.subprocess.Process) -> None:
         code = await process.wait()
+        if process is self._cli:
+            if self._transport_error_code == "none":
+                self._transport_error_code = "sender_exit"
+            self._transport_failed.set()
+            _diagnostic(
+                logging.WARNING,
+                "sender_exit",
+                phase=self._transport_phase,
+                exit_code=code,
+                sender_code=self._transport_error_code,
+                sender_http=self._transport_error_http,
+            )
         if process is self._cli and self._status.state in {"BUFFERING", "PLAYING", "PAUSED"}:
             LOG.warning("AirPlay sender exited unexpectedly code=%s", code)
             self._set_position(self._current_position())
@@ -446,6 +575,12 @@ class AirPlayAudioBackend(NullAudioBackend):
             os.write(self._command_fd, payload)
         except (BrokenPipeError, BlockingIOError, OSError) as exc:
             LOG.warning("Unable to send cliairplay command: %s", exc)
+            _diagnostic(
+                logging.WARNING,
+                "command_pipe_error",
+                phase=self._transport_phase,
+                error=type(exc).__name__,
+            )
 
     async def _send_metadata(self) -> None:
         metadata = self.metadata
@@ -500,16 +635,50 @@ class AirPlayAudioBackend(NullAudioBackend):
             event = parse_cliairplay_line(text)
             if event is None:
                 LOG.debug("cliairplay diagnostic received (content omitted)")
+                _diagnostic(logging.DEBUG, "sender_unstructured_output")
                 continue
             if event.kind == "status" and event.name in {"route", "connected", "audio", "started", "stopped", "eof", "flushed"}:
                 LOG.info("AirPlay status=%s", event.name)
             else:
                 LOG.debug("cliairplay structured event received")
+            if event.kind == "status" and event.name == "error":
+                self._transport_error_code = _safe_token(event.values.get("code", "unknown"))
+                http = event.values.get("http", "none")
+                self._transport_error_http = http if http.isdigit() else "none"
+                self._transport_failed.set()
+                self._structured_error.set()
+                _diagnostic(
+                    logging.WARNING,
+                    "sender_error",
+                    phase=self._transport_phase,
+                    sender_code=self._transport_error_code,
+                    sender_http=self._transport_error_http,
+                )
+            elif event.kind == "status" and event.name == "playing":
+                elapsed = event.values.get("elapsed_ms", "unknown")
+                _diagnostic(
+                    logging.DEBUG,
+                    "sender_progress",
+                    elapsed_ms=elapsed if elapsed.isdigit() else "unknown",
+                    decoded_ms=round(self._decoded_bytes / 176.4),
+                    input_finished=int(self._input_finished),
+                    track_started=int(self._track_started),
+                    state=self._status.state.lower(),
+                )
+            else:
+                _diagnostic(
+                    logging.DEBUG,
+                    "sender_event",
+                    kind=event.kind,
+                    name=event.name or "unknown",
+                    phase=self._transport_phase,
+                )
             if event.kind == "event" and event.name == "remote":
                 await self._apply_remote_command(event.values.get("command", ""))
             if event.kind == "status" and event.name == "flushed":
                 self._flushed.set()
             if event.kind == "status" and event.name == "started" and self._start_pending:
+                self._transport_phase = "playing"
                 self._start_pending = False
                 self._track_started = True
                 if self._status.state == "BUFFERING" and self._autoplay:
@@ -535,6 +704,13 @@ class AirPlayAudioBackend(NullAudioBackend):
                     self._status.idle_reason = "FINISHED"
                     LOG.info("AirPlay track drained decoded_s=%.3f elapsed_s=%.3f",
                              self._decoded_bytes / 176400, elapsed)
+                    _diagnostic(
+                        logging.INFO,
+                        "track_finished",
+                        decoded_ms=round(self._decoded_bytes / 176.4),
+                        elapsed_ms=round(elapsed * 1000),
+                        start_ms=_milliseconds(self._track_start),
+                    )
                     self._emit_status()
             if event.kind == "status" and event.name == "eof" and self._input_finished and not self.persistent:
                 # Upstream reports EOF after the receiver buffer drains, not
@@ -565,8 +741,10 @@ class AirPlayAudioBackend(NullAudioBackend):
                 if needle in lower and category not in categories:
                     categories.add(category)
                     LOG.warning("AirPlay decoder category=%s", category)
+                    _diagnostic(logging.WARNING, "decoder_warning", category=category)
             if not warned:
                 LOG.warning("ffmpeg decoder diagnostic received (URLs/content omitted)")
+                _diagnostic(logging.DEBUG, "decoder_output", content="omitted")
                 warned = True
 
     async def _apply_remote_command(self, command: str) -> None:
@@ -606,6 +784,17 @@ class AirPlayAudioBackend(NullAudioBackend):
                 truncated = math.isfinite(expected) and expected > 3 and decoded_seconds < expected - 3
                 LOG.info("AirPlay decoder ended code=%s decoded_s=%.3f expected_s=%.3f truncated=%s",
                          returncode, decoded_seconds, expected, truncated)
+                outcome = ("process_error" if returncode != 0 else "empty" if not self._decoded_bytes
+                           else "truncated" if truncated else "complete")
+                _diagnostic(
+                    logging.WARNING if outcome != "complete" else logging.INFO,
+                    "decoder_end",
+                    outcome=outcome,
+                    exit_code=returncode,
+                    decoded_ms=round(decoded_seconds * 1000),
+                    expected_ms=_milliseconds(expected),
+                    start_ms=_milliseconds(self._track_start),
+                )
                 if returncode != 0 or truncated or not self._decoded_bytes:
                     self._status.state = "IDLE"
                     self._status.idle_reason = "ERROR"
@@ -624,6 +813,7 @@ class AirPlayAudioBackend(NullAudioBackend):
                 destination.close()
         except (BrokenPipeError, ConnectionResetError):
             LOG.warning("AirPlay PCM transport closed unexpectedly")
+            _diagnostic(logging.WARNING, "pcm_transport_closed", phase=self._transport_phase)
             self._status.state = "IDLE"
             self._status.idle_reason = "ERROR"
             self._emit_status()
@@ -651,6 +841,13 @@ class AirPlayAudioBackend(NullAudioBackend):
             await _reap_process(decoder)
 
     async def _stop_pipeline(self) -> None:
+        _diagnostic(
+            logging.DEBUG,
+            "pipeline_stop",
+            sender_present=int(self._cli is not None),
+            decoder_present=int(self._decoder is not None),
+            phase=self._transport_phase,
+        )
         self._track_started = False
         self._start_pending = False
         await self._stop_track()
@@ -670,6 +867,7 @@ class AirPlayAudioBackend(NullAudioBackend):
             self._temporary_directory.cleanup()
             self._temporary_directory = None
         self._prepared_artwork_url = None
+        self._transport_phase = "idle"
 
 
 async def _reap_process(process: asyncio.subprocess.Process) -> None:

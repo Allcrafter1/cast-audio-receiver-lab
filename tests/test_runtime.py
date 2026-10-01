@@ -41,6 +41,7 @@ class RuntimeCommandTests(unittest.TestCase):
         self.assertIn("ws://127.0.0.1:8010/player", manager)
         self.assertIn("http://192.0.2.2:8788", manager)
         self.assertIn("43124", manager)
+        self.assertEqual(manager[manager.index("--log-level") + 1], "INFO")
 
 
 class RuntimeSupervisorTests(unittest.IsolatedAsyncioTestCase):

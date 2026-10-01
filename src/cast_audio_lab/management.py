@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import ipaddress
 import json
+import logging
 from pathlib import Path
 import signal
 import time
@@ -281,6 +282,12 @@ def main():
     parser.add_argument("--port", type=int, default=8788)
     parser.add_argument("--bridge", default="ws://127.0.0.1:8010/player")
     parser.add_argument("--cliairplay", default="cliairplay")
+    parser.add_argument(
+        "--log-level",
+        default="INFO",
+        type=str.upper,
+        choices=("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"),
+    )
     parser.add_argument('--artwork-public-url', help='LAN URL of this manager, e.g. http://192.168.1.5:8788; requires artwork-capable frontend')
     parser.add_argument('--ha-ingress', action='store_true', help=argparse.SUPPRESS)
     parser.add_argument('--ingress-port', type=int, help=argparse.SUPPRESS)
@@ -289,6 +296,10 @@ def main():
     parser.add_argument("--player-id", help="preserve an existing player UUID on offline import")
     parser.add_argument("--name", help="speaker name for offline import")
     args = parser.parse_args()
+    logging.basicConfig(
+        level=getattr(logging, args.log_level),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
     try:
         bind_address = ipaddress.ip_address(args.host)
         if (not (bind_address.is_loopback or bind_address.is_private) or
@@ -319,7 +330,12 @@ def main():
             return
         if args.player_id or args.name:
             raise ValueError("name/player-id only apply to offline import")
-        manager = RouteManager(store, bridge=args.bridge, cliairplay=args.cliairplay)
+        manager = RouteManager(
+            store,
+            bridge=args.bridge,
+            cliairplay=args.cliairplay,
+            log_level=args.log_level,
+        )
         if args.artwork_public_url:
             if not (bind_address.is_unspecified or bind_address.is_loopback):
                 raise ValueError('artwork processing requires wildcard or loopback binding')

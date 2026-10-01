@@ -185,6 +185,8 @@ def runtime_commands(args: argparse.Namespace) -> tuple[list[str], list[str]]:
         str(args.web_port),
         "--cliairplay",
         args.cliairplay,
+        "--log-level",
+        args.log_level.upper(),
     ]
     if args.artwork_public_url:
         manager += ["--artwork-public-url", args.artwork_public_url]

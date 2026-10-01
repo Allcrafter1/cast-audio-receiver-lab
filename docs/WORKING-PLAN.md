@@ -1,5 +1,24 @@
 # Working plan
 
+## Issue #13 observable AirPlay path — 2026-10-01
+
+- Confirmed that the Home Assistant `log_level` reached only the Rust frontend:
+  the manager and route adapter remained at INFO. Adapter output was captured
+  only in a private per-route file, so the public Add-on debug log could not
+  explain the reported early stop or subsequent command-pipe failure.
+- Dev21 passes the configured level through all supervisors and relays only
+  allowlist-formatted AirPlay diagnostics to the shared log. DEBUG records the
+  load/transport/FLUSH/decoder/progress sequence and numeric timing; warnings
+  retain safe sender codes, HTTP status, fallback stage and decoder outcome.
+  URLs, media metadata, device/route identity, addresses, credentials and raw
+  native-helper text remain excluded.
+- Regression coverage distinguishes a successful decoder whose samples are
+  shorter than metadata duration, a sender-reported FLUSH failure, warm-to-cold
+  fallback, and the complete Add-on option -> adapter -> shared-log path.
+  Physical reproduction remains for the issue reporter; the resulting debug
+  log should determine whether a playback fix belongs in source resolution,
+  duration validation, persistent transport transition or reconnect startup.
+
 ## Issue #13 AirPlay early-stop investigation — 2026-10-01
 
 - Reviewed the dev20 report and current main `4444f2d`. The command-pipe failure

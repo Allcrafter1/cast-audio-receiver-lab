@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0.dev21 — AirPlay diagnostics
+
+- Pass the configured Add-on log level through the runtime and speaker manager
+  to every output adapter. `DEBUG` now enables AirPlay adapter diagnostics in
+  the normal Add-on log instead of leaving them only in a private route log.
+- Add structured, redacted AirPlay lifecycle diagnostics for cold/warm starts,
+  FLUSH acknowledgements and fallback stages, sender error/HTTP codes, decoder
+  warnings and exit state, decoded versus expected duration, PCM closure and
+  audible completion. Do not expose media URLs, metadata, device addresses,
+  credentials or unrestricted native-helper output in the shared log.
+- Abort a FLUSH wait immediately when the sender reports a structured error and
+  preserve safe startup failure codes in the player error. This improves
+  recovery timing and makes the next user reproduction distinguish source
+  truncation, duration mismatch, transport failure and reconnect failure.
+
 ## Unreleased — release tooling
 
 - Add an explicit Release App workflow for checked native image/source builds,

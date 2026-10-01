@@ -91,6 +91,21 @@ class AirPlayLifecycleTests(unittest.IsolatedAsyncioTestCase):
             if not expected:
                 self.assertEqual(backend.status().idle_reason, 'ERROR')
 
+    async def test_decoder_end_diagnostic_distinguishes_duration_mismatch(self):
+        backend = AirPlayAudioBackend(AirPlayTarget('192.0.2.1'), persistent=False)
+        backend.metadata = MediaMetadata(duration=20)
+        backend._status.state = 'PLAYING'
+        backend._decoder = Mock(wait=AsyncMock(return_value=0))
+        source = asyncio.StreamReader()
+        source.feed_data(b'\0' * 176400)
+        source.feed_eof()
+        destination = Mock(drain=AsyncMock())
+        with self.assertLogs('cast_audio_lab.airplay', level='DEBUG') as logs:
+            await backend._pump_pcm(source, destination)
+        output = '\n'.join(logs.output)
+        self.assertIn('event=decoder_end outcome=truncated exit_code=0', output)
+        self.assertIn('decoded_ms=1000 expected_ms=20000 start_ms=0', output)
+
     async def test_artwork_cancellation_reaps_helper_without_sending_art(self):
         backend = AirPlayAudioBackend(AirPlayTarget('192.0.2.1'))
         backend.metadata = MediaMetadata(artwork_url='https://example.invalid/cover')
