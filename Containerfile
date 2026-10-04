@@ -4,7 +4,7 @@
 # separately verified native assets and wheel hashes for each target.
 FROM rust:1.98-bookworm AS vibecast-builder
 ARG VIBECAST_REPOSITORY=https://github.com/Allcrafter1/vibecast.git
-ARG VIBECAST_COMMIT=6f01a42c8932c798a1ba321102dec8dcbdd8d1e9
+ARG VIBECAST_COMMIT=bff89b3382a77535ebd75e7fa0a0309f86d1cd78
 RUN apt-get update \
     && apt-get install -y --no-install-recommends clang cmake git \
     && rm -rf /var/lib/apt/lists/*

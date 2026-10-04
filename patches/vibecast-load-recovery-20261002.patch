@@ -2268,7 +2268,7 @@ index 0000000..44b8628
 +    }
 +}
 diff --git a/crates/vibecast-core/src/hub.rs b/crates/vibecast-core/src/hub.rs
-index 6790ece..c8e7422 100644
+index 6790ece..50faa88 100644
 --- a/crates/vibecast-core/src/hub.rs
 +++ b/crates/vibecast-core/src/hub.rs
 @@ -42,6 +42,7 @@ use crate::registry::AppRegistry;
@@ -2458,16 +2458,11 @@ index 6790ece..c8e7422 100644
          tracing::info!(session_id = %session_id, app_key = %session.app_key, "stopping session");
          // Observers (e.g. Home Assistant) retain their last MEDIA_STATUS even
          // after the application disappears. Publish the terminal state while
-@@ -783,6 +830,31 @@ impl DeviceHub {
+@@ -783,6 +830,21 @@ impl DeviceHub {
          )
      }
  
-+    async fn reply_and_publish_receiver_status(
-+        &self,
-+        conn_id: u64,
-+        source: &str,
-+        request_id: i64,
-+    ) {
++    async fn reply_and_publish_receiver_status(&self, conn_id: u64, source: &str, request_id: i64) {
 +        // Command responses must target the sender that owns the request.
 +        // Chromium's launch state machine does not treat a wildcard status as
 +        // the correlated LAUNCH response, even though mobile senders commonly
@@ -2478,19 +2473,14 @@ index 6790ece..c8e7422 100644
 +        self.send_to(conn_id, RECEIVER_0, source, ns::RECEIVER, &response)
 +            .await;
 +        let update = self.receiver_status(0);
-+        self.broadcast_except_connection(
-+            RECEIVER_0,
-+            ns::RECEIVER,
-+            &update,
-+            Some(conn_id),
-+        )
-+        .await;
++        self.broadcast_except_connection(RECEIVER_0, ns::RECEIVER, &update, Some(conn_id))
++            .await;
 +    }
 +
      // -- app session transports --------------------------------------------
  
      async fn handle_session_message(&mut self, handle: &ConnectionHandle, message: CastMessage) {
-@@ -798,6 +870,14 @@ impl DeviceHub {
+@@ -798,6 +860,14 @@ impl DeviceHub {
                  Ok(ConnectionMessage::Connect(_)) => {
                      self.subscriptions
                          .insert((conn_id, source.clone()), transport.clone());
@@ -2505,7 +2495,7 @@ index 6790ece..c8e7422 100644
                      let (ctx, response, jobs) = match self.sessions.get(&transport) {
                          Some(session) => (
                              self.callback_context(session, Some((conn_id, source.clone()))),
-@@ -821,7 +901,13 @@ impl DeviceHub {
+@@ -821,7 +891,13 @@ impl DeviceHub {
                          .subscriptions
                          .values()
                          .any(|target| target == &transport);
@@ -2520,7 +2510,7 @@ index 6790ece..c8e7422 100644
                          self.stop_session(&transport).await;
                      }
                      // CLOSE only leaves the app channel. The platform socket
-@@ -893,7 +979,7 @@ impl DeviceHub {
+@@ -893,7 +969,7 @@ impl DeviceHub {
              }
              MediaRequest::Play(r) => {
                  tracing::debug!(session_id = %transport, request_id = r.request_id, "PLAY");
@@ -2529,7 +2519,7 @@ index 6790ece..c8e7422 100644
              }
              MediaRequest::Pause(r) => {
                  tracing::debug!(session_id = %transport, request_id = r.request_id, "PAUSE");
-@@ -1016,6 +1102,27 @@ impl DeviceHub {
+@@ -1016,6 +1092,27 @@ impl DeviceHub {
          self.broadcast(transport, ns::MEDIA, &response).await;
      }
  
@@ -2557,7 +2547,7 @@ index 6790ece..c8e7422 100644
      async fn play(&mut self, session_id: &str, request_id: i64) {
          self.transition(session_id, request_id, |coordinator| {
              coordinator.player_state = PlayerState::Playing;
-@@ -1060,6 +1167,7 @@ impl DeviceHub {
+@@ -1060,6 +1157,7 @@ impl DeviceHub {
      }
  
      async fn stop_playback(&mut self, session_id: &str, request_id: i64) {
@@ -2565,7 +2555,7 @@ index 6790ece..c8e7422 100644
          self.transition(session_id, request_id, |coordinator| {
              coordinator.set_idle(Some(IdleReason::Cancelled));
          })
-@@ -1241,13 +1349,48 @@ impl DeviceHub {
+@@ -1241,13 +1339,48 @@ impl DeviceHub {
      }
  
      fn attach_proxies(
@@ -2616,7 +2606,7 @@ index 6790ece..c8e7422 100644
          let has_license = !license_routes.is_empty();
          if !has_manifest && !has_license {
              return media;
-@@ -1255,12 +1398,14 @@ impl DeviceHub {
+@@ -1255,12 +1388,14 @@ impl DeviceHub {
          let Some(session) = self.sessions.get(session_id) else {
              return media;
          };
@@ -2633,7 +2623,7 @@ index 6790ece..c8e7422 100644
          let manifest_base =
              has_manifest.then(|| self.proxy.register_manifest(session_id, proxy.clone()));
          let license_base =
-@@ -1271,9 +1416,23 @@ impl DeviceHub {
+@@ -1271,9 +1406,23 @@ impl DeviceHub {
              license_base.as_deref(),
              media_session_id,
          );
@@ -2657,7 +2647,7 @@ index 6790ece..c8e7422 100644
      async fn fail_load(
          &mut self,
          session_id: &str,
-@@ -1302,6 +1461,7 @@ impl DeviceHub {
+@@ -1302,6 +1451,7 @@ impl DeviceHub {
              None => return,
          };
          self.unregister_proxies(session_id);
@@ -2665,7 +2655,7 @@ index 6790ece..c8e7422 100644
          self.send_to(conn_id, session_id, sender_id, ns::MEDIA, &failed)
              .await;
          self.broadcast(session_id, ns::MEDIA, &status).await;
-@@ -1421,7 +1581,7 @@ impl DeviceHub {
+@@ -1421,7 +1571,7 @@ impl DeviceHub {
  
      async fn on_output_control(&mut self, session_id: &str, control: PlayerControlRequest) {
          match control {
@@ -2674,7 +2664,7 @@ index 6790ece..c8e7422 100644
              PlayerControlRequest::Pause => self.pause(session_id, 0).await,
              PlayerControlRequest::Stop => self.stop_playback(session_id, 0).await,
              PlayerControlRequest::Seek { position } if position.is_finite() => {
-@@ -1480,6 +1640,11 @@ impl DeviceHub {
+@@ -1480,6 +1630,11 @@ impl DeviceHub {
              None => return,
          };
          if player_state == PlayerState::Idle {
@@ -2686,7 +2676,7 @@ index 6790ece..c8e7422 100644
              self.unregister_proxies(session_id);
          }
          self.broadcast(session_id, ns::MEDIA, &response).await;
-@@ -1573,6 +1738,17 @@ impl DeviceHub {
+@@ -1573,6 +1728,17 @@ impl DeviceHub {
      }
  
      async fn broadcast<T: Serialize>(&self, transport: &str, namespace: &str, message: &T) {
@@ -2704,7 +2694,7 @@ index 6790ece..c8e7422 100644
          let Ok(value) = serde_json::to_value(message) else {
              return;
          };
-@@ -1589,6 +1765,9 @@ impl DeviceHub {
+@@ -1589,6 +1755,9 @@ impl DeviceHub {
                  .collect()
          };
          for conn_id in connection_ids {
@@ -2795,7 +2785,7 @@ index e7cd97f..f77dbe8 100644
                  },
                  content_type: stream.content_type.clone(),
 diff --git a/crates/vibecast-core/src/tests.rs b/crates/vibecast-core/src/tests.rs
-index ab32d26..20c1131 100644
+index ab32d26..25b8cb0 100644
 --- a/crates/vibecast-core/src/tests.rs
 +++ b/crates/vibecast-core/src/tests.rs
 @@ -49,6 +49,7 @@ impl FakePlayer {
@@ -2911,7 +2901,7 @@ index ab32d26..20c1131 100644
                  Some("PUSH_MEDIA") => {
                      let mut media = PlaybackMedia::new(
                          ctx.session_id.clone(),
-@@ -348,7 +412,11 @@ async fn launch_id(client: &mut Framed<DuplexStream, CastCodec>, app_id: &str) -
+@@ -348,7 +412,10 @@ async fn launch_id(client: &mut Framed<DuplexStream, CastCodec>, app_id: &str) -
          &serde_json::json!({"type":"LAUNCH","requestId":1,"appId":app_id}).to_string(),
      )
      .await;
@@ -2919,12 +2909,11 @@ index ab32d26..20c1131 100644
 +    let message = client.next().await.unwrap().unwrap();
 +    assert_eq!(message.source_id, "receiver-0");
 +    assert_eq!(message.destination_id, "sender-1");
-+    let status: Value =
-+        serde_json::from_str(message.payload_utf8.as_deref().unwrap()).unwrap();
++    let status: Value = serde_json::from_str(message.payload_utf8.as_deref().unwrap()).unwrap();
      assert_eq!(status["type"], "RECEIVER_STATUS");
      let app = &status["status"]["applications"][0];
      assert_eq!(app["appId"], app_id);
-@@ -366,6 +434,202 @@ async fn launch_id(client: &mut Framed<DuplexStream, CastCodec>, app_id: &str) -
+@@ -366,6 +433,202 @@ async fn launch_id(client: &mut Framed<DuplexStream, CastCodec>, app_id: &str) -
  
  // -- tests -----------------------------------------------------------------
  
@@ -3127,7 +3116,7 @@ index ab32d26..20c1131 100644
  #[tokio::test]
  async fn launch_injects_player_scoped_settings() {
      let mut harness = setup().await;
-@@ -765,35 +1029,400 @@ async fn receiver_stop_publishes_terminal_media_before_removing_app() {
+@@ -765,35 +1028,400 @@ async fn receiver_stop_publishes_terminal_media_before_removing_app() {
  
  #[tokio::test]
  async fn app_close_refreshes_platform_status_without_transport_disconnect() {

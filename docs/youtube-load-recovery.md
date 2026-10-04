@@ -312,7 +312,7 @@ normal explicit LOAD after a decoder error.
   `35ffe1b5ceca4962903a4f217cb18ef7d3dfb071`, not an automatically applied overlay.
 
 The reviewed frontend is now committed and pinned at
-`6f01a42c8932c798a1ba321102dec8dcbdd8d1e9`. Container, lock and CI use that exact
+`bff89b3382a77535ebd75e7fa0a0309f86d1cd78`. Container, lock and CI use that exact
 revision. Do not apply the snapshot again. Build/test/publish the chosen version
 through `release-runbook.md`, including the dual-stack runtime change and dev21
 AirPlay diagnostics.

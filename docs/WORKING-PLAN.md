@@ -14,7 +14,7 @@
   wildcard update only to other platform connections so observers remain fresh
   without queuing a duplicate response for the requester.
 - Regression asserts the LAUNCH response source/destination. Maintained fork
-  commit is `6f01a42c8932c798a1ba321102dec8dcbdd8d1e9`; physical acceptance is pending
+  commit is `bff89b3382a77535ebd75e7fa0a0309f86d1cd78`; physical acceptance is pending
   the dev23 image deployment.
 
 ## Approved bounded reconnect grace — 2026-10-03
