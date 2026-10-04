@@ -1,15 +1,16 @@
 # Reconstructing the Rust frontend
 
-## Current dev22 maintained source
+## Current dev23 maintained source
 
-Build commit `9a7f443946680f705f8196ad2e7827aa5341c1e2` from
+Build commit `6f01a42c8932c798a1ba321102dec8dcbdd8d1e9` from
 `https://github.com/Allcrafter1/vibecast.git` directly. Exact input and fallback
 records are in `config/vibecast-frontend.lock.json`. Container and CI select this
 commit. The maintained/default branch is `cast-audio-receiver`; upstream `main`
 is retained for provenance, not the product build.
 
 The commit includes the former dev12/dev13 integration, repeat support, bounded
-load recovery, current-title audio caching and sender-reconnect grace. The exact
+load recovery, current-title audio caching, sender-reconnect grace and directly
+addressed Cast command responses required by Chromium desktop senders. The exact
 diff from the previous dev21 pin is retained in
 `patches/vibecast-load-recovery-20261002.patch`. Do **not** apply that snapshot or
 an older overlay on top of this commit. The previous reconstruction instructions

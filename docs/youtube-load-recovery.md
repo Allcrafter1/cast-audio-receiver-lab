@@ -312,10 +312,15 @@ normal explicit LOAD after a decoder error.
   `35ffe1b5ceca4962903a4f217cb18ef7d3dfb071`, not an automatically applied overlay.
 
 The reviewed frontend is now committed and pinned at
-`9a7f443946680f705f8196ad2e7827aa5341c1e2`. Container, lock and CI use that exact
+`6f01a42c8932c798a1ba321102dec8dcbdd8d1e9`. Container, lock and CI use that exact
 revision. Do not apply the snapshot again. Build/test/publish the chosen version
 through `release-runbook.md`, including the dual-stack runtime change and dev21
 AirPlay diagnostics.
+
+The dev23 follow-up also directly addresses correlated LAUNCH, STOP and volume
+responses to the requesting Cast sender. Chromium desktop senders otherwise
+ignore the wildcard LAUNCH result and never connect to the returned YouTube MDX
+transport. Other platform observers receive a separate unsolicited status.
 
 ## Validation and deployment
 

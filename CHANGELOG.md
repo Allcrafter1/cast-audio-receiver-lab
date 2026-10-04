@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.6.0.dev23 — desktop YouTube Music Cast launch
+
+- Address `RECEIVER_STATUS` command replies directly to the requesting Cast
+  sender instead of using a wildcard destination. Chromium can now correlate
+  its `LAUNCH` response, read the new `transportId`, connect to the YouTube MDX
+  app transport and submit playback. Mobile senders that tolerated the old
+  wildcard response retain the same flow.
+- Keep platform observers current with a separate unsolicited status update,
+  without leaving a duplicate correlated response queued for the requester.
+  Apply the same request/reply rule to receiver STOP and volume commands.
+
 ## 0.6.0.dev22 — resilient YouTube playback, current-title cache and MPL 2.0
 
 - Route direct Cast/output Play through YouTube recovery as well as Lounge Play;

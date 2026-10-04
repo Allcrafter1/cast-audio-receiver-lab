@@ -1,5 +1,22 @@
 # Working plan
 
+## Desktop YouTube Music LAUNCH response — 2026-10-04
+
+- The physical Chromium desktop sender repeatedly completed device auth
+  and issued YouTube app `2DB7CC49` LAUNCH, but never connected to the returned
+  app transport and no Lounge selection/LOAD followed. Receiver, bridge and both
+  outputs stayed ready with zero restarts; the decoder was never involved.
+- Root cause is the receiver's correlated command response: LAUNCH used the
+  wildcard destination `*`. Chromium's launch handler expects RECEIVER_STATUS
+  addressed to its sender id before it will use the returned `transportId`.
+- Send LAUNCH/STOP/SET_VOLUME responses directly to the requesting connection
+  and sender id with the original request id. Send a separate request-id-zero
+  wildcard update only to other platform connections so observers remain fresh
+  without queuing a duplicate response for the requester.
+- Regression asserts the LAUNCH response source/destination. Maintained fork
+  commit is `6f01a42c8932c798a1ba321102dec8dcbdd8d1e9`; physical acceptance is pending
+  the dev23 image deployment.
+
 ## Approved bounded reconnect grace — 2026-10-03
 
 - Owner rejected indefinite playback after control loss: stop-on-disconnect was

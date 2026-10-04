@@ -1,5 +1,13 @@
 # App changelog
 
+## 0.6.0-dev23 — desktop YouTube Music Cast launch
+
+- Fix YouTube Music casting from Chromium-based desktop browsers. The receiver
+  now sends the LAUNCH result directly to the requesting sender, allowing the
+  browser to obtain the app transport and continue into playback.
+- Preserve receiver-status updates for Home Assistant and other observers, and
+  use the same correctly addressed replies for Stop and volume commands.
+
 ## 0.6.0-dev22 — playback recovery, current-title cache and MPL 2.0
 
 - Recover a failed YouTube Music load with one fresh bounded retry; **Retry/Play**

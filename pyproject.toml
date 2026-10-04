@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cast-audio-receiver-lab"
-version = "0.6.0.dev22"
+version = "0.6.0.dev23"
 description = "An experimental, audio-only Google Cast V2 receiver"
 license = "MPL-2.0"
 license-files = ["LICENSE", "LICENSING.md", "THIRD_PARTY_NOTICES.md", "licenses/*"]
