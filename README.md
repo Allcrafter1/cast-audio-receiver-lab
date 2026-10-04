@@ -124,7 +124,7 @@ the authentication section in [How it works](docs/how-it-works.md).
 The published multiarch (`amd64` / `arm64`) image is:
 
 ```text
-ghcr.io/allcrafter1/cast-audio-receiver:0.6.0-dev23
+ghcr.io/allcrafter1/cast-audio-receiver:0.6.0-dev24
 ```
 
 It needs host networking for Cast/mDNS and target discovery, plus persistent

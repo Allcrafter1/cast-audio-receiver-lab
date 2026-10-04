@@ -1,5 +1,5 @@
 name: Cast Audio Receiver Lab
-version: "0.6.0-dev23"
+version: "0.6.0-dev24"
 slug: cast_audio_receiver
 description: Experimental audio-only Cast receiver with modular outputs
 url: https://github.com/Allcrafter1/cast-audio-receiver-lab
