@@ -1,5 +1,20 @@
 # Working plan
 
+## dev26 acceptance — 2026-10-04
+
+- Desktop/mobile playback and exclusive takeover in both directions passed
+  physical acceptance. Replacement LAUNCH now publishes old-session removal
+  before the correlated new status; stale observers cannot claim ownership.
+- Checked fallback extraction fixes false success with HTTP-403 media URLs.
+  Earlier HTTP-429 metadata responses and seven-second fallback attempts were
+  observed. Subsequent accepted attempts used the primary path in 2.0–2.3s,
+  without rate-limit/fallback events. Do not attribute that speed to the fallback
+  check or claim external throttling is solved.
+- Preserve HLS manifest processing outside the progressive audio cache, with a
+  dedicated regression. Pin `83ba470158189de3bc223701decdc4c502d47644` for dev26.
+- Core/YouTube regressions, broader frontend release tests, formatting and
+  publication tests gate release; image/source verification remains mandatory.
+
 ## Desktop MDX request correlation — 2026-10-04
 
 - Physical dev24 acceptance still produced no Lounge playlist after a complete

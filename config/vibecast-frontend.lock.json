@@ -1,10 +1,10 @@
 {
   "repository": "https://github.com/Allcrafter1/vibecast.git",
-  "commit": "262a5c77828e634cfa8a91f6e406fce98b74fc3a",
+  "commit": "83ba470158189de3bc223701decdc4c502d47644",
   "branch_for_review": "cast-audio-receiver",
   "rust_toolchain": "1.98.1",
   "reconstruction_base": "f28befe02fe930db300294d6bf49cdf5fec5a747",
   "reconstruction_overlay": "patches/vibecast-dev13-internal-bridge.patch",
   "reconstruction_overlay_sha256": "660e536d026cb57681c3ea0534cb331ec91da8a75df08849d2f62819d74ed7c1",
-  "note": "Direct commit includes the reviewed bridge isolation, YouTube Music repeat, bounded reconnect recovery, current-title audio cache, directly addressed Cast command responses and request-correlated MDX session-status replies for Chromium senders. Reconstruction base/overlay describe the historical dev13 baseline only, not later fixes. Build the pinned commit directly; do not apply any snapshot again."
+  "note": "Direct commit includes bridge isolation, YouTube repeat/recovery and current-title audio cache, correlated desktop MDX, exclusive sender takeover with observer isolation, ordered route replacement, Previous handling and checked mobile-web playback fallback. HLS manifests remain outside the progressive audio cache. Reconstruction base/overlay describe the historical dev13 baseline only. Build the pinned commit directly; do not apply any snapshot again."
 }

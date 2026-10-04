@@ -1,5 +1,20 @@
 # App changelog
 
+## 0.6.0-dev26 — reliable desktop/mobile takeover and playback fallback
+
+- A new YouTube Music controller now takes over exclusively and disconnects the
+  old controller. Home Assistant/status observers cannot take control or stop
+  the active session. Stopping from the active controller still stops playback.
+- Fix the first connection back from mobile to desktop by reporting the end of
+  the previous Cast session before confirming its replacement.
+- Handle desktop Previous and protect a newer song selection from delayed
+  playlist messages.
+- Check fallback streams before playback, avoiding false successful loads and
+  repeated retries on unusable URLs. Preserve audio-only caching and normal HLS
+  playlist handling. YouTube throttling can still delay or prevent playback.
+- Validated desktop/mobile playback and switching on the physical test receiver.
+  Existing MPL-2.0 and third-party licensing remain unchanged.
+
 ## 0.6.0-dev25 — correlated desktop MDX status
 
 - Complete the desktop YouTube Music handshake by returning its MDX

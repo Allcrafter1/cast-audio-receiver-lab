@@ -59,7 +59,7 @@ jobs:
       - name: Reconstruct maintained Vibecast source
         run: |
           git clone https://github.com/Allcrafter1/vibecast.git /tmp/vibecast
-          git -C /tmp/vibecast checkout --detach 262a5c77828e634cfa8a91f6e406fce98b74fc3a
+          git -C /tmp/vibecast checkout --detach 83ba470158189de3bc223701decdc4c502d47644
       - name: Test changed frontend crates
         working-directory: /tmp/vibecast
         run: >-

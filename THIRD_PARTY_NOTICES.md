@@ -38,7 +38,7 @@ reproducible finding is not a blanket legal guarantee.
 ## AirPlay native licence evidence
 
 Current maintained Vibecast build input is commit
-`262a5c77828e634cfa8a91f6e406fce98b74fc3a`, recorded in
+`83ba470158189de3bc223701decdc4c502d47644`, recorded in
 `config/vibecast-frontend.lock.json`. It incorporates the previously separate
 bridge overlay and corrects the fork README. The older commit in the provenance
 table remains the integration base; MIT notices remain unchanged.

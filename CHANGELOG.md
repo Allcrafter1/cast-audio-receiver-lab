@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0.dev26 — exclusive YouTube controllers and checked playback fallback
+
+- Restore exclusive YouTube Music sender takeover. A new active controller
+  displaces the previous one; passive status observers cannot steal ownership
+  or stop playback. Invalidate stale MDX replies when Lounge ownership changes.
+- Notify the displaced browser that its Cast route ended. When LAUNCH replaces
+  an app, announce removal before the new session, fixing first-attempt return
+  from mobile to desktop. Keep explicit owner-stop behavior.
+- Handle the desktop `previous` command and preserve newer track selections
+  when delayed playlist additions arrive.
+- Retain usable playback when one metadata/extraction path fails, and check
+  mobile-web fallback formats before handing URLs to the player. Prevent
+  unusable fallback URLs from causing repeated player-load recovery. Preserve
+  direct HLS manifest handling outside the progressive current-title cache.
+- Desktop/mobile playback and switching were accepted on the test receiver.
+  Successful primary resolutions measured about 2.0–2.3 seconds after external
+  throttling subsided; this is not a guarantee or a rate-limit bypass.
+- Existing MPL-2.0 project licensing and third-party notices are unchanged;
+  the updated Vibecast fork remains MIT-licensed.
+
 ## 0.6.0.dev25 — correlated desktop MDX status
 
 - Echo the optional `requestId` from YouTube's `getMdxSessionStatus` request in
