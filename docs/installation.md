@@ -30,7 +30,7 @@ In Home Assistant, open **Settings → Apps → App store → Repositories**, ad
 `https://github.com/Allcrafter1/cast-audio-receiver-lab`, refresh the store and
 install **Cast Audio Receiver Lab**. This release supports `amd64` and `aarch64`
 (64-bit ARM), not 32-bit ARM. To update an existing installation, refresh the
-store, choose version **0.6.0-dev21**, and retain the App backup option.
+store, choose version **0.6.0-dev22**, and retain the App backup option.
 
 The source package under `cast-audio-receiver/` has passed a real HAOS/
 Supervisor source build, install, ingress, LAN, local-audio restart and
@@ -75,7 +75,7 @@ private state before permanently dropping to UID/GID 1000:
 docker run --rm --network host \
   -v /absolute/cast-audio-state:/data \
   -e CAST_AUDIO_WEB_PORT=8788 \
-  ghcr.io/allcrafter1/cast-audio-receiver:0.6.0-dev21
+  ghcr.io/allcrafter1/cast-audio-receiver:0.6.0-dev22
 ```
 
 For BYO material, additionally mount the file read-only and set
