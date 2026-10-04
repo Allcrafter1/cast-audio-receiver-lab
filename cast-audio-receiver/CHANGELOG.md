@@ -1,5 +1,13 @@
 # App changelog
 
+## 0.6.0-dev24 — desktop YouTube Music MDX bootstrap
+
+- Fix the remaining desktop YouTube Music startup failure after a successful
+  Cast connection. The receiver now answers the browser's explicit MDX session
+  status request, allowing it to pair with the YouTube Lounge session and send
+  the selected playlist.
+- Preserve the existing mobile connect-time status behavior.
+
 ## 0.6.0-dev23 — desktop YouTube Music Cast launch
 
 - Fix YouTube Music casting from Chromium-based desktop browsers. The receiver

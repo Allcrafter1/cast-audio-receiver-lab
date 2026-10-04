@@ -1,8 +1,88 @@
 diff --git a/crates/vibecast-apps-youtube/src/lib.rs b/crates/vibecast-apps-youtube/src/lib.rs
-index cac272f..58c701a 100644
+index cac272f..c99bd02 100644
 --- a/crates/vibecast-apps-youtube/src/lib.rs
 +++ b/crates/vibecast-apps-youtube/src/lib.rs
-@@ -192,6 +192,16 @@ impl AppSession for YouTubeSession {
+@@ -11,8 +11,9 @@ use async_trait::async_trait;
+ use tokio::sync::{mpsc, watch};
+ use vibecast_sdk::{
+     AppContext, AppManifest, AppProvider, AppSession, AppSettingsReader, AppSettingsSchema,
+-    ChoiceOption, LaunchCredentials, LaunchError, LoadRequest, MediaResolveError, OutputControl,
+-    PlaybackController, PlaybackMedia, PlaybackState, SettingDescriptor, SettingScope,
++    ChoiceOption, LaunchCredentials, LaunchError, LoadRequest, MediaResolveError,
++    MessageDisposition, OutputControl, PlaybackController, PlaybackMedia, PlaybackState,
++    SettingDescriptor, SettingScope,
+ };
+ 
+ use lounge::{LoungeCommand, LoungeConnection, LoungeIdentity};
+@@ -140,42 +141,32 @@ impl AppSession for YouTubeSession {
+             .map_err(map_resolve_error)
+     }
+ 
+-    async fn on_sender_connected(&self, ctx: &AppContext, _sender_id: &str) {
+-        let ctx = ctx.clone();
+-        let mut identity = self.identity.clone();
+-        let mut cancel = self.cancel.subscribe();
+-        tokio::spawn(async move {
+-            loop {
+-                let current_identity = { identity.borrow().clone() };
+-                if let Some(identity) = current_identity {
+-                    ctx.send_custom(
+-                        MDX_NAMESPACE,
+-                        serde_json::json!({
+-                            "type": "mdxSessionStatus",
+-                            "data": {
+-                                "screenId": identity.screen_id,
+-                                "deviceId": identity.device_id,
+-                            }
+-                        }),
+-                    )
+-                    .await;
+-                    return;
+-                }
++    async fn on_message(
++        &self,
++        ctx: &AppContext,
++        namespace: &str,
++        data: &serde_json::Value,
++    ) -> MessageDisposition {
++        if namespace != MDX_NAMESPACE
++            || data.get("type").and_then(serde_json::Value::as_str)
++                != Some("getMdxSessionStatus")
++        {
++            return MessageDisposition::Unhandled;
++        }
++        send_mdx_session_status_when_ready(
++            ctx.clone(),
++            self.identity.clone(),
++            self.cancel.subscribe(),
++        );
++        MessageDisposition::Handled
++    }
+ 
+-                tokio::select! {
+-                    result = identity.changed() => {
+-                        if result.is_err() {
+-                            return;
+-                        }
+-                    }
+-                    result = cancel.changed() => {
+-                        if result.is_err() || *cancel.borrow() {
+-                            return;
+-                        }
+-                    }
+-                }
+-            }
+-        });
++    async fn on_sender_connected(&self, ctx: &AppContext, _sender_id: &str) {
++        send_mdx_session_status_when_ready(
++            ctx.clone(),
++            self.identity.clone(),
++            self.cancel.subscribe(),
++        );
+     }
+ 
+     async fn on_playback_update(&self, _ctx: &AppContext, state: PlaybackState) {
+@@ -192,6 +183,16 @@ impl AppSession for YouTubeSession {
          });
      }
  
@@ -19,7 +99,53 @@ index cac272f..58c701a 100644
      async fn on_output_control(&self, _ctx: &AppContext, control: OutputControl) {
          let _ = self.output_control_tx.try_send(control);
      }
-@@ -308,9 +318,18 @@ impl CurrentResolution {
+@@ -201,6 +202,45 @@ impl AppSession for YouTubeSession {
+     }
+ }
+ 
++fn send_mdx_session_status_when_ready(
++    ctx: AppContext,
++    mut identity: watch::Receiver<Option<LoungeIdentity>>,
++    mut cancel: watch::Receiver<bool>,
++) {
++    tokio::spawn(async move {
++        loop {
++            let current_identity = { identity.borrow().clone() };
++            if let Some(identity) = current_identity {
++                ctx.send_custom(
++                    MDX_NAMESPACE,
++                    serde_json::json!({
++                        "type": "mdxSessionStatus",
++                        "data": {
++                            "screenId": identity.screen_id,
++                            "deviceId": identity.device_id,
++                        }
++                    }),
++                )
++                .await;
++                return;
++            }
++
++            tokio::select! {
++                result = identity.changed() => {
++                    if result.is_err() {
++                        return;
++                    }
++                }
++                result = cancel.changed() => {
++                    if result.is_err() || *cancel.borrow() {
++                        return;
++                    }
++                }
++            }
++        }
++    });
++}
++
+ async fn run_lounge(
+     http: reqwest::Client,
+     receiver: vibecast_sdk::ReceiverContext,
+@@ -308,9 +348,18 @@ impl CurrentResolution {
          video_id: Option<&String>,
          codec: PreferredVideoCodec,
      ) -> Option<PlaybackMedia> {
@@ -39,7 +165,7 @@ index cac272f..58c701a 100644
          {
              return None;
          }
-@@ -333,6 +352,8 @@ async fn run_commands(
+@@ -333,6 +382,8 @@ async fn run_commands(
      let mut next_resolution: Option<NextResolution> = None;
      let mut current_resolution: Option<CurrentResolution> = None;
      let mut playback_active = false;
@@ -48,7 +174,7 @@ index cac272f..58c701a 100644
      let mut deferred = None;
      'commands: loop {
          let command = if let Some(command) = deferred.take() {
-@@ -354,13 +375,20 @@ async fn run_commands(
+@@ -354,13 +405,20 @@ async fn run_commands(
          };
  
          let repeating = matches!(command, LoungeCommand::RepeatCurrent);
@@ -70,7 +196,7 @@ index cac272f..58c701a 100644
                  playback.load(media).await;
                  continue;
              }
-@@ -386,6 +414,16 @@ async fn run_commands(
+@@ -386,6 +444,16 @@ async fn run_commands(
              );
          }
          let load = match command {
@@ -87,7 +213,7 @@ index cac272f..58c701a 100644
              LoungeCommand::RepeatCurrent => {
                  queue.next_pending = false;
                  queue
-@@ -450,8 +488,16 @@ async fn run_commands(
+@@ -450,8 +518,16 @@ async fn run_commands(
                      .map(|video_id| (video_id, 0.0))
              }
              LoungeCommand::Play => {
@@ -106,7 +232,7 @@ index cac272f..58c701a 100644
              }
              LoungeCommand::Pause => {
                  playback.pause().await;
-@@ -462,6 +508,8 @@ async fn run_commands(
+@@ -462,6 +538,8 @@ async fn run_commands(
                  None
              }
              LoungeCommand::Stop => {
@@ -115,7 +241,7 @@ index cac272f..58c701a 100644
                  current_resolution = None;
                  queue.next_pending = false;
                  playback_active = false;
-@@ -472,6 +520,8 @@ async fn run_commands(
+@@ -472,6 +550,8 @@ async fn run_commands(
          };
  
          if let Some((video_id, start_time)) = load {
@@ -124,7 +250,7 @@ index cac272f..58c701a 100644
              current_resolution = None;
              tracing::info!(%video_id, start_time, "YouTube queue requests load");
              let snapshot = settings.snapshot();
-@@ -499,15 +549,35 @@ async fn run_commands(
+@@ -499,15 +579,35 @@ async fn run_commands(
                  }
                  match prepared {
                      Some(media) => Ok(media),
@@ -165,7 +291,7 @@ index cac272f..58c701a 100644
              let result = loop {
                  tokio::select! {
                      biased;
-@@ -535,6 +605,11 @@ async fn run_commands(
+@@ -535,6 +635,11 @@ async fn run_commands(
                                  queue.video_ids = video_ids;
                                  queue.list_id = list_id;
                              }
@@ -177,7 +303,7 @@ index cac272f..58c701a 100644
                              Some(command) => {
                                  tracing::info!(%video_id, "superseding pending YouTube load");
                                  deferred = Some(command);
-@@ -563,6 +638,7 @@ async fn run_commands(
+@@ -563,6 +668,7 @@ async fn run_commands(
                  }
                  Err(error) => {
                      playback_active = false;
@@ -185,7 +311,7 @@ index cac272f..58c701a 100644
                      tracing::warn!(%video_id, %error, "failed to resolve YouTube video");
                      playback.stop().await;
                  }
-@@ -594,6 +670,14 @@ async fn run_commands(
+@@ -594,6 +700,14 @@ async fn run_commands(
      }
  }
  
@@ -200,7 +326,93 @@ index cac272f..58c701a 100644
  fn map_resolve_error(error: ResolveError) -> MediaResolveError {
      match error {
          ResolveError::Http(error) => error.into(),
-@@ -798,6 +882,202 @@ mod tests {
+@@ -660,6 +774,20 @@ mod tests {
+     }
+     use std::sync::Mutex;
+ 
++    #[derive(Default)]
++    struct RecordingSender {
++        sent: Mutex<Vec<(String, serde_json::Value)>>,
++    }
++
++    #[async_trait]
++    impl vibecast_sdk::SenderChannel for RecordingSender {
++        async fn send_custom(&self, namespace: &str, data: serde_json::Value) {
++            self.sent.lock().unwrap().push((namespace.to_owned(), data));
++        }
++
++        async fn broadcast_custom(&self, _namespace: &str, _data: serde_json::Value) {}
++    }
++
+     #[derive(Default)]
+     struct RecordingPlayback {
+         operations: Mutex<Vec<String>>,
+@@ -692,6 +820,64 @@ mod tests {
+         }
+     }
+ 
++    #[tokio::test]
++    async fn explicit_mdx_status_request_receives_lounge_identity() {
++        let sender = Arc::new(RecordingSender::default());
++        let ctx = AppContext::new(
++            "session",
++            "transport",
++            APP_IDS[1],
++            reqwest::Client::new(),
++            vibecast_sdk::ReceiverContext::new(
++                "YouTube test",
++                "Test",
++                "test-device",
++                std::path::PathBuf::new(),
++            ),
++            sender.clone(),
++        );
++        let (_identity_tx, identity) = watch::channel(Some(LoungeIdentity {
++            screen_id: "screen-123".into(),
++            device_id: "device-456".into(),
++        }));
++        let (playback_tx, _playback_rx) = mpsc::channel(1);
++        let (output_control_tx, _output_control_rx) = mpsc::channel(1);
++        let (volume_tx, _volume_rx) = watch::channel((1.0, false));
++        let (cancel, _cancelled) = watch::channel(false);
++        let session = YouTubeSession {
++            resolver: Resolver::new(reqwest::Client::new()),
++            capabilities: vibecast_sdk::PlayerCapabilities::default(),
++            identity,
++            playback_tx,
++            output_control_tx,
++            volume_tx,
++            cancel,
++        };
++
++        let disposition = session
++            .on_message(
++                &ctx,
++                MDX_NAMESPACE,
++                &serde_json::json!({"type": "getMdxSessionStatus"}),
++            )
++            .await;
++        assert_eq!(disposition, MessageDisposition::Handled);
++        tokio::time::timeout(std::time::Duration::from_secs(1), async {
++            while sender.sent.lock().unwrap().is_empty() {
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .unwrap();
++
++        let sent = sender.sent.lock().unwrap();
++        assert_eq!(sent.len(), 1);
++        assert_eq!(sent[0].0, MDX_NAMESPACE);
++        assert_eq!(sent[0].1["type"], "mdxSessionStatus");
++        assert_eq!(sent[0].1["data"]["screenId"], "screen-123");
++        assert_eq!(sent[0].1["data"]["deviceId"], "device-456");
++    }
++
+     #[test]
+     fn provider_declares_captured_identity() {
+         let manifest = YouTube::new().manifest();
+@@ -798,6 +984,202 @@ mod tests {
          .unwrap();
      }
  
@@ -403,7 +615,7 @@ index cac272f..58c701a 100644
      #[tokio::test]
      async fn latest_selection_preserves_controls_and_prepared_next() {
          let (resolver, mut requests) = Resolver::controlled();
-@@ -948,6 +1228,44 @@ mod tests {
+@@ -948,6 +1330,44 @@ mod tests {
              .is_none());
      }
  

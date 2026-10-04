@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.6.0.dev24 — desktop YouTube Music MDX bootstrap
+
+- Answer the explicit YouTube MDX `getMdxSessionStatus` request with the
+  session's Lounge screen and device identity. Chromium desktop establishes the
+  app transport and sends this request before it submits a playlist; leaving it
+  unhandled made the Cast connection appear successful while Play did nothing.
+- Keep the existing connect-time MDX status for mobile senders, using the same
+  bounded wait for the Lounge identity on both paths.
+
 ## 0.6.0.dev23 — desktop YouTube Music Cast launch
 
 - Address `RECEIVER_STATUS` command replies directly to the requesting Cast

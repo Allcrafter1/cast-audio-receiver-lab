@@ -1,5 +1,23 @@
 # Working plan
 
+## Desktop YouTube Music MDX bootstrap — 2026-10-04
+
+- Physical dev23 acceptance proved that Chromium received the LAUNCH response,
+  opened the returned app transport with its browser and media-router sender
+  identities, and requested media status. The earlier assumption that no app
+  transport CONNECT followed LAUNCH was therefore incomplete.
+- The decisive debug event was an explicit YouTube MDX
+  `getMdxSessionStatus` request being left unhandled. The Lounge connection then
+  received only keepalive/no-op commands and no playlist or playback request,
+  matching the visible "connected but Play does nothing" failure.
+- Answer that explicit request with the same screen/device identity already
+  sent on sender connect. Keep the response bound to the requesting sender and
+  retain the bounded wait for Lounge identity readiness.
+- Regression covers the explicit request, handled disposition and returned MDX
+  payload. Maintained fork commit is
+  `5eddfeaaa89bbd1a648654ef22adfe30657866d6`; physical acceptance is pending
+  the dev24 image deployment.
+
 ## Desktop YouTube Music LAUNCH response — 2026-10-04
 
 - The physical Chromium desktop sender repeatedly completed device auth
@@ -13,9 +31,9 @@
   and sender id with the original request id. Send a separate request-id-zero
   wildcard update only to other platform connections so observers remain fresh
   without queuing a duplicate response for the requester.
-- Regression asserts the LAUNCH response source/destination. Maintained fork
-  commit is `bff89b3382a77535ebd75e7fa0a0309f86d1cd78`; physical acceptance is pending
-  the dev23 image deployment.
+- Regression asserts the LAUNCH response source/destination. The physical dev23
+  trace confirmed that Chromium accepted the response and opened the returned
+  app transport; the remaining MDX bootstrap defect is recorded above.
 
 ## Approved bounded reconnect grace — 2026-10-03
 

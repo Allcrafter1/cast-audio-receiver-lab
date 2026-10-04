@@ -312,7 +312,7 @@ normal explicit LOAD after a decoder error.
   `35ffe1b5ceca4962903a4f217cb18ef7d3dfb071`, not an automatically applied overlay.
 
 The reviewed frontend is now committed and pinned at
-`bff89b3382a77535ebd75e7fa0a0309f86d1cd78`. Container, lock and CI use that exact
+`5eddfeaaa89bbd1a648654ef22adfe30657866d6`. Container, lock and CI use that exact
 revision. Do not apply the snapshot again. Build/test/publish the chosen version
 through `release-runbook.md`, including the dual-stack runtime change and dev21
 AirPlay diagnostics.
@@ -321,6 +321,12 @@ The dev23 follow-up also directly addresses correlated LAUNCH, STOP and volume
 responses to the requesting Cast sender. Chromium desktop senders otherwise
 ignore the wildcard LAUNCH result and never connect to the returned YouTube MDX
 transport. Other platform observers receive a separate unsolicited status.
+
+The dev24 follow-up answers an explicit `getMdxSessionStatus` request on the
+YouTube MDX namespace. Desktop YouTube Music sends this request after connecting
+the returned app transport and waits for the screen/device identity before it
+submits a Lounge playlist; mobile senders often accepted the connect-time status
+without the explicit request path.
 
 ## Validation and deployment
 

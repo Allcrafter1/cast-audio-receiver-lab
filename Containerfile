@@ -4,7 +4,7 @@
 # separately verified native assets and wheel hashes for each target.
 FROM rust:1.98-bookworm AS vibecast-builder
 ARG VIBECAST_REPOSITORY=https://github.com/Allcrafter1/vibecast.git
-ARG VIBECAST_COMMIT=bff89b3382a77535ebd75e7fa0a0309f86d1cd78
+ARG VIBECAST_COMMIT=5eddfeaaa89bbd1a648654ef22adfe30657866d6
 RUN apt-get update \
     && apt-get install -y --no-install-recommends clang cmake git \
     && rm -rf /var/lib/apt/lists/*
@@ -78,7 +78,7 @@ RUN groupadd --gid 1000 cast-audio \
     && mkdir -p /data/private && chown -R 1000:1000 /data
 ENV HOME=/home/cast-audio
 # Release metadata must not invalidate dependency installation/build layers.
-ARG BUILD_VERSION=0.6.0-dev23
+ARG BUILD_VERSION=0.6.0-dev24
 ARG BUILD_ARCH=${TARGETARCH}
 LABEL org.opencontainers.image.title="Cast Audio Receiver Lab"
 LABEL org.opencontainers.image.description="Experimental Cast audio receiver with modular local and AirPlay outputs"

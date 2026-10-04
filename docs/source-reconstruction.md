@@ -2,7 +2,7 @@
 
 ## Current dev23 maintained source
 
-Build commit `bff89b3382a77535ebd75e7fa0a0309f86d1cd78` from
+Build commit `5eddfeaaa89bbd1a648654ef22adfe30657866d6` from
 `https://github.com/Allcrafter1/vibecast.git` directly. Exact input and fallback
 records are in `config/vibecast-frontend.lock.json`. Container and CI select this
 commit. The maintained/default branch is `cast-audio-receiver`; upstream `main`
