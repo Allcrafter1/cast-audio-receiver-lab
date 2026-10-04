@@ -1,5 +1,5 @@
 diff --git a/crates/vibecast-apps-youtube/src/lib.rs b/crates/vibecast-apps-youtube/src/lib.rs
-index cac272f..c99bd02 100644
+index cac272f..68812d6 100644
 --- a/crates/vibecast-apps-youtube/src/lib.rs
 +++ b/crates/vibecast-apps-youtube/src/lib.rs
 @@ -11,8 +11,9 @@ use async_trait::async_trait;
@@ -14,7 +14,7 @@ index cac272f..c99bd02 100644
  };
  
  use lounge::{LoungeCommand, LoungeConnection, LoungeIdentity};
-@@ -140,42 +141,32 @@ impl AppSession for YouTubeSession {
+@@ -140,42 +141,31 @@ impl AppSession for YouTubeSession {
              .map_err(map_resolve_error)
      }
  
@@ -46,8 +46,7 @@ index cac272f..c99bd02 100644
 +        data: &serde_json::Value,
 +    ) -> MessageDisposition {
 +        if namespace != MDX_NAMESPACE
-+            || data.get("type").and_then(serde_json::Value::as_str)
-+                != Some("getMdxSessionStatus")
++            || data.get("type").and_then(serde_json::Value::as_str) != Some("getMdxSessionStatus")
 +        {
 +            return MessageDisposition::Unhandled;
 +        }
@@ -82,7 +81,7 @@ index cac272f..c99bd02 100644
      }
  
      async fn on_playback_update(&self, _ctx: &AppContext, state: PlaybackState) {
-@@ -192,6 +183,16 @@ impl AppSession for YouTubeSession {
+@@ -192,6 +182,16 @@ impl AppSession for YouTubeSession {
          });
      }
  
@@ -99,7 +98,7 @@ index cac272f..c99bd02 100644
      async fn on_output_control(&self, _ctx: &AppContext, control: OutputControl) {
          let _ = self.output_control_tx.try_send(control);
      }
-@@ -201,6 +202,45 @@ impl AppSession for YouTubeSession {
+@@ -201,6 +201,45 @@ impl AppSession for YouTubeSession {
      }
  }
  
@@ -145,7 +144,7 @@ index cac272f..c99bd02 100644
  async fn run_lounge(
      http: reqwest::Client,
      receiver: vibecast_sdk::ReceiverContext,
-@@ -308,9 +348,18 @@ impl CurrentResolution {
+@@ -308,9 +347,18 @@ impl CurrentResolution {
          video_id: Option<&String>,
          codec: PreferredVideoCodec,
      ) -> Option<PlaybackMedia> {
@@ -165,7 +164,7 @@ index cac272f..c99bd02 100644
          {
              return None;
          }
-@@ -333,6 +382,8 @@ async fn run_commands(
+@@ -333,6 +381,8 @@ async fn run_commands(
      let mut next_resolution: Option<NextResolution> = None;
      let mut current_resolution: Option<CurrentResolution> = None;
      let mut playback_active = false;
@@ -174,7 +173,7 @@ index cac272f..c99bd02 100644
      let mut deferred = None;
      'commands: loop {
          let command = if let Some(command) = deferred.take() {
-@@ -354,13 +405,20 @@ async fn run_commands(
+@@ -354,13 +404,20 @@ async fn run_commands(
          };
  
          let repeating = matches!(command, LoungeCommand::RepeatCurrent);
@@ -196,7 +195,7 @@ index cac272f..c99bd02 100644
                  playback.load(media).await;
                  continue;
              }
-@@ -386,6 +444,16 @@ async fn run_commands(
+@@ -386,6 +443,16 @@ async fn run_commands(
              );
          }
          let load = match command {
@@ -213,7 +212,7 @@ index cac272f..c99bd02 100644
              LoungeCommand::RepeatCurrent => {
                  queue.next_pending = false;
                  queue
-@@ -450,8 +518,16 @@ async fn run_commands(
+@@ -450,8 +517,16 @@ async fn run_commands(
                      .map(|video_id| (video_id, 0.0))
              }
              LoungeCommand::Play => {
@@ -232,7 +231,7 @@ index cac272f..c99bd02 100644
              }
              LoungeCommand::Pause => {
                  playback.pause().await;
-@@ -462,6 +538,8 @@ async fn run_commands(
+@@ -462,6 +537,8 @@ async fn run_commands(
                  None
              }
              LoungeCommand::Stop => {
@@ -241,7 +240,7 @@ index cac272f..c99bd02 100644
                  current_resolution = None;
                  queue.next_pending = false;
                  playback_active = false;
-@@ -472,6 +550,8 @@ async fn run_commands(
+@@ -472,6 +549,8 @@ async fn run_commands(
          };
  
          if let Some((video_id, start_time)) = load {
@@ -250,7 +249,7 @@ index cac272f..c99bd02 100644
              current_resolution = None;
              tracing::info!(%video_id, start_time, "YouTube queue requests load");
              let snapshot = settings.snapshot();
-@@ -499,15 +579,35 @@ async fn run_commands(
+@@ -499,15 +578,35 @@ async fn run_commands(
                  }
                  match prepared {
                      Some(media) => Ok(media),
@@ -291,7 +290,7 @@ index cac272f..c99bd02 100644
              let result = loop {
                  tokio::select! {
                      biased;
-@@ -535,6 +635,11 @@ async fn run_commands(
+@@ -535,6 +634,11 @@ async fn run_commands(
                                  queue.video_ids = video_ids;
                                  queue.list_id = list_id;
                              }
@@ -303,7 +302,7 @@ index cac272f..c99bd02 100644
                              Some(command) => {
                                  tracing::info!(%video_id, "superseding pending YouTube load");
                                  deferred = Some(command);
-@@ -563,6 +668,7 @@ async fn run_commands(
+@@ -563,6 +667,7 @@ async fn run_commands(
                  }
                  Err(error) => {
                      playback_active = false;
@@ -311,7 +310,7 @@ index cac272f..c99bd02 100644
                      tracing::warn!(%video_id, %error, "failed to resolve YouTube video");
                      playback.stop().await;
                  }
-@@ -594,6 +700,14 @@ async fn run_commands(
+@@ -594,6 +699,14 @@ async fn run_commands(
      }
  }
  
@@ -326,7 +325,7 @@ index cac272f..c99bd02 100644
  fn map_resolve_error(error: ResolveError) -> MediaResolveError {
      match error {
          ResolveError::Http(error) => error.into(),
-@@ -660,6 +774,20 @@ mod tests {
+@@ -660,6 +773,20 @@ mod tests {
      }
      use std::sync::Mutex;
  
@@ -347,7 +346,7 @@ index cac272f..c99bd02 100644
      #[derive(Default)]
      struct RecordingPlayback {
          operations: Mutex<Vec<String>>,
-@@ -692,6 +820,64 @@ mod tests {
+@@ -692,6 +819,64 @@ mod tests {
          }
      }
  
@@ -412,7 +411,7 @@ index cac272f..c99bd02 100644
      #[test]
      fn provider_declares_captured_identity() {
          let manifest = YouTube::new().manifest();
-@@ -798,6 +984,202 @@ mod tests {
+@@ -798,6 +983,202 @@ mod tests {
          .unwrap();
      }
  
@@ -615,7 +614,7 @@ index cac272f..c99bd02 100644
      #[tokio::test]
      async fn latest_selection_preserves_controls_and_prepared_next() {
          let (resolver, mut requests) = Resolver::controlled();
-@@ -948,6 +1330,44 @@ mod tests {
+@@ -948,6 +1329,44 @@ mod tests {
              .is_none());
      }
  

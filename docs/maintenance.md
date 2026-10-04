@@ -17,7 +17,7 @@ be applied as a series.
 | Component | Existing version record | Remaining gap |
 | --- | --- | --- |
 | Our adapter | `pyproject.toml`, package version, `CHANGELOG.md`, dev18 release | Keep release tag, image digest and HA version aligned. |
-| Vibecast | Maintained commit `5eddfeaaa89bbd1a648654ef22adfe30657866d6`, Cargo.lock, per-release vendored-source archive | Frozen archive rebuild is a release gate; full OS/toolchain bit reproducibility is not claimed. |
+| Vibecast | Maintained commit `e4743892e85fb0aaf36e86f1b779dd734a2b5830`, Cargo.lock, per-release vendored-source archive | Frozen archive rebuild is a release gate; full OS/toolchain bit reproducibility is not claimed. |
 | yt-dlp extraction stack | `config/youtube-extractor-requirements.txt`: yt-dlp 2026.8.19, yt-dlp-ejs 0.8.0, deno 2.9.6; complete container resolution in `config/container-linux-x86_64-cp312.lock.txt` | amd64 CPython 3.12 is hash-locked and offline-verified; ARM remains separate. |
 | AirPlay sender | `config/cliairplay-linux-x86_64.lock.json`: unified Music Assistant airplay-cli v0.5.4, source/asset/checksum pins | Linux x86_64/reference-RAOP verified; HomePod/Yamaha and other architectures remain separate. |
 | Python libraries | Tested constraints and separate 17-wheel CPython3.12/3.13 Linux x86_64 hash locks | Fresh offline install/pip-check/tests verified for both; ARM and extractor/build dependencies remain separate. See dependency-locks.md. |

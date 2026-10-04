@@ -28,7 +28,7 @@
     {
       "bytes": 4332,
       "path": ".github/workflows/ci.yml",
-      "sha256": "f9fcbde9603df708cb7dc082acf3cfb33ced9b6b5343874bc89940d715982b1e"
+      "sha256": "be6338e1d5a0e2b9e56aa5159c7b5e4f373f17b48d080e6cb2e86d9487855a4f"
     },
     {
       "bytes": 6663,
@@ -73,7 +73,7 @@
     {
       "bytes": 4736,
       "path": "Containerfile",
-      "sha256": "3010b72e66a9b610b6af7427818d4984c2c6131112c980347a1bb6f2f33f9447"
+      "sha256": "36f56d8a0909b6bd607e5fb63bf55f60a36fc96ca89b814221401f9eb219457b"
     },
     {
       "bytes": 16726,
@@ -98,7 +98,7 @@
     {
       "bytes": 9861,
       "path": "THIRD_PARTY_NOTICES.md",
-      "sha256": "b1caa56fec26364f08755c0a867469a6ac5f1de1174194d5859ddab68a787ac9"
+      "sha256": "d53bcda624da62f6699928f5556d86b1d14e4cb590370068f0ccdbac888f8994"
     },
     {
       "bytes": 4760,
@@ -263,7 +263,7 @@
     {
       "bytes": 851,
       "path": "config/vibecast-frontend.lock.json",
-      "sha256": "7fc85d1df45a5681e0a7f24d46c176a7b28bb8b66b782a89a8b6e5c50499b102"
+      "sha256": "ccb8bcba73e8970611e93c02dadb5a3cce8b0fbe2477e46abab360e9fa5bb395"
     },
     {
       "bytes": 134,
@@ -298,7 +298,7 @@
     {
       "bytes": 171923,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "56ed03e13eabb8f32df00d165b0da7c68c17d706384cca8b8485ee644c74c2a2"
+      "sha256": "903598f703b760be030607fcba7e090db6304a63d135f3691b376b945ceeaddc"
     },
     {
       "bytes": 4535,
@@ -508,7 +508,7 @@
     {
       "bytes": 14166,
       "path": "docs/maintenance.md",
-      "sha256": "55ef24b0ae023d4b2d65c580ca845f600a1d78daf7a4326254d79be0c3fc44ec"
+      "sha256": "2fa3584c1d6ed9961174668969862ce7dd761d7f868454d298f31f5da95c40aa"
     },
     {
       "bytes": 3148,
@@ -573,7 +573,7 @@
     {
       "bytes": 8997,
       "path": "docs/source-reconstruction.md",
-      "sha256": "ab409cf495418a45da008c18c8275b8a42b8e4d9daae8dfc3e5f8d05a9783b3f"
+      "sha256": "54fdc14026fd3dc5c30d71024519b4229fb22732f4cebae0163e071735fcd411"
     },
     {
       "bytes": 5071,
@@ -593,7 +593,7 @@
     {
       "bytes": 23608,
       "path": "docs/youtube-load-recovery.md",
-      "sha256": "5681667242420c96c268050829f7cdea1d5179d5d0fc5b4d19662c6ac1eb3ef8"
+      "sha256": "81e3ef2ceb11d3f7bd7fd5c7ba207b9e9cc6a428c081bfaf629c37585a9e7907"
     },
     {
       "bytes": 3666,
@@ -791,9 +791,9 @@
       "sha256": "fd44db52815ba3dcc8fb3bfef81fa0d25e1cc5e1f2949b326c8133d0408ac39b"
     },
     {
-      "bytes": 153940,
+      "bytes": 153923,
       "path": "patches/vibecast-load-recovery-20261002.patch",
-      "sha256": "6a8acbb5be95a175136c22768ee194a96dadca89d116b510b5e7ce46a627d9ed"
+      "sha256": "c4c4750885c559f23642aac420dc367b929c5dd1fa6982fa58ea31da3098f16f"
     },
     {
       "bytes": 8522,

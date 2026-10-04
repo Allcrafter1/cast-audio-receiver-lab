@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/Allcrafter1/vibecast.git",
-  "commit": "5eddfeaaa89bbd1a648654ef22adfe30657866d6",
+  "commit": "e4743892e85fb0aaf36e86f1b779dd734a2b5830",
   "branch_for_review": "cast-audio-receiver",
   "rust_toolchain": "1.98.1",
   "reconstruction_base": "f28befe02fe930db300294d6bf49cdf5fec5a747",

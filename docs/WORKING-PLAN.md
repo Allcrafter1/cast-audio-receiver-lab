@@ -15,7 +15,7 @@
   retain the bounded wait for Lounge identity readiness.
 - Regression covers the explicit request, handled disposition and returned MDX
   payload. Maintained fork commit is
-  `5eddfeaaa89bbd1a648654ef22adfe30657866d6`; physical acceptance is pending
+  `e4743892e85fb0aaf36e86f1b779dd734a2b5830`; physical acceptance is pending
   the dev24 image deployment.
 
 ## Desktop YouTube Music LAUNCH response — 2026-10-04
