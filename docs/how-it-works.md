@@ -62,7 +62,8 @@ Earlier work by [Shanocast](https://github.com/rgerganov/shanocast) showed that
 some sender implementations accepted a legacy response made from precomputed
 signatures for short-lived TLS certificates. Its public identity later appeared
 in the Cast revocation data and stopped working with our Android sender, but the
-shape of the solution was valuable.
+shape of the solution was valuable. Shanocast's repository has no license grant;
+the current release contains no Shanocast source, patch or authentication table.
 
 We then compared a purchased AirReceiver installation on two user-owned Android
 devices with the failing Linux endpoint. The useful observations were:

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 import hashlib
 import unittest
 from datetime import datetime

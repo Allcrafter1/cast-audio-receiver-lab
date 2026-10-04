@@ -49,8 +49,10 @@ Never attach authentication bundles, private keys, tokens/cookies, signed media
 URLs, pairing secrets, full environments or unreviewed logs. Titles, filenames,
 device names and LAN addresses may also be private. Review all attachments.
 
-Our GPL-3.0-or-later declaration does not relicense dependencies. Preserve
-upstream notices and credit actual contributions. Unresolved distribution
-questions are in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Passing tests
-is not independent security review. Do not imply Google/Apple/Music Assistant
-endorsement or guarantee future service compatibility.
+Contributions to original project files are accepted under MPL-2.0. Vibecast
+fork/patch changes remain MIT so they can flow upstream. No project declaration
+relicenses dependencies: preserve upstream notices and credit actual
+contributions. Review [the licensing scope](LICENSING.md) and unresolved
+distribution questions in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Passing tests is not independent security review. Do not imply Google/Apple/
+Music Assistant endorsement or guarantee future service compatibility.

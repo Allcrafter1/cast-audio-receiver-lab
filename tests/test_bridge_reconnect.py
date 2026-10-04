@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Real local WebSocket regression; requires the existing [bridge] extra."""
 import asyncio
 import json

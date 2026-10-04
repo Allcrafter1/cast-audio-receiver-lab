@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 from pathlib import Path
 import tempfile
 import unittest

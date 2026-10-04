@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Execute the browser request helper, including HA's session cookie policy."""
 from pathlib import Path
 import shutil

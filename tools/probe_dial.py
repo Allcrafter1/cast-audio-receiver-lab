@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Discover and inspect a DIAL receiver without launching an application."""
 
 from __future__ import annotations

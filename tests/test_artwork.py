@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Real FFmpeg crop behavior; no network, sound, or image-library dependency."""
 import shutil
 import subprocess

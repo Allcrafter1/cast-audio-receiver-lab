@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Send a unicast-response mDNS query and sanitize Cast TXT metadata."""
 
 from __future__ import annotations

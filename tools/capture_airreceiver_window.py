@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Capture one TLS window from the user's running AirReceiver test installation.
 
 Requires an explicitly selected rooted Android device and Frida server. Only

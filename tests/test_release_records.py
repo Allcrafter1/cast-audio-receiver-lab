@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Offline consistency gates for the release records we actually maintain."""
 import hashlib
 import json

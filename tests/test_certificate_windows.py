@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 import base64
 import datetime as dt
 import importlib.util

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Read-only search for already-observed auth signatures in the test app.
 
 Print addresses/labels only, not signatures or unrelated memory. No clock change,

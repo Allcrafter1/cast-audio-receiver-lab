@@ -22,8 +22,9 @@ network security, device compatibility and resource use. Please do not include
 private authentication material, account tokens or signed media URLs in issues,
 logs, pull requests or test fixtures.
 
-The project is published as open source with the applicable license notices.
-Third-party code retains its own licenses.
+Original project files are published under MPL-2.0 from version 0.6.0-dev22;
+earlier releases retain their GPL-3.0-or-later grant. Third-party code retains
+its own licenses. `LICENSING.md` records the exact file/component boundaries.
 
 ## Relationship to Music Assistant
 

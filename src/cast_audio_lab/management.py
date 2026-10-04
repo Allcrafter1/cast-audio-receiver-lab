@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Direct local-network speaker administration."""
 import argparse
 import asyncio

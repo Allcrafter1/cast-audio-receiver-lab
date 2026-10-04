@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Shared image conversion policy for every output protocol.
 
 The public helper deliberately does not know about AirPlay, Cast or Home

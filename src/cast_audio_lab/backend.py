@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Audio output backends."""
 
 from __future__ import annotations

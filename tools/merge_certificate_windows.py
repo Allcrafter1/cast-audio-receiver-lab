@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Validate and merge private, same-identity Cast TLS windows. Never print keys.
 
 This verifies cryptographic consistency, NOT Google acceptance or revocation.

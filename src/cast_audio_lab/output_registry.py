@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Static registry for supported managed audio outputs.
 
 This is deliberately not a dynamic plugin loader.  It gives route validation,

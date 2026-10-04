@@ -1,9 +1,41 @@
+# SPDX-License-Identifier: MPL-2.0
 import unittest
 from unittest.mock import AsyncMock
 from cast_audio_lab.mpv_backend import MpvAudioBackend
 
 
 class MpvEventTests(unittest.IsolatedAsyncioTestCase):
+    async def test_local_cache_limits_readahead_without_affecting_other_sources(self):
+        b = MpvAudioBackend()
+        b._start = AsyncMock()
+        b._command = AsyncMock()
+        await b.load("http://127.0.0.1:8010/manifest/session/cache-title", "audio/mp4", True, 0)
+        options = b._command.await_args_list[-1].args[-1]
+        self.assertEqual(options["cache-secs"], "30")
+        self.assertEqual(options["demuxer-max-bytes"], "512KiB")
+        await b.load("https://example.invalid/audio", "audio/mp4", True, 0)
+        self.assertEqual(b._command.await_args_list[-1].args[-1], {"start": "0"})
+
+    async def test_play_after_stop_cannot_start_empty_decoder(self):
+        b = MpvAudioBackend()
+        b._command = AsyncMock()
+        await b.stop()
+        await b.play()
+        await b.pause()
+        self.assertEqual(b.status().state, "IDLE")
+        self.assertEqual(b.status().idle_reason, "CANCELLED")
+        b._command.assert_not_awaited()
+
+    async def test_play_after_failed_load_does_not_claim_playback(self):
+        b = MpvAudioBackend()
+        b._command = AsyncMock()
+        await b._event({"event": "end-file", "reason": "error"})
+        await b.play()
+        await b.pause()
+        self.assertEqual(b.status().state, "IDLE")
+        self.assertEqual(b.status().idle_reason, "ERROR")
+        b._command.assert_not_awaited()
+
     async def test_older_mpv_loadfile_retains_start_and_pause(self):
         b = MpvAudioBackend()
         b._start = AsyncMock()
@@ -53,6 +85,7 @@ class MpvEventTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_pause_survives_cache_feedback(self):
         b = MpvAudioBackend()
+        b._status.state = "PLAYING"
         b._command = AsyncMock()
         await b.pause()
         await b._event({"event": "property-change", "name": "paused-for-cache", "data": False})

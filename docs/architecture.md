@@ -12,8 +12,9 @@ Start with a small audio-only Cast V2 receiver and keep device attestation behin
 an interface. This makes discovery, TLS framing, receiver/media namespaces and
 actual playback independently testable.
 
-Shanocast is useful protocol research, but not a sustainable base: its published
-method replays signatures observed from AirReceiver, and current Chromium
+Shanocast is useful protocol research, but not a sustainable base: its publicly
+accessible repository has no license grant, its documented method replays
+signatures observed from AirReceiver, and current Chromium
 versions reject the associated certificate. Copying a production key or replay
 table would also create a security and distribution problem instead of solving
 device identity.

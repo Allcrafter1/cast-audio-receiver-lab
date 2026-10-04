@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Translate a tiny container/Home Assistant configuration into runtime args."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 import asyncio
 from dataclasses import replace
 import json

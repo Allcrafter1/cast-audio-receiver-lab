@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Sequential, resumable private collection using the bounded phone pilot.
 
 Each window restores the phone independently. No runtime manifest is changed.

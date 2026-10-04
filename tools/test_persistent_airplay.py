@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Opt-in physical test: emits quiet tones to the explicitly configured target."""
 import argparse
 import asyncio

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Create an allowlisted source tree with reviewed branding for publication review.
 
 This is deliberately stricter than ``git archive`` because the development
@@ -26,6 +27,7 @@ ROOT_FILES = (
     "CONTRIBUTING.md",
     "Containerfile",
     "LICENSE",
+    "LICENSING.md",
     "README.md",
     "SECURITY.md",
     "THIRD_PARTY_NOTICES.md",

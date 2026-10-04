@@ -146,6 +146,7 @@ Useful maintainer documents:
 - [Maintenance, updates and support bundles](docs/maintenance.md)
 - [Reconstructing the maintained Vibecast source](docs/source-reconstruction.md)
 - [Release checklist](docs/RELEASE-CHECKLIST.md)
+- [Licensing scope](LICENSING.md)
 - [Credits and third-party licences](THIRD_PARTY_NOTICES.md)
 
 Python runtime locks include reviewed wheel and source inventories and are
@@ -154,16 +155,24 @@ Protocol and transport updates also need targeted regression tests.
 
 ## Origin, licence and contributions
 
-This project would not exist without Vibecast, Shanocast and its research,
+This project would not exist without Vibecast, Shanocast's protocol research,
 Music Assistant's `airplay-cli`, FFmpeg, mpv, yt-dlp, Chromium's published Cast
 protocol sources and the researchers who documented Cast device authentication.
 The exact relationship and licences are recorded in
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Attribution does not imply
 endorsement.
 
-Original project code is **GPL-3.0-or-later**; third-party components retain
-their own copyrights and licences. The project does not use Google's official
-Cast SDK or a receiver registered in the Cast developer console.
+Original project code is **MPL-2.0**: modifications to an MPL-covered file stay
+under MPL, while those files can be combined with Apache-2.0 and other code in a
+larger work. Third-party components retain their own copyrights and licences.
+In particular, the maintained Vibecast fork remains MIT, Chromium's schema
+remains BSD-3-Clause and the separate `airplay-cli` executable remains GPLv3.
+See [the exact file/component boundaries](LICENSING.md) and the
+[dated provenance audit](docs/licensing-audit-2026-10-04.md). Releases through
+`0.6.0-dev21` remain available under their original GPL-3.0-or-later terms.
+
+The project does not use Google's official Cast SDK or a receiver registered in
+the Cast developer console.
 
 Much of the implementation was developed collaboratively with GPT/Astra and
 other AI coding assistance. I have almost no programming

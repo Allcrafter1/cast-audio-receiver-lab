@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Inventory explicitly downloaded wheels and emit exact artifact requirements.
 
 Does not download, import, execute or install their contents. Hashes establish

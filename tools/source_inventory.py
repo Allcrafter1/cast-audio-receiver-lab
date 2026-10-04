@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Read-only Rust build-source hashes, without source content or private state.
 
 Lists Git-visible workspace manifests and crate files, including new providers.

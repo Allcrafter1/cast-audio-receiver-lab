@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Launch a known receiver app, inspect its public status, then stop it."""
 
 from __future__ import annotations

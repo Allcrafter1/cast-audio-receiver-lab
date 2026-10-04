@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Verify OCI JSON descriptors and summarize embedded SBOM/provenance.
 
 Reads only bounded JSON metadata from an OCI tar, never extracts or executes

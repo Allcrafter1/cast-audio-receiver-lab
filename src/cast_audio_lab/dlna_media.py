@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Output-local HTTP media compatibility for finite DLNA audio items.
 
 Old renderers need Content-Length and byte ranges, so prepare a bounded file

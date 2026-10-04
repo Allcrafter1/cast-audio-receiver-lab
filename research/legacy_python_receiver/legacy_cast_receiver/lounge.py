@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Minimal receiving side of YouTube's undocumented Lounge protocol.
 
 The protocol is not a public YouTube API and may change without notice.  This

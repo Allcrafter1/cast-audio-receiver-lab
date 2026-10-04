@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Historical ephemeral TLS identity for the Python receiver prototype."""
 
 from __future__ import annotations

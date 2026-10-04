@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
 # Developer-only Linux x86_64 provenance build. Does not install into runtime.
 # Inputs: complete pinned recursive airplay-cli checkout, NEW output directory.
 set -euo pipefail

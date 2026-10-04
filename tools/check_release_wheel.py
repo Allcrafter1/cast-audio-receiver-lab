@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Fail if a runtime wheel is incomplete or contains historical receiver code."""
 
 import argparse

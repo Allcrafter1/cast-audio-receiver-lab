@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Own only explicitly configured adapter processes, not the Rust frontend."""
 import asyncio
 import contextlib

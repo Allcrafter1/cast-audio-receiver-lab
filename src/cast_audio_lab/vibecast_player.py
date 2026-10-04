@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Audio player adapter for Vibecast's external-player WebSocket protocol."""
 
 from __future__ import annotations
@@ -50,6 +51,7 @@ class VibecastAudioPlayer:
                 "playerId": self.player_id,
                 "name": self.name,
                 "capabilities": {
+                    "localAudioCache": bool(getattr(self.backend, "local_audio_cache", False)),
                     "platform": f"Linux {platform.machine()}",
                     "drm": [],
                     # YouTube currently builds a DASH manifest containing video

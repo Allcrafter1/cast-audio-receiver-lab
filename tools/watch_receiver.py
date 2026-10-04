@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Watch read-only receiver status until an application becomes active."""
 
 from __future__ import annotations

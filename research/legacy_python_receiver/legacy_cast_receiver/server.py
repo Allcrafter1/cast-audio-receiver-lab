@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """TLS Cast channel server."""
 
 from __future__ import annotations

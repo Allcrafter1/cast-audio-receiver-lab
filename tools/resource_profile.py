@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Read-only Linux process-tree sampling; no commands, URLs or environment exported.
 
 RSS double-counts shared pages; PSS is preferable and may require same-user access.

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Small shared disk cache for processed covers; no persistent worker."""
 import asyncio
 import contextlib

@@ -1,11 +1,13 @@
+# SPDX-License-Identifier: MPL-2.0
 import argparse
 import asyncio
+import socket
 from pathlib import Path
 import tempfile
 import unittest
 from unittest.mock import patch
 
-from cast_audio_lab.runtime import RuntimeSupervisor, runtime_commands
+from cast_audio_lab.runtime import RuntimeSupervisor, frontend_bind_host, runtime_commands
 
 
 class FakeProcess:
@@ -27,6 +29,28 @@ class FakeProcess:
 
 
 class RuntimeCommandTests(unittest.TestCase):
+    def test_frontend_accepts_both_advertised_address_families(self):
+        host = frontend_bind_host()
+        if host != "::":
+            self.skipTest("host has no default dual-stack IPv6 socket")
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as listener:
+            listener.bind((host, 0))
+            listener.listen()
+            listener.settimeout(2)
+            for address in ("127.0.0.1", "::1"):
+                with socket.create_connection((address, listener.getsockname()[1]), timeout=2):
+                    connection, _ = listener.accept()
+                    connection.close()
+
+    def test_ipv6_disabled_preserves_ipv4_startup(self):
+        with patch("cast_audio_lab.runtime.socket.socket", side_effect=OSError):
+            self.assertEqual(frontend_bind_host(), "0.0.0.0")
+
+    def test_ipv6_only_default_does_not_drop_ipv4(self):
+        with patch("cast_audio_lab.runtime.socket.socket") as factory:
+            factory.return_value.__enter__.return_value.getsockopt.return_value = 1
+            self.assertEqual(frontend_bind_host(), "0.0.0.0")
+
     def test_defaults_keep_private_bundle_outside_release(self):
         with tempfile.TemporaryDirectory() as directory:
             args = argparse.Namespace(
@@ -36,7 +60,9 @@ class RuntimeCommandTests(unittest.TestCase):
                 artwork_public_url="http://192.0.2.2:8788", log_level="INFO",
                 ha_ingress=True, ingress_port=43124,
             )
-            frontend, manager = runtime_commands(args)
+            with patch("cast_audio_lab.runtime.frontend_bind_host", return_value="::"):
+                frontend, manager = runtime_commands(args)
+        self.assertEqual(frontend[frontend.index("--bind-host") + 1], "::")
         self.assertIn(str(Path(directory) / "private" / "certs.json"), frontend)
         self.assertIn("ws://127.0.0.1:8010/player", manager)
         self.assertIn("http://192.0.2.2:8788", manager)

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Exercise the receiver with a development sender that skips device auth.
 
 This is an end-to-end protocol/decoder test, not a substitute for validation

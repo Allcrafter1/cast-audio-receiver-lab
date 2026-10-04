@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Play a YouTube/Googlevideo audio URL through curl and mpv.
 
 Experimental transport, not a verified solution to CDN HTTP 403 responses.

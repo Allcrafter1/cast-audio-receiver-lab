@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Disassemble an address range from an AArch64 ELF image."""
 
 from __future__ import annotations

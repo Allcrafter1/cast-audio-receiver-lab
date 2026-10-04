@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Bounded, opt-in SSDP MediaRenderer discovery using the existing UPnP stack."""
 import asyncio
 import ipaddress

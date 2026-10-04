@@ -1,4 +1,5 @@
 #!/system/bin/sh
+# SPDX-License-Identifier: MPL-2.0
 # Independent emergency restore, using monotonic uptime rather than altered wall time.
 # Arguments: initial epoch, initial uptime seconds, original auto_time, timeout.
 clock_epoch="$1"

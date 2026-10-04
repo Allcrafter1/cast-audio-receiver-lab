@@ -4,7 +4,7 @@
 # separately verified native assets and wheel hashes for each target.
 FROM rust:1.98-bookworm AS vibecast-builder
 ARG VIBECAST_REPOSITORY=https://github.com/Allcrafter1/vibecast.git
-ARG VIBECAST_COMMIT=35ffe1b5ceca4962903a4f217cb18ef7d3dfb071
+ARG VIBECAST_COMMIT=9a7f443946680f705f8196ad2e7827aa5341c1e2
 RUN apt-get update \
     && apt-get install -y --no-install-recommends clang cmake git \
     && rm -rf /var/lib/apt/lists/*
@@ -18,7 +18,7 @@ WORKDIR /src
 COPY config/container-build-cp312.lock.txt /tmp/build-requirements.txt
 RUN python -m pip install --no-cache-dir --disable-pip-version-check \
       --require-hashes -r /tmp/build-requirements.txt
-COPY pyproject.toml README.md LICENSE ./
+COPY pyproject.toml README.md LICENSE LICENSING.md ./
 COPY THIRD_PARTY_NOTICES.md ./
 COPY licenses/ ./licenses/
 COPY src/ ./src/
@@ -68,7 +68,7 @@ COPY tests/test_mpv_integration.py /tmp/cast-build-tests/test_mpv_integration.py
 COPY tests/test_dlna_media.py /tmp/cast-build-tests/test_dlna_media.py
 RUN python -m unittest discover -s /tmp/cast-build-tests -p 'test_*.py' -v \
     && cliairplay --check
-COPY LICENSE THIRD_PARTY_NOTICES.md /usr/share/doc/cast-audio-receiver/
+COPY LICENSE LICENSING.md THIRD_PARTY_NOTICES.md /usr/share/doc/cast-audio-receiver/
 COPY licenses/ /usr/share/doc/cast-audio-receiver/licenses/
 RUN dpkg-query -W > /usr/share/doc/cast-audio-receiver/debian-packages.txt \
     && ffmpeg -version > /usr/share/doc/cast-audio-receiver/ffmpeg-build.txt \
@@ -78,11 +78,12 @@ RUN groupadd --gid 1000 cast-audio \
     && mkdir -p /data/private && chown -R 1000:1000 /data
 ENV HOME=/home/cast-audio
 # Release metadata must not invalidate dependency installation/build layers.
-ARG BUILD_VERSION=0.6.0-dev21
+ARG BUILD_VERSION=0.6.0-dev22
 ARG BUILD_ARCH=${TARGETARCH}
 LABEL org.opencontainers.image.title="Cast Audio Receiver Lab"
 LABEL org.opencontainers.image.description="Experimental Cast audio receiver with modular local and AirPlay outputs"
-LABEL org.opencontainers.image.licenses="GPL-3.0-or-later"
+LABEL org.opencontainers.image.licenses="NOASSERTION"
+LABEL io.cast-audio-receiver.project-license="MPL-2.0"
 LABEL org.opencontainers.image.source="https://github.com/Allcrafter1/cast-audio-receiver-lab"
 LABEL io.hass.version="${BUILD_VERSION}"
 LABEL io.hass.type="app"

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Collect exact PyPI source references for a reviewed wheel inventory.
 
 Reads public metadata only: never installs/imports packages or executes their

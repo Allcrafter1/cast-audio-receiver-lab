@@ -1,5 +1,203 @@
 # Working plan
 
+## Approved bounded reconnect grace — 2026-10-03
+
+- Owner rejected indefinite playback after control loss: stop-on-disconnect was
+  intentional because the laptop lacks a physical stop button. The previous
+  unconditional-retention change was an unapproved behavior change, not an
+  established defect in the agreed product policy. Owner now authorizes rollback,
+  diagnosis and a bounded reconnect grace if appropriate.
+- Rolled .110 back at 18:33:32 UTC to binary 7969bfcaf2c90dd953c6fee53f49d5141f02dbc8031d03f4aed44c238c6d226f;
+  both routes ready and hash verified. Granular cache remains; unlimited retention
+  is no longer live. Bounded-grace revision subsequently activated as below.
+- YouTube opts into a fixed 10-second deadline after owner/last-subscriber TCP
+  loss. No reattachment means Stop/session/cache teardown. Only app-transport
+  CONNECT cancels the deadline and transfers ownership. Platform discovery/status
+  queries, existing observers and repeated drops do not extend it. Explicit owner
+  CLOSE or last-sender CLOSE, receiver STOP, replacement and shutdown tear down
+  immediately. Observer loss alone does not stop an attached owner.
+- Existing local management UI offers Deactivate/Activate per output: disabling
+  stops the adapter process group and decoder, independent of Cast. Re-enabling
+  is required before casting again. No new management controls/dependencies.
+- Original 18:05 transport cause remains unknown. NetworkManager journal has no
+  entries in the incident window; subsequent 18:28/18:32 closes show transport_io,
+  which does not establish the original cause. No network configuration changes.
+- 182 Rust tests and SDK doc test pass; two optional probes ignored. Includes
+  real ten-second expiry, no extension by status polling, reconnect cancellation,
+  immediate STOP/CLOSE during grace, owner CLOSE with an observer, observer loss
+  with an attached owner, and replacement safe from the old deadline.
+  Optimized build (3m35s) and dev20 execution check pass. Activated on .110 at
+  18:47:16 UTC; both routes ready/running without restarts, installed hash verified:
+  `9d95bfd0cde5b2cf5d1b90412240a361049d03a789ac598b8e710c9d663c19df`.
+  Physical YTM disconnect/reconnect acceptance pending. No image/pin/version push.
+  Current combined snapshot: `c6f9714f758a41206ff376a3c95fc643f79c92e4b4f190a3d8d97592217b7180`.
+
+## Rejected unlimited sender-disconnect retention — 2026-10-03 (historical)
+
+- At 18:05:53.872 UTC (.110), the phone .79 Cast socket closed and the YouTube
+  session stopped immediately. Earlier repeats logged cached_audio=true through
+  18:04:23; no adjacent decoder/cache failure. Container stayed up, no OOM/restart.
+  The reason the phone socket closed is unknown; do not claim a Google/CDN error.
+- Confirmed lifecycle bug: physical owner disconnect unconditionally tears down
+  its app; losing the last subscribed socket does the same. Two new end-to-end
+  tests reproduce both paths against the previous hub (both fail).
+- SDK session opt-in survives_sender_disconnect defaults false; YouTube opts in.
+  Dead ownership/subscriptions are removed but Lounge/playback/cache survive.
+  Explicit receiver STOP, last-sender app CLOSE, new LAUNCH and shutdown keep
+  their existing teardown behavior; other apps retain their disconnect policy.
+  No timed grace or automatic sender reconnection is claimed. At most the
+  existing current session/cache per output is retained until explicit teardown.
+- Added safe transport-close category and teardown-origin diagnostics.
+  175 Rust tests and SDK doc test pass (two optional probes ignored). Includes
+  owner loss, final-subscriber loss, same-cache repeat after reattachment,
+  explicit STOP/CLOSE and unchanged non-opted-in teardown. Both new regressions
+  fail against the previous hub and pass with the fix. Optimized build (3m34s)
+  and dev20 execution check pass. Activated at 18:26:15 UTC on .110, both routes
+  running/no restarts and health ready; binary hash verified. Physical repeat/
+  unexpected-disconnect acceptance remains pending. No image/pin/version push.
+  Binary: `5dcb880a961c5bed7faae81363061770a46e7b7720aec578274c613c277769ab`.
+  Combined patch: `ccd4dbde47f6e376fb9729fcc7a478b67654a450583ea641a2a4350f1a541853`.
+
+## Demand-driven current-title cache — 2026-10-02
+
+- Owner prefers gradual fetching during playback, not an eager whole-song
+  background download. Supersedes the initial cache download policy below.
+- Implemented sparse 128-KiB upstream Range blocks, progressive serving within
+  each block, shared fetches for concurrent readers, retention of loaded blocks
+  and direct forward-seek fetches without downloading the intervening prefix.
+  No active request means no background sweep of remaining blocks.
+- mpv local-cache loads use 30s/512-KiB demuxer readahead and 64-KiB stream buffer.
+  Literal-loopback bridge listeners bound the TCP send buffer to 64 KiB, because
+  otherwise a paused real mpv pulled almost all of a 2.88-MB test song into TCP.
+  Existing AirPlay PCM-pipe backpressure supplies decoder demand.
+- RAM limit stays 32 MiB/current output; complete-only offline repeat, selection
+  eviction and no playlist archive remain unchanged. Unknown/oversized sources
+  or origins ignoring Range bypass caching. Per-block header/stall/total limits
+  are 15s/30s/120s; idle cache demand has no timeout.
+- 167 Rust tests plus SDK doc test pass. Explicit silent real-mpv test passes:
+  paused fixture retains 655,360 / 2,880,044 bytes rather than almost all audio.
+  Isolated dev20 Python candidate passes 25 tests including real silent mpv.
+  Optimized build (3m14s) and dev20 compatibility passed. Activated on .110 at
+  21:11:22 UTC, health ready, both routes running/no restarts; hashes verified.
+  Physical YTM acceptance of this granular revision pending. No image/pin/version
+  publication. Snapshot SHA-256:
+  `4510125af2d0da8780adbd17440b38ec58aa02a474cdbb0499f815238b7dfdb7`.
+
+## Approved current-title progressive audio cache — 2026-10-02
+
+- Owner approved the common-media-path cache: one current title per output,
+  32 MiB RAM limit, start before download completes, cached seeks/repeat-one,
+  no retained playlist loop/archive, evict on title switch/Stop/session teardown.
+- Implementation in frontend SDK/core/bridge: opt-in CachedUrl, shared completion
+  hint, one cancellable progressive GET, local GET/HEAD/single-Range route with
+  distinct per-title token, eight readers maximum, 64 KiB body chunks. Complete
+  cached repeat-one bypasses ten-minute source-URL age; incomplete/failed entries
+  do not. Unknown length/oversized media redirects to ordinary streaming; HLS
+  remains uncached. No disk persistence or new dependencies.
+- Enable only receiver-side mpv/AirPlay decoders via localAudioCache capability;
+  other players remain opt-out, avoiding loopback URLs sent to remote renderers.
+  Python capability changes mirrored to lab. Existing recovery fixes preserved.
+- 165 Rust tests and one SDK doc test passed; one live resolver probe ignored.
+  24 Python tests pass in isolated dev20 image with exact live-candidate modules,
+  including real silent mpv. Five basic AirPlay tests also pass locally.
+  Optimized build (3m34s) and dev20 execution check passed. Activated locally
+  at ~20:39 UTC, both routes healthy/no restarts; installed hashes verified.
+  User confirms playback/seek/repeat; 2,399,842-byte completed cache and
+  cached_audio=true repeat confirmed live. HTTP range and silent FFmpeg seek pass.
+  Timeout-only follow-up tested but not deployed; superseded by the granular
+  policy above. No image/pin/version publication.
+  Historical intermediate snapshot SHA-256:
+  `ebe6d4b62ecd77eeb84200e4bc20e00781b2e78987c82357ce2fbbdec5c92df5`.
+
+## Direct Cast Play and persistent metadata failure — 2026-10-02
+
+- At 19:42 UTC repeat renewal failed twice in metadata HTTP requests. A direct
+  Cast Play bypassed Lounge recovery. User also reports reconnect now fails.
+  A single watch-page probe from the receiver returned HTTP 429; the historical
+  Rust error lacked status, so that exact earlier status is not established.
+- Opt-in app-owned Play dispatch now covers Cast and output controls, retaining
+  existing behavior for other apps and bypassing interception for app-originated
+  Play. YouTube routes it through Lounge's existing fresh-load recovery.
+- Safe metadata diagnostics include fixed stage, HTTP status and error category
+  flags, never request URLs, bodies, keys or raw reqwest errors. HTTP 429 does
+  not receive the immediate automatic retry. Resolver STOP after manual reload
+  must not grant a second decoder retry budget.
+- 122 Rust unit tests plus one SDK doc test passed; one live probe ignored.
+  Release build and dev20 execution check passed. Activated .110 at 19:59:47 UTC;
+  health ready, both routes running without restarts, binary digest verified.
+  User confirms audio; fresh resolution succeeded at 20:00:53 UTC. Long-running
+  repeat stability and permanent rate-limit clearance remain unproven.
+  Previous binary backed up to
+  `/home/<receiver-user>/cast-castplay-backup-20261002-jOVEuq/vibecast.before`.
+  Combined snapshot SHA-256:
+  `818f1ce1193162341a3d12547e06d62bde93798346a487c25eec01a14e458728`.
+  No image publication or pin changes.
+
+## Repeat renewal HTTP failure and empty-player Play — 2026-10-02
+
+- New live incident: normal EOF at 18:40:54 UTC, fresh repeat resolution failed
+  at 18:40:56.777 (`YouTube HTTP request failed`), then the worker sent STOP.
+  At 18:41:42 Play only unpaused mpv. Read-only inspection found idle-active=true,
+  playlist-count=0, no sink input, 28% volume and mute=false. The earlier recovery
+  candidate was not yet deployed; this additionally exposed the pre-LOAD path.
+- Added one cancellable HTTP/extractor resolution retry (250 ms delay), retained
+  failed selection/position for explicit Play, and encoded failed resolution STOP
+  as ERROR instead of EOF. mpv now keeps every empty/IDLE decoder idle, including
+  CANCELLED, rather than reporting PLAYING/PAUSED. Decoder-start recovery remains
+  separately bounded; explicit Stop clears recovery.
+- 109 Rust tests passed (62 YouTube, 16 bridge, 31 core), one live resolver test
+  ignored; 13 mpv tests passed with real silent decoder in isolated dev20 image.
+  Ten adapter tests passed locally. Updated combined snapshot SHA-256:
+  `be0d6d79406c874b7decacd626107f29595f83b0e32e22d7cb7b4fbf905ff288`.
+- Compatible release build and dev20 execution check passed. Hotfix activated
+  on .110 at 19:01:57 UTC; health ready, both routes running without restarts,
+  deployed binary/module hashes verified. User confirms YTM audio is back;
+  long-running repeat stability still needs observation.
+  Backup of previous frontend/mpv module retained at
+  `/home/<receiver-user>/cast-repeat-recovery-backup-20261002`.
+  Public image,
+  version metadata and frontend pins remain unchanged for the later release.
+
+## YouTube load recovery prepared for later image — 2026-10-02
+
+- Owner authorized the fix and asked to accumulate/document changes before a
+  later image publication. No new deployment, commit, push, version bump or App
+  metadata promotion. Existing AirPlay diagnostics and IPv6 work are preserved.
+- Rust worktree `/home/codex/cast-repeat-frontend` now handles one automatic
+  initial-load retry with freshly resolved media, preserving position/pause.
+  Terminal failure remains retryable with explicit YTM Play. Failed media and
+  speculative Next are not reused for recovery; Stop/disconnect/new selection
+  cancel obsolete work. Duplicate stale errors cannot loop/restart resolution.
+- Lounge reports errors separately from completion, with buffering during
+  recovery. Python mpv Play/Pause preserve ERROR until a new LOAD; they no longer
+  claim playback after merely unpausing a failed decoder. Mirrored into lab.
+- Validation: 106 Rust tests passed (YouTube 59, bridge 16, core 31), one explicit
+  live-network resolver test ignored; Rust doc tests passed. Formatted changed
+  files with stable rustfmt. Twelve mpv tests passed in an isolated dev20-based
+  container with candidate Python source, including real silent decoder failure
+  and fresh-LOAD recovery. Ten adapter tests and one real WebSocket reconnect
+  test passed locally. No live YTM recovery acceptance is claimed.
+- Rust snapshot `patches/vibecast-load-recovery-20261002.patch`, SHA-256
+  `d26a63fa115557b287b87800c4aa3babd8b1df77aad9c794fe3624b5f2bfcd03`.
+  See `docs/youtube-load-recovery.md` for source locations, behavior, limits and
+  the required new frontend commit/pins before image build. Current image pins
+  intentionally still reference the last published frontend, NOT this fix.
+
+## .110 dual-stack discovery hotfix — 2026-10-02
+
+- Mirror the lab runtime correction: choose a verified default dual-stack bind
+  for Cast/Eureka instead of always IPv4, matching mDNS IPv6 advertisements.
+  Preserve IPv4 startup where default dual-stack binding is unavailable.
+  Six runtime tests pass, including real IPv4 and IPv6 socket connections.
+- Existing .110 dev20 container hotfixed and restarted with original runtime
+  retained in `/home/<receiver-user>/cast-ipv6-fix-20261002/runtime.py.before`.
+  Both routes healthy; real Cast TLS passes over LAN IPv4 and IPv6. No public
+  image, version bump or push. Container recreation needs a corrected build.
+- Concurrent YTM loading failure was HTTP 403 for a nonexpired signed URL;
+  two fresh resolutions decoded and silent PulseAudio playback passed.
+  Exact HTTP-403 cause remains unconfirmed. Owner confirmed after the restart:
+  "Sichtbar und Ton funktioniert"; immediate playback/discovery acceptance passed.
+
 ## Issue #13 observable AirPlay path — 2026-10-01
 
 - Confirmed that the Home Assistant `log_level` reached only the Rust frontend:
@@ -606,7 +804,12 @@ repository, image or authentication bundle until the gates below are resolved.
 
 ### Decisions after the licence/distribution review — 2026-09-20
 
-- Keep original Cast Audio Receiver Lab code under **GPL-3.0-or-later** while
+> Historical record: the project-license choice below was superseded by the
+> owner-authorized MPL-2.0 transition on 2026-10-04. See `LICENSING.md` and
+> `docs/licensing-audit-2026-10-04.md`. The third-party boundaries remain valid.
+
+- At this review point, original Cast Audio Receiver Lab code was kept under
+  **GPL-3.0-or-later** while
   retaining every incorporated component's own copyright, licence and source
   obligations. The root licence does not relicense Vibecast, Chromium protocol
   files, airplay-cli, libraop, FFmpeg, mpv or credentials.
@@ -680,8 +883,9 @@ repository, image or authentication bundle until the gates below are resolved.
    does not lead with a precise product goal or clearly separate upstream code,
    the maintained fork, and this project's substantial audio/output/management/
    HA work. This is a documentation and provenance blocker, not a playback bug.
-6. **Release licensing/attribution is incomplete.** Vibecast's MIT notice is
-   present, and original project code declares GPL-3.0-or-later, but the final
+6. **Release licensing/attribution was incomplete at this review point.**
+   Vibecast's MIT notice was present, and original project code then declared
+   GPL-3.0-or-later, but the final
    artifact inventory, Chromium `cast_channel.proto` BSD notice, corresponding-
    source records, updated libraop evidence and direct/transitive notices still
    need to be made release-complete.
@@ -716,14 +920,17 @@ fork can retain it as an opt-in development example.
 
 ### Licence and authentication publication decision
 
+> Historical 2026-09-20 decision. The project-code GPL choice was superseded by
+> MPL-2.0 on 2026-10-04; it did not and does not change the licenses below.
+
 - Keep the maintained Vibecast fork under its upstream **MIT** licence and retain
   the upstream copyright/licence text plus a clear modified-by/changelog record.
   MIT permits modification and combination, and is GPL-compatible, but its code
   and notice do not become ours or lose their MIT provenance.
-- Keep original Cast Audio Receiver Lab product/glue code under
-  **GPL-3.0-or-later**, subject to a final per-file/origin audit. A combined
+- At that review point, original Cast Audio Receiver Lab product/glue code was
+  kept under **GPL-3.0-or-later**, subject to a final per-file/origin audit. A combined
   distribution can carry GPL obligations while preserving each incorporated
-  component's notices. Do not use the root GPL file to imply that every bundled
+  component's notices. The root license was never intended to imply that every bundled
   third-party component or credential was relicensed.
 - Before a public image: finish exact FFmpeg/mpv/Rust/Python/airplay-cli source,
   licence and notice inventory; incorporate libraop's current MIT statement and
@@ -1339,7 +1546,7 @@ independent work. Preserve existing architecture and tuning decisions.
   Three wheel-inventory tests raise the local suite to132 (three FFmpeg skips).
   CPython3.13/ARM and extractor/build-tool artifact locks remain open.
   Credits/notices inventory added; upstream license ambiguities remain a release
-  gate, not silently treated as resolved by the project's GPL choice.
+  gate, not silently treated as resolved by the project's then-current GPL choice.
 - **Confirmed sender limitation:** extreme rapid selection order also fails on
   Nest Audio. Do not reopen heuristic reordering without new receiver evidence.
 - **HA evidence:** CC1AD845/default_media launch observed in the correct log;

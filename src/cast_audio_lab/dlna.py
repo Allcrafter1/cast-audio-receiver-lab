@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Experimental DLNA DMR output built on async-upnp-client."""
 
 from __future__ import annotations

@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Convert Shanocast's public replay table into a Vibecast cert manifest.
+# SPDX-License-Identifier: MPL-2.0
+"""Convert an externally supplied Shanocast-format table to a Vibecast manifest.
 
 The generated manifest contains private/authentication material and must stay in
-the ignored state directory.  Nothing from the table is copied into this source
-file; the user supplies a local checkout of Shanocast's public patch.
+the ignored state directory. Nothing from the table or Shanocast implementation
+is copied into this source file; the user supplies an external input path.
+Shanocast's checked repository has no license grant. Availability of that input
+does not grant permission to redistribute it or generated authentication data.
 """
 
 from __future__ import annotations

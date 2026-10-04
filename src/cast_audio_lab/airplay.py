@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """AirPlay output built around Music Assistant's ``cliairplay`` binary.
 
 The module owns process plumbing, not the AirPlay protocol.  FFmpeg converts an
@@ -242,6 +243,8 @@ class AirPlayAudioBackend(NullAudioBackend):
     Keep the AirPlay transport and PCM pipe open across tracks. Only the decoder
     is replaced; acknowledged FLUSH barriers separate old and new samples.
     """
+
+    local_audio_cache = True
 
     def __init__(
         self,

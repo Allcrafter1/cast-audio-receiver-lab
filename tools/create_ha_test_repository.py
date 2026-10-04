@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Create a clean local-build Home Assistant App repository for acceptance tests.
 
 The generated repository contains source and build records, never private state
@@ -19,6 +20,7 @@ FILES = (
     "pyproject.toml",
     "README.md",
     "LICENSE",
+    "LICENSING.md",
     "THIRD_PARTY_NOTICES.md",
     "tests/test_mpv_integration.py",
     "tests/test_dlna_media.py",

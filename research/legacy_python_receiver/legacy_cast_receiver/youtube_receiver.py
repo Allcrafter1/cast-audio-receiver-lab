@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Runnable YouTube Music receiver using DIAL and YouTube Lounge."""
 
 from __future__ import annotations

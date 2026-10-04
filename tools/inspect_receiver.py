@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Read-only inspection of Cast receiver status and app availability."""
 
 from __future__ import annotations

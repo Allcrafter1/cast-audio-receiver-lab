@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Expose an existing Cast receiver through an audio-only lab endpoint.
 
 This tool deliberately keeps the Cast TLS stream opaque.  It forwards port

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Cast V2 JSON namespaces needed by an audio-only receiver."""
 
 from __future__ import annotations

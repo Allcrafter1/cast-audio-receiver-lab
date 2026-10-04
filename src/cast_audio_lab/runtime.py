@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Own the Cast frontend and speaker manager as one runtime.
 
 The supervisor contains no playback logic.  Its only job is deterministic
@@ -13,6 +14,7 @@ import contextlib
 import os
 from pathlib import Path
 import signal
+import socket
 import sys
 
 
@@ -147,6 +149,18 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def frontend_bind_host() -> str:
+    """Match automatic IPv6 discovery on hosts with dual-stack listeners."""
+    try:
+        with socket.socket(socket.AF_INET6, socket.SOCK_STREAM) as probe:
+            if probe.getsockopt(socket.IPPROTO_IPV6, socket.IPV6_V6ONLY):
+                return "0.0.0.0"
+            probe.bind(("::", 0))
+    except OSError:
+        return "0.0.0.0"
+    return "::"
+
+
 def runtime_commands(args: argparse.Namespace) -> tuple[list[str], list[str]]:
     data_dir = args.data_dir.resolve()
     frontend_dir = data_dir / "frontend"
@@ -165,7 +179,7 @@ def runtime_commands(args: argparse.Namespace) -> tuple[list[str], list[str]]:
         "--model",
         args.model,
         "--bind-host",
-        "0.0.0.0",
+        frontend_bind_host(),
         "--player-port",
         str(args.bridge_port),
         "--log-level",

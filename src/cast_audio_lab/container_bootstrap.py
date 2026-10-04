@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Prepare the dedicated container state directories, then drop privileges."""
 
 from __future__ import annotations

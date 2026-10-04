@@ -1,9 +1,11 @@
+# SPDX-License-Identifier: MPL-2.0
 """mpv JSON IPC output with decoder-owned position and EOF feedback."""
 import asyncio
 import json
 import logging
 import tempfile
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .backend import NullAudioBackend
 
@@ -11,6 +13,8 @@ LOGGER = logging.getLogger(__name__)
 
 
 class MpvAudioBackend(NullAudioBackend):
+    local_audio_cache = True
+
     def __init__(self):
         super().__init__()
         self._process = None
@@ -134,6 +138,11 @@ class MpvAudioBackend(NullAudioBackend):
         try:
             await self._command("set_property", "pause", not autoplay)
             options = {"start": str(max(0, start_time))}
+            source = urlsplit(url)
+            if source.hostname == "127.0.0.1" and source.path.startswith("/manifest/") and "/cache-" in source.path:
+                # Retention lives in the receiver; mpv only needs a short runway.
+                options.update({"cache-secs": "30", "demuxer-max-bytes": "512KiB",
+                                "stream-buffer-size": "64KiB"})
             try:
                 await self._command("loadfile", url, "replace", -1, options)
             except ValueError as exc:
@@ -150,11 +159,17 @@ class MpvAudioBackend(NullAudioBackend):
             raise
 
     async def play(self):
+        if self._status.state == "IDLE":
+            # A failed decoder needs a new LOAD. The owning app can obtain a
+            # fresh URL; unpausing mpv cannot resurrect the failed stream.
+            return
         await self._command("set_property", "pause", False)
         self._autoplay = True
         self._status.state = "BUFFERING" if self._loading else "PLAYING"
 
     async def pause(self):
+        if self._status.state == "IDLE":
+            return
         await self._command("set_property", "pause", True)
         self._autoplay = False
         self._status.state = "PAUSED"

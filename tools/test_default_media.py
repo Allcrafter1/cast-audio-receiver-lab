@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Opt-in isolated DMR/real-mpv test. Owns all test processes.
 
 Emits a quiet tone unless --silent-fixture is selected. Silence still exercises

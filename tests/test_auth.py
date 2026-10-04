@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 import unittest
 
 from research.legacy_python_receiver.legacy_cast_receiver.auth import describe_challenge

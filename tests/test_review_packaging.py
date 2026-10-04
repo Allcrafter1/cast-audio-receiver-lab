@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Review gates: exact pins, distribution notices and independent UI sections."""
 import hashlib
 from html.parser import HTMLParser
@@ -95,8 +96,33 @@ class ReviewPackagingTests(unittest.TestCase):
         self.assertIn({"sonos-name", "sonos-host", "add-sonos"}, groups.groups)
 
     def test_source_notices_are_present_and_packaged(self):
+        license_bytes = (ROOT / "LICENSE").read_bytes()
+        self.assertEqual(
+            hashlib.sha256(license_bytes).hexdigest(),
+            "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04",
+        )
+        self.assertIn("Mozilla Public License Version 2.0", license_bytes.decode())
+        self.assertIn('license = "MPL-2.0"', (ROOT / "pyproject.toml").read_text())
+        licensing = (ROOT / "LICENSING.md").read_text()
+        self.assertIn("Vibecast fork", licensing)
+        self.assertIn("**MIT** license", licensing)
         for name in ["Vibecast-MIT.txt", "Chromium-BSD.txt", "airplay-cli-GPL.txt",
                      "airplay-cli-THIRD_PARTY_NOTICES.md", "libraop-upstream-statement.txt"]:
             self.assertTrue((ROOT / "licenses" / name).is_file())
         self.assertIn('"licenses/*"', (ROOT / "pyproject.toml").read_text())
-        self.assertIn("/usr/share/doc/cast-audio-receiver/licenses/", (ROOT / "Containerfile").read_text())
+        container = (ROOT / "Containerfile").read_text()
+        self.assertIn("COPY LICENSE LICENSING.md THIRD_PARTY_NOTICES.md", container)
+        self.assertIn("/usr/share/doc/cast-audio-receiver/licenses/", container)
+        self.assertIn('org.opencontainers.image.licenses="NOASSERTION"', container)
+        self.assertIn('io.cast-audio-receiver.project-license="MPL-2.0"', container)
+
+    def test_project_source_files_have_mpl_spdx_headers(self):
+        suffixes = {".py", ".sh", ".js", ".cjs", ".css", ".html"}
+        for directory in ("src", "tools", "tests", "research"):
+            for path in (ROOT / directory).rglob("*"):
+                if path.is_file() and path.suffix in suffixes:
+                    self.assertIn(
+                        "SPDX-License-Identifier: MPL-2.0",
+                        path.read_text(),
+                        path.relative_to(ROOT),
+                    )

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Read-only version inventory. Does not collect logs, URLs, accounts or keys.
 
 Run using the SAME Python environment as the adapter. Binary hashes identify

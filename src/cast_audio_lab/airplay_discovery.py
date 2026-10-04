@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Discover and merge RAOP/AirPlay advertisements into physical targets."""
 
 from __future__ import annotations

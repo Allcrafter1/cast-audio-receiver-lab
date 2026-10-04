@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Real IPC smoke tests, silent, skipped when mpv is not installed."""
 import asyncio
 from pathlib import Path
@@ -31,6 +32,13 @@ class MpvIntegrationTests(unittest.IsolatedAsyncioTestCase):
             backend = MpvAudioBackend()
             with patch("cast_audio_lab.mpv_backend.asyncio.create_subprocess_exec", silent):
                 try:
+                    await backend.load(str(Path(directory) / "missing.wav"), "audio/wav", True, 2)
+                    await until(lambda: backend.status().idle_reason == "ERROR")
+                    await backend.play()
+                    await backend.pause()
+                    self.assertEqual(backend.status().state, "IDLE")
+                    self.assertEqual(backend.status().idle_reason, "ERROR")
+                    # Fresh LOAD, not unpause, must recover the real decoder.
                     await backend.load(str(media), "audio/wav", False, 2)
                     await until(lambda: not backend._loading)
                     self.assertEqual(backend.status().state, "PAUSED")

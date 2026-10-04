@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: MPL-2.0
 # Build an extracted source candidate offline; never installs a runtime binary.
 set -euo pipefail
 cast_output=$(cd "${1:?usage: bash build_exported_airplay.sh EXTRACTED_DIRECTORY}" && pwd -P)

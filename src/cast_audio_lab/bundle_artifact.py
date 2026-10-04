@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Explicit, hash-pinned authentication-artifact acquisition.
 
 The release pins a reviewed manifest and its digest; callers may supply another.

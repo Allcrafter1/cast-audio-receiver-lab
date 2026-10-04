@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Render HA's PNG assets from the existing project SVG, outside runtime.
 
 Developer-only renderer: CairoSVG 2.8.2 in an isolated environment. Generated

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Offline release safety gates; no publishing, credentials or live receivers."""
 import hashlib
 import io

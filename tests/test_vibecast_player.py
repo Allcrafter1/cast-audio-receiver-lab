@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 import asyncio
 import unittest
 
@@ -37,12 +38,20 @@ class VibecastAudioPlayerTests(unittest.IsolatedAsyncioTestCase):
         self.player._send = capture
 
     def test_registration_has_audio_and_youtube_compatible_codecs(self):
+        self.assertFalse(self.player.registration()["player"]["capabilities"]["localAudioCache"])
         player = self.player.registration()["player"]
         self.assertEqual(player["protocolVersion"], 2)
         self.assertEqual(player["name"], "Kitchen")
         self.assertEqual(player["capabilities"]["audioCodecs"], ["opus", "aac"])
         self.assertIn("vp9", player["capabilities"]["videoCodecs"])
         self.assertIn("next", player["capabilities"]["controlRequests"])
+
+    def test_local_cache_is_opt_in_for_receiver_side_decoders(self):
+        from cast_audio_lab.mpv_backend import MpvAudioBackend
+        from cast_audio_lab.airplay import AirPlayAudioBackend
+        self.assertTrue(AirPlayAudioBackend.local_audio_cache)
+        player = VibecastAudioPlayer("ws://example.invalid/player", "id", "local", MpvAudioBackend())
+        self.assertTrue(player.registration()["player"]["capabilities"]["localAudioCache"])
 
     async def test_load_and_controls_are_reported(self):
         await self.player.handle_message(

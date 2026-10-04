@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Check a Cast device certificate against Google's opaque Cast CRL."""
 from __future__ import annotations
 

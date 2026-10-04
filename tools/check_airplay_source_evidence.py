@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Verify historical native-source evidence without modifying a checkout.
 
 This is not binary reproducibility or licence clearance. In particular, the

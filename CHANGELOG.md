@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.6.0.dev22 — resilient YouTube playback, current-title cache and MPL 2.0
+
+- Route direct Cast/output Play through YouTube recovery as well as Lounge Play;
+  do not optimistically report playback before recovery. Log safe metadata HTTP
+  status/category diagnostics and skip immediate retries for HTTP 429.
+
+- Also retry transient HTTP/extractor failure before decoder LOAD (including
+  repeat stream renewal), and retain the failed selection for manual Play.
+  An empty decoder after resolver STOP cannot falsely report PLAYING/PAUSED.
+
+- Retry an initial YouTube playback failure once with freshly resolved media,
+  retaining position/pause; Play after a terminal failure performs a real reload.
+  Bound retries and cancel obsolete work on Stop/disconnect/new selection.
+- Preserve decoder errors instead of claiming PLAYING after unpause; report
+  YouTube errors separately from normal completion.
+- Use default dual-stack Cast/Eureka listeners when supported, matching IPv6
+  discovery.
+- Fetch the current title on demand in sparse 128-KiB blocks instead of eagerly
+  downloading the whole object. Retain loaded regions for seek/repeat, bound
+  local mpv readahead and loopback TCP buffering, and fetch a seek target directly.
+- Cache up to 32 MiB of the current progressive YouTube audio in RAM for local
+  mpv/AirPlay decoders; play while downloading, serve local byte-range seeks,
+  repeat one fully cached title without renewed source resolution, discard on
+  replacement/Stop/session teardown. No playlist archive; oversized/unknown-size
+  media and manifests retain streaming behavior.
+- Allow up to ten seconds for YouTube to reattach after an unexpected Cast
+  control-socket loss, then stop playback automatically. Explicit Close and Stop
+  remain immediate, so disconnecting remains a reliable way to stop playback.
+- Relicense original project files from GPL-3.0-or-later to MPL-2.0 after a
+  repository/history provenance audit. Preserve Vibecast/patches as MIT,
+  Chromium's schema as BSD-3-Clause, `airplay-cli` as GPLv3 and every other
+  component's own terms. Shanocast remains an unlicensed research/format
+  reference; no Shanocast source, patch or authentication table is shipped.
+  Releases through dev21 keep their original GPL-3.0-or-later grant.
+
 ## 0.6.0.dev21 — AirPlay diagnostics
 
 - Pass the configured Add-on log level through the runtime and speaker manager

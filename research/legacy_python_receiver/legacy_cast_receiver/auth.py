@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Device-authentication extension point.
 
 Google Cast senders require a receiver certificate chained to Google's trust

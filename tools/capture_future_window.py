@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Bounded single-window test; restores phone time even on capture failure.
 
 Requires the user's explicit clock-change authorization. Only the selected

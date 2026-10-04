@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
@@ -18,6 +19,7 @@ class HomeAssistantTestRepositoryTests(unittest.TestCase):
                 'certificate_path: ""', config
             )
             self.assertTrue((app / "Dockerfile").is_file())
+            self.assertTrue((app / "LICENSING.md").is_file())
             for name in ("icon.png", "logo.png", "README.md", "CHANGELOG.md"):
                 self.assertTrue((app / name).is_file(), name)
             self.assertTrue((app / "src" / "cast_audio_lab" / "runtime.py").is_file())

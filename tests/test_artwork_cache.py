@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 import asyncio
 from pathlib import Path
 import tempfile

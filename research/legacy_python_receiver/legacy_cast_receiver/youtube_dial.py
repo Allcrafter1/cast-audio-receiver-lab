@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Historical DIAL service retained as a backup research path."""
 
 from __future__ import annotations

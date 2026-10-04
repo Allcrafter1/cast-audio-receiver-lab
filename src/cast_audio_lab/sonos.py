@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Experimental direct Sonos output built on SoCo."""
 
 from __future__ import annotations

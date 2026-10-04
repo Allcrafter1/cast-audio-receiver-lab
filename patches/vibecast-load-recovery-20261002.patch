@@ -1,0 +1,3680 @@
+diff --git a/crates/vibecast-apps-youtube/src/lib.rs b/crates/vibecast-apps-youtube/src/lib.rs
+index cac272f..58c701a 100644
+--- a/crates/vibecast-apps-youtube/src/lib.rs
++++ b/crates/vibecast-apps-youtube/src/lib.rs
+@@ -192,6 +192,16 @@ impl AppSession for YouTubeSession {
+         });
+     }
+ 
++    fn handles_play_requests(&self) -> bool {
++        true
++    }
++
++    fn allows_sender_reconnect_grace(&self) -> bool {
++        // Lounge/cache can bridge a brief control-connection loss, but the
++        // runtime must stop playback if control is not restored within 10s.
++        true
++    }
++
+     async fn on_output_control(&self, _ctx: &AppContext, control: OutputControl) {
+         let _ = self.output_control_tx.try_send(control);
+     }
+@@ -308,9 +318,18 @@ impl CurrentResolution {
+         video_id: Option<&String>,
+         codec: PreferredVideoCodec,
+     ) -> Option<PlaybackMedia> {
++        let cache = self
++            .media
++            .streams
++            .first()
++            .and_then(|stream| match &stream.source {
++                vibecast_sdk::StreamSource::CachedUrl { cache, .. } => Some(cache),
++                _ => None,
++            });
+         if video_id != Some(&self.video_id)
+             || codec != self.codec
+-            || !prefetched_is_fresh(self.completed)
++            || cache.is_some_and(|c| c.is_failed())
++            || (!cache.is_some_and(|c| c.is_complete()) && !prefetched_is_fresh(self.completed))
+         {
+             return None;
+         }
+@@ -333,6 +352,8 @@ async fn run_commands(
+     let mut next_resolution: Option<NextResolution> = None;
+     let mut current_resolution: Option<CurrentResolution> = None;
+     let mut playback_active = false;
++    let mut stopped = false;
++    let mut failed_resolution: Option<(String, f64)> = None;
+     let mut deferred = None;
+     'commands: loop {
+         let command = if let Some(command) = deferred.take() {
+@@ -354,13 +375,20 @@ async fn run_commands(
+         };
+ 
+         let repeating = matches!(command, LoungeCommand::RepeatCurrent);
++        let reload_autoplay = match &command {
++            LoungeCommand::ReloadCurrent { autoplay, .. } => Some(*autoplay),
++            _ => None,
++        };
+         if repeating && playback_active {
+             let codec = PreferredVideoCodec::from_snapshot(&settings.snapshot());
+             if let Some(media) = current_resolution
+                 .as_ref()
+                 .and_then(|current| current.replay(queue.video_ids.get(queue.current_index), codec))
+             {
+-                tracing::info!("reusing current YouTube media for repeat");
++                let cached_audio = media.streams.iter().any(|stream| matches!(
++                    &stream.source, vibecast_sdk::StreamSource::CachedUrl { cache, .. } if cache.is_complete()
++                ));
++                tracing::info!(cached_audio, "reusing current YouTube media for repeat");
+                 playback.load(media).await;
+                 continue;
+             }
+@@ -386,6 +414,16 @@ async fn run_commands(
+             );
+         }
+         let load = match command {
++            LoungeCommand::ReloadCurrent {
++                video_id,
++                current_time,
++                ..
++            } => {
++                if stopped || queue.video_ids.get(queue.current_index) != Some(&video_id) {
++                    continue;
++                }
++                Some((video_id, current_time))
++            }
+             LoungeCommand::RepeatCurrent => {
+                 queue.next_pending = false;
+                 queue
+@@ -450,8 +488,16 @@ async fn run_commands(
+                     .map(|video_id| (video_id, 0.0))
+             }
+             LoungeCommand::Play => {
+-                playback.play().await;
+-                None
++                if let Some((video_id, position)) = failed_resolution.take() {
++                    if !stopped && queue.video_ids.get(queue.current_index) == Some(&video_id) {
++                        Some((video_id, position))
++                    } else {
++                        None
++                    }
++                } else {
++                    playback.play().await;
++                    None
++                }
+             }
+             LoungeCommand::Pause => {
+                 playback.pause().await;
+@@ -462,6 +508,8 @@ async fn run_commands(
+                 None
+             }
+             LoungeCommand::Stop => {
++                stopped = true;
++                failed_resolution = None;
+                 current_resolution = None;
+                 queue.next_pending = false;
+                 playback_active = false;
+@@ -472,6 +520,8 @@ async fn run_commands(
+         };
+ 
+         if let Some((video_id, start_time)) = load {
++            stopped = false;
++            failed_resolution = None;
+             current_resolution = None;
+             tracing::info!(%video_id, start_time, "YouTube queue requests load");
+             let snapshot = settings.snapshot();
+@@ -499,15 +549,35 @@ async fn run_commands(
+                 }
+                 match prepared {
+                     Some(media) => Ok(media),
+-                    None => resolver
+-                        .resolve(&video_id, start_time, &capabilities, preferred_video_codec)
+-                        .await
+-                        .map(|media| (media, std::time::Instant::now())),
++                    None => {
++                        let mut result = resolver
++                            .resolve(&video_id, start_time, &capabilities, preferred_video_codec)
++                            .await;
++                        // Metadata/extractor requests can fail before a LOAD ever
++                        // reaches the decoder (including repeat cache renewal).
++                        if result
++                            .as_ref()
++                            .err()
++                            .is_some_and(retryable_resolution_error)
++                        {
++                            tracing::warn!("retrying YouTube resolution after request failure");
++                            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
++                            result = resolver
++                                .resolve(
++                                    &video_id,
++                                    start_time,
++                                    &capabilities,
++                                    preferred_video_codec,
++                                )
++                                .await;
++                        }
++                        result.map(|media| (media, std::time::Instant::now()))
++                    }
+                 }
+             };
+             tokio::pin!(resolution);
+             let mut requested_position = start_time;
+-            let mut autoplay = true;
++            let mut autoplay = reload_autoplay.unwrap_or(true);
+             let result = loop {
+                 tokio::select! {
+                     biased;
+@@ -535,6 +605,11 @@ async fn run_commands(
+                                 queue.video_ids = video_ids;
+                                 queue.list_id = list_id;
+                             }
++                            Some(LoungeCommand::ReloadCurrent { video_id: retry_id, .. })
++                                if retry_id != video_id => {
++                                // A delayed recovery for the previous item must not
++                                // cancel the user's newer in-flight selection.
++                            }
+                             Some(command) => {
+                                 tracing::info!(%video_id, "superseding pending YouTube load");
+                                 deferred = Some(command);
+@@ -563,6 +638,7 @@ async fn run_commands(
+                 }
+                 Err(error) => {
+                     playback_active = false;
++                    failed_resolution = Some((video_id.clone(), requested_position));
+                     tracing::warn!(%video_id, %error, "failed to resolve YouTube video");
+                     playback.stop().await;
+                 }
+@@ -594,6 +670,14 @@ async fn run_commands(
+     }
+ }
+ 
++fn retryable_resolution_error(error: &ResolveError) -> bool {
++    match error {
++        ResolveError::Http(error) => error.status().map(|s| s.as_u16()) != Some(429),
++        ResolveError::Protocol("external audio resolver failed") => true,
++        _ => false,
++    }
++}
++
+ fn map_resolve_error(error: ResolveError) -> MediaResolveError {
+     match error {
+         ResolveError::Http(error) => error.into(),
+@@ -798,6 +882,202 @@ mod tests {
+         .unwrap();
+     }
+ 
++    #[tokio::test]
++    async fn failed_repeat_resolution_retries_then_play_resolves_instead_of_unpausing() {
++        let (resolver, mut requests) = Resolver::controlled();
++        let player = Arc::new(RecordingPlayback::default());
++        let (tx, rx) = mpsc::channel(16);
++        let (cancel, cancelled) = watch::channel(false);
++        let worker = tokio::spawn(run_commands(
++            rx,
++            resolver,
++            player.clone(),
++            vibecast_sdk::PlayerCapabilities::default(),
++            test_settings(),
++            cancelled,
++        ));
++        tx.send(selection(&["A"], 0)).await.unwrap();
++        requests
++            .recv()
++            .await
++            .unwrap()
++            .1
++            .send(Err(ResolveError::Protocol(
++                "external audio resolver failed",
++            )))
++            .unwrap();
++        let (id, retry) = requests.recv().await.unwrap();
++        assert_eq!(id, "A");
++        tx.send(LoungeCommand::Seek(66.0)).await.unwrap();
++        retry
++            .send(Err(ResolveError::Protocol(
++                "external audio resolver failed",
++            )))
++            .unwrap();
++        tokio::time::timeout(std::time::Duration::from_secs(2), async {
++            while !player.operations.lock().unwrap().contains(&"stop".into()) {
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .unwrap();
++        assert!(
++            requests.try_recv().is_err(),
++            "automatic resolution retry is bounded"
++        );
++        tx.send(LoungeCommand::Play).await.unwrap();
++        let (id, manual) = requests.recv().await.unwrap();
++        assert_eq!(id, "A");
++        manual.send(Ok(test_media("A-fresh"))).unwrap();
++        wait_loads(&player, 1).await;
++        assert_eq!(player.loaded.lock().unwrap()[0].start_time, 66.0);
++        assert_eq!(*player.operations.lock().unwrap(), ["stop", "load:A-fresh"]);
++        cancel.send(true).unwrap();
++        worker.await.unwrap();
++    }
++
++    #[tokio::test]
++    async fn stop_cancels_resolution_retry() {
++        let (resolver, mut requests) = Resolver::controlled();
++        let player = Arc::new(RecordingPlayback::default());
++        let (tx, rx) = mpsc::channel(16);
++        let (_cancel, cancelled) = watch::channel(false);
++        let worker = tokio::spawn(run_commands(
++            rx,
++            resolver,
++            player.clone(),
++            vibecast_sdk::PlayerCapabilities::default(),
++            test_settings(),
++            cancelled,
++        ));
++        tx.send(selection(&["A"], 0)).await.unwrap();
++        requests
++            .recv()
++            .await
++            .unwrap()
++            .1
++            .send(Err(ResolveError::Protocol(
++                "external audio resolver failed",
++            )))
++            .unwrap();
++        let (_, retry) = requests.recv().await.unwrap();
++        tx.send(LoungeCommand::Stop).await.unwrap();
++        tx.send(LoungeCommand::Play).await.unwrap();
++        drop(tx);
++        worker.await.unwrap();
++        assert!(retry.is_closed());
++        assert!(requests.try_recv().is_err());
++        assert!(player.loaded.lock().unwrap().is_empty());
++    }
++
++    #[tokio::test]
++    async fn reload_resolves_fresh_media_and_preserves_position_and_controls() {
++        let (resolver, mut requests) = Resolver::controlled();
++        let player = Arc::new(RecordingPlayback::default());
++        let (tx, rx) = mpsc::channel(16);
++        let (cancel, cancelled) = watch::channel(false);
++        let worker = tokio::spawn(run_commands(
++            rx,
++            resolver,
++            player.clone(),
++            vibecast_sdk::PlayerCapabilities::default(),
++            test_settings(),
++            cancelled,
++        ));
++        tx.send(selection(&["A", "B"], 0)).await.unwrap();
++        let (_, first) = requests.recv().await.unwrap();
++        first.send(Ok(test_media("A-old"))).unwrap();
++        wait_loads(&player, 1).await;
++        let (id, prepared) = requests.recv().await.unwrap();
++        assert_eq!(id, "B");
++        tx.send(LoungeCommand::ReloadCurrent {
++            video_id: "A".into(),
++            current_time: 66.0,
++            autoplay: false,
++        })
++        .await
++        .unwrap();
++        let (id, retry) = requests.recv().await.unwrap();
++        assert_eq!(id, "A");
++        assert!(prepared.is_closed());
++        retry.send(Ok(test_media("A-fresh"))).unwrap();
++        wait_loads(&player, 2).await;
++        {
++            let loaded = player.loaded.lock().unwrap();
++            assert_eq!(loaded[1].content_id.as_deref(), Some("A-fresh"));
++            assert_eq!(loaded[1].start_time, 66.0);
++            assert!(!loaded[1].autoplay);
++        }
++        let (_, _next) = requests.recv().await.unwrap();
++        tx.send(LoungeCommand::ReloadCurrent {
++            video_id: "A".into(),
++            current_time: 66.0,
++            autoplay: true,
++        })
++        .await
++        .unwrap();
++        let (_, manual) = requests.recv().await.unwrap();
++        tx.send(LoungeCommand::Pause).await.unwrap();
++        tx.send(LoungeCommand::Seek(80.0)).await.unwrap();
++        manual.send(Ok(test_media("A-manual"))).unwrap();
++        wait_loads(&player, 3).await;
++        {
++            let loaded = player.loaded.lock().unwrap();
++            assert_eq!(loaded[2].start_time, 80.0);
++            assert!(!loaded[2].autoplay);
++        }
++        cancel.send(true).unwrap();
++        worker.await.unwrap();
++    }
++
++    #[tokio::test]
++    async fn reload_cannot_override_stop_or_new_selection() {
++        let (resolver, mut requests) = Resolver::controlled();
++        let player = Arc::new(RecordingPlayback::default());
++        let (tx, rx) = mpsc::channel(16);
++        let (cancel, cancelled) = watch::channel(false);
++        let worker = tokio::spawn(run_commands(
++            rx,
++            resolver,
++            player.clone(),
++            vibecast_sdk::PlayerCapabilities::default(),
++            test_settings(),
++            cancelled,
++        ));
++        tx.send(selection(&["A"], 0)).await.unwrap();
++        requests
++            .recv()
++            .await
++            .unwrap()
++            .1
++            .send(Ok(test_media("A")))
++            .unwrap();
++        wait_loads(&player, 1).await;
++        let reload = LoungeCommand::ReloadCurrent {
++            video_id: "A".into(),
++            current_time: 66.0,
++            autoplay: true,
++        };
++        tx.send(reload.clone()).await.unwrap();
++        let (_, retry) = requests.recv().await.unwrap();
++        tx.send(LoungeCommand::Stop).await.unwrap();
++        tx.send(reload.clone()).await.unwrap(); // queued obsolete retry
++        tx.send(selection(&["B"], 0)).await.unwrap();
++        let (id, replacement) = requests.recv().await.unwrap();
++        assert_eq!(id, "B");
++        assert!(retry.is_closed());
++        tx.send(reload.clone()).await.unwrap(); // also stale while B is resolving
++        replacement.send(Ok(test_media("B"))).unwrap();
++        wait_loads(&player, 2).await;
++        tx.send(reload).await.unwrap(); // wrong selection must be ignored
++        tx.send(LoungeCommand::Pause).await.unwrap();
++        drop(tx);
++        worker.await.unwrap();
++        assert!(requests.try_recv().is_err());
++        assert_eq!(player.loaded.lock().unwrap().len(), 2);
++        drop(cancel);
++    }
++
+     #[tokio::test]
+     async fn latest_selection_preserves_controls_and_prepared_next() {
+         let (resolver, mut requests) = Resolver::controlled();
+@@ -948,6 +1228,44 @@ mod tests {
+             .is_none());
+     }
+ 
++    #[test]
++    fn only_complete_current_audio_replays_after_url_age_limit() {
++        let id = "A".to_string();
++        let mut media = test_media("A");
++        let stream =
++            vibecast_sdk::PlaybackStream::cached_url("https://example.test/audio", "audio/mp4");
++        let vibecast_sdk::StreamSource::CachedUrl { cache, .. } = &stream.source else {
++            unreachable!()
++        };
++        let hint = cache.clone();
++        media.streams = vec![stream];
++        let current = CurrentResolution {
++            video_id: id.clone(),
++            media,
++            completed: std::time::Instant::now() - std::time::Duration::from_secs(3600),
++            codec: PreferredVideoCodec::Auto,
++        };
++        assert!(current
++            .replay(Some(&id), PreferredVideoCodec::Auto)
++            .is_none());
++        hint.mark_complete();
++        let replay = current
++            .replay(Some(&id), PreferredVideoCodec::Auto)
++            .unwrap();
++        assert_eq!(replay.start_time, 0.0);
++        assert!(replay.autoplay);
++        assert!(current
++            .replay(Some(&"B".into()), PreferredVideoCodec::Auto)
++            .is_none());
++        assert!(current
++            .replay(Some(&id), PreferredVideoCodec::H264)
++            .is_none());
++        hint.invalidate();
++        assert!(current
++            .replay(Some(&id), PreferredVideoCodec::Auto)
++            .is_none());
++    }
++
+     #[tokio::test]
+     async fn stop_and_disconnect_cancel_pending_resolution() {
+         let (resolver, mut requests) = Resolver::controlled();
+diff --git a/crates/vibecast-apps-youtube/src/lounge.rs b/crates/vibecast-apps-youtube/src/lounge.rs
+index 7e183c1..541b96f 100644
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -61,6 +61,12 @@ pub(crate) enum LoungeCommand {
+     Previous,
+     // Natural EOF in repeat-one mode, distinct from a new sender selection.
+     RepeatCurrent,
++    // Retry the same selection with fresh media, never repeat/prefetch reuse.
++    ReloadCurrent {
++        video_id: String,
++        current_time: f64,
++        autoplay: bool,
++    },
+ }
+ 
+ pub(crate) struct LoungeConnection {
+@@ -91,6 +97,7 @@ struct BoundSession {
+ 
+ #[derive(Default)]
+ struct CurrentMedia {
++    recovery: LoadRecovery,
+     loop_mode: LoopMode,
+     volume: Option<(f64, bool)>,
+     awaiting_load: bool,
+@@ -102,7 +109,86 @@ struct CurrentMedia {
+     state: Option<PlaybackState>,
+ }
+ 
++#[derive(Default)]
++struct LoadRecovery {
++    enabled: bool,
++    retry_used: bool,
++    reloading: bool,
++    failed: bool,
++    started: bool,
++    paused: bool,
++}
++
+ impl CurrentMedia {
++    fn reload_command(&self, autoplay: bool) -> Option<LoungeCommand> {
++        Some(LoungeCommand::ReloadCurrent {
++            video_id: self.video_id.clone()?,
++            current_time: self.state.as_ref().map_or(0.0, |s| s.current_time),
++            autoplay,
++        })
++    }
++
++    fn accept_state(
++        &mut self,
++        mut state: PlaybackState,
++    ) -> Option<(PlaybackState, Option<LoungeCommand>)> {
++        // The adapter keeps reporting the failed old load while resolution runs.
++        // Only a new BUFFERING acknowledgement (or resolver STOP) ends this gate.
++        if self.recovery.reloading {
++            if state.player_state == PlayerState::Buffering {
++                self.recovery.reloading = false;
++            } else if state.idle_reason == Some(IdleReason::Cancelled) {
++                self.recovery.reloading = false;
++                // The resolver exhausted (or declined) its retry already.
++                self.recovery.retry_used = true;
++                self.awaiting_load = false;
++                state = self.state.clone()?;
++                state.player_state = PlayerState::Idle;
++                state.idle_reason = Some(IdleReason::Error);
++            } else {
++                return None;
++            }
++        }
++        if self.awaiting_load {
++            if state.player_state != PlayerState::Buffering
++                && state.idle_reason != Some(IdleReason::Cancelled)
++            {
++                return None;
++            }
++            self.awaiting_load = false;
++            if state.idle_reason == Some(IdleReason::Cancelled) && self.recovery.enabled {
++                // The command worker already retried resolution, then stopped
++                // the old decoder. Preserve this failed selection for Play.
++                self.recovery.retry_used = true;
++                state = self.state.clone()?;
++                state.player_state = PlayerState::Idle;
++                state.idle_reason = Some(IdleReason::Error);
++            }
++        }
++        if state.idle_reason == Some(IdleReason::Error) && self.recovery.enabled {
++            self.recovery.failed = true;
++            if !self.recovery.started && !self.recovery.retry_used {
++                self.state = Some(state.clone());
++                if let Some(command) = self.reload_command(!self.recovery.paused) {
++                    self.recovery.retry_used = true;
++                    self.recovery.reloading = true;
++                    self.awaiting_load = true;
++                    state.player_state = PlayerState::Buffering;
++                    state.idle_reason = None;
++                    tracing::info!("retrying failed YouTube start with fresh media");
++                    return Some((state, Some(command)));
++                }
++            }
++        } else if matches!(
++            state.player_state,
++            PlayerState::Playing | PlayerState::Paused
++        ) {
++            self.recovery.started = true;
++            self.recovery.failed = false;
++        }
++        Some((state, None))
++    }
++
+     // Distinguish repeat-one EOF from a new selection so playback can reuse
+     // the current stream. Queue wrapping remains an ordinary selection.
+     fn next_command(&self, finished: bool) -> LoungeCommand {
+@@ -129,6 +215,19 @@ impl CurrentMedia {
+     }
+ 
+     fn coalesce_pending_selection(&self, incoming: Incoming) -> Incoming {
++        if matches!(incoming, Incoming::Command(LoungeCommand::Play))
++            && self.recovery.enabled
++            && self.recovery.failed
++            && !self.recovery.reloading
++            && self
++                .state
++                .as_ref()
++                .is_some_and(|s| s.player_state == PlayerState::Idle)
++        {
++            if let Some(command) = self.reload_command(true) {
++                return Incoming::Command(command);
++            }
++        }
+         if matches!(incoming, Incoming::Command(LoungeCommand::Next)) {
+             return Incoming::Command(self.next_command(false));
+         }
+@@ -354,13 +453,16 @@ impl LoungeConnection {
+                     control = output_control_rx.recv() => {
+                         let Some(control) = control else { return Ok(()); };
+                         let command = match control {
++                            OutputControl::Play => LoungeCommand::Play,
+                             OutputControl::Next => self.current.next_command(false),
+                             OutputControl::Previous => LoungeCommand::Previous,
+                         };
+-                        let incoming = Incoming::Command(command.clone());
++                        let incoming = self.current.coalesce_pending_selection(Incoming::Command(command));
+                         let outbound = self.handle_internal(&incoming);
+-                        if command_tx.send(command).await.is_err() {
+-                            return Ok(());
++                        if let Incoming::Command(command) = incoming {
++                            if command_tx.send(command).await.is_err() {
++                                return Ok(());
++                            }
+                         }
+                         if let Some(outbound) = outbound {
+                             self.post(outbound).await?;
+@@ -373,17 +475,14 @@ impl LoungeConnection {
+                     }
+                     state = playback_rx.recv() => {
+                         let Some(state) = state else { return Ok(()); };
+-                        if self.current.awaiting_load {
+-                            if state.player_state != PlayerState::Buffering
+-                                && !matches!(state.idle_reason, Some(IdleReason::Error | IdleReason::Cancelled)) {
+-                                continue;
+-                            }
+-                            self.current.awaiting_load = false;
+-                        }
++                        let Some((state, reload)) = self.current.accept_state(state) else { continue; };
+                         let ended = state.idle_reason == Some(IdleReason::Finished)
+                             && self.current.state.as_ref().and_then(|s| s.idle_reason)
+                                 != Some(IdleReason::Finished);
+                         self.current.state = Some(state.clone());
++                        if let Some(command) = reload {
++                            if command_tx.send(command).await.is_err() { return Ok(()); }
++                        }
+                         self.post(Outbound::State(state)).await?;
+                         if ended {
+                             let command = self.current.next_command(true);
+@@ -424,6 +523,46 @@ impl LoungeConnection {
+ 
+     fn handle_internal(&mut self, incoming: &Incoming) -> Option<Outbound> {
+         match incoming {
++            Incoming::Command(
++                LoungeCommand::SetPlaylist { .. }
++                | LoungeCommand::Next
++                | LoungeCommand::Previous
++                | LoungeCommand::RepeatCurrent,
++            ) => {
++                self.current.recovery = LoadRecovery {
++                    enabled: true,
++                    ..Default::default()
++                };
++            }
++            Incoming::Command(LoungeCommand::Pause) => self.current.recovery.paused = true,
++            Incoming::Command(LoungeCommand::Play) => self.current.recovery.paused = false,
++            Incoming::Command(LoungeCommand::Stop) => {
++                self.current.recovery = LoadRecovery::default();
++                self.current.awaiting_load = false;
++            }
++            _ => {}
++        }
++        match incoming {
++            Incoming::Command(LoungeCommand::ReloadCurrent {
++                current_time,
++                autoplay,
++                ..
++            }) => {
++                // Explicit Play after a terminal failure gets a new bounded attempt.
++                self.current.recovery.retry_used = false;
++                self.current.recovery.started = false;
++                self.current.recovery.reloading = true;
++                self.current.recovery.paused = !autoplay;
++                self.current.awaiting_load = true;
++                let duration = self.current.state.as_ref().and_then(|s| s.duration);
++                self.current.state = Some(PlaybackState {
++                    player_state: PlayerState::Buffering,
++                    current_time: *current_time,
++                    duration,
++                    idle_reason: None,
++                });
++                Some(Outbound::NowPlaying)
++            }
+             Incoming::SetLoopMode(mode) => {
+                 self.current.loop_mode = *mode;
+                 tracing::info!(loop_mode = mode.as_str(), "YouTube repeat mode changed");
+@@ -609,7 +748,14 @@ impl Outbound {
+             Self::State(state) => {
+                 form.append_pair("req0__sc", "onStateChange");
+                 append_state_fields(&mut form, "req0_", state);
+-                form.append_pair("req0_playabilityStatus", "OK");
++                form.append_pair(
++                    "req0_playabilityStatus",
++                    if state.idle_reason == Some(IdleReason::Error) {
++                        "ERROR"
++                    } else {
++                        "OK"
++                    },
++                );
+             }
+             Self::PlaybackSpeed => {
+                 form.append_pair("req0__sc", "onPlaybackSpeedChanged")
+@@ -644,6 +790,7 @@ fn append_state_fields(
+         PlayerState::Playing => "1",
+         PlayerState::Paused => "2",
+         PlayerState::Buffering => "3",
++        PlayerState::Idle if state.idle_reason == Some(IdleReason::Error) => "-1",
+         PlayerState::Idle => "0",
+     };
+     form.append_pair(&format!("{prefix}state"), lounge_state)
+@@ -1354,6 +1501,177 @@ struct LoungeTokenScreen {
+ mod tests {
+     use super::*;
+ 
++    fn failed_start() -> PlaybackState {
++        PlaybackState {
++            player_state: PlayerState::Idle,
++            current_time: 66.0,
++            duration: Some(230.0),
++            idle_reason: Some(IdleReason::Error),
++        }
++    }
++
++    fn retryable_media() -> CurrentMedia {
++        CurrentMedia {
++            video_id: Some("A".into()),
++            recovery: LoadRecovery {
++                enabled: true,
++                ..Default::default()
++            },
++            ..Default::default()
++        }
++    }
++
++    #[test]
++    fn failed_start_retries_once_and_play_requests_fresh_media() {
++        let mut current = retryable_media();
++        let (buffering, command) = current.accept_state(failed_start()).unwrap();
++        assert_eq!(
++            command,
++            Some(LoungeCommand::ReloadCurrent {
++                video_id: "A".into(),
++                current_time: 66.0,
++                autoplay: true
++            })
++        );
++        assert_eq!(buffering.player_state, PlayerState::Buffering);
++        assert_eq!(buffering.idle_reason, None);
++        current.state = Some(buffering.clone());
++        // Periodic old ERRORs cannot consume retries or report a false end.
++        assert!(current.accept_state(failed_start()).is_none());
++        assert!(current.accept_state(failed_start()).is_none());
++        current.accept_state(buffering).unwrap();
++        let (failure, command) = current.accept_state(failed_start()).unwrap();
++        assert!(command.is_none());
++        current.state = Some(failure);
++        assert!(current.accept_state(failed_start()).unwrap().1.is_none());
++        assert!(matches!(
++            current.coalesce_pending_selection(Incoming::Command(LoungeCommand::Play)),
++            Incoming::Command(LoungeCommand::ReloadCurrent {
++                current_time: 66.0,
++                autoplay: true,
++                ..
++            })
++        ));
++    }
++
++    #[test]
++    fn retry_preserves_pause_and_resolver_failure_remains_retryable() {
++        let mut current = retryable_media();
++        current.recovery.paused = true;
++        let (buffering, command) = current.accept_state(failed_start()).unwrap();
++        assert!(matches!(
++            command,
++            Some(LoungeCommand::ReloadCurrent {
++                autoplay: false,
++                ..
++            })
++        ));
++        current.state = Some(buffering);
++        let (state, command) = current
++            .accept_state(PlaybackState {
++                player_state: PlayerState::Idle,
++                current_time: 0.0,
++                duration: None,
++                idle_reason: Some(IdleReason::Cancelled),
++            })
++            .unwrap();
++        assert!(command.is_none());
++        assert_eq!(state.idle_reason, Some(IdleReason::Error));
++        assert_eq!(state.current_time, 66.0);
++        current.state = Some(state);
++        assert!(matches!(
++            current.coalesce_pending_selection(Incoming::Command(LoungeCommand::Play)),
++            Incoming::Command(LoungeCommand::ReloadCurrent { .. })
++        ));
++    }
++
++    #[test]
++    fn no_automatic_retry_after_playback_started_or_stop() {
++        let mut current = retryable_media();
++        current
++            .accept_state(PlaybackState {
++                player_state: PlayerState::Playing,
++                current_time: 70.0,
++                duration: Some(230.0),
++                idle_reason: None,
++            })
++            .unwrap();
++        let (state, command) = current.accept_state(failed_start()).unwrap();
++        assert!(command.is_none());
++        current.state = Some(state);
++        assert!(matches!(
++            current.coalesce_pending_selection(Incoming::Command(LoungeCommand::Play)),
++            Incoming::Command(LoungeCommand::ReloadCurrent { .. })
++        ));
++        current.recovery = LoadRecovery::default();
++        assert!(current.accept_state(failed_start()).unwrap().1.is_none());
++        assert!(matches!(
++            current.coalesce_pending_selection(Incoming::Command(LoungeCommand::Play)),
++            Incoming::Command(LoungeCommand::Play)
++        ));
++    }
++
++    #[test]
++    fn old_failure_cannot_retry_new_selection_before_load_acknowledgement() {
++        let mut current = retryable_media();
++        current.awaiting_load = true;
++        assert!(current.accept_state(failed_start()).is_none());
++        assert!(!current.recovery.retry_used);
++    }
++
++    #[test]
++    fn resolution_failure_stop_is_error_and_play_reloads_same_repeat_position() {
++        let mut current = retryable_media();
++        current.awaiting_load = true;
++        current.state = Some(PlaybackState {
++            player_state: PlayerState::Buffering,
++            current_time: 0.0,
++            duration: None,
++            idle_reason: None,
++        });
++        let (state, command) = current
++            .accept_state(PlaybackState {
++                player_state: PlayerState::Idle,
++                current_time: 230.0,
++                duration: Some(230.0),
++                idle_reason: Some(IdleReason::Cancelled),
++            })
++            .unwrap();
++        assert!(
++            command.is_none(),
++            "resolution retry budget was already consumed"
++        );
++        assert_eq!(state.idle_reason, Some(IdleReason::Error));
++        assert_eq!(
++            state.current_time, 0.0,
++            "repeat starts at zero, not old EOF"
++        );
++        current.state = Some(state);
++        assert!(matches!(
++            current.coalesce_pending_selection(Incoming::Command(LoungeCommand::Play)),
++            Incoming::Command(LoungeCommand::ReloadCurrent {
++                current_time: 0.0,
++                ..
++            })
++        ));
++    }
++
++    #[test]
++    fn load_error_is_not_encoded_as_finished_or_playable() {
++        let body = Outbound::State(failed_start()).form_body(
++            0,
++            &CurrentMedia::default(),
++            "device",
++            "lounge",
++        );
++        let values: std::collections::HashMap<_, _> = url::form_urlencoded::parse(body.as_bytes())
++            .into_owned()
++            .collect();
++        assert_eq!(values["req0_state"], "-1");
++        assert_eq!(values["req0_playabilityStatus"], "ERROR");
++        assert_eq!(values["req0_currentTime"], "66");
++    }
++
+     #[test]
+     fn repeat_capability_and_sender_modes_round_trip() {
+         let receiver = ReceiverContext::new("Test", "Model", "device", PathBuf::new());
+@@ -1678,6 +1996,130 @@ mod tests {
+         assert_eq!(connection.bound.aid, 4, "forward ACK must not advance AID");
+     }
+ 
++    #[tokio::test]
++    async fn load_recovery_round_trips_feedback_and_manual_play() {
++        let server = MockServer::start().await;
++        Mock::given(method("POST"))
++            .respond_with(ResponseTemplate::new(200))
++            .mount(&server)
++            .await;
++        Mock::given(method("GET"))
++            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(30)))
++            .mount(&server)
++            .await;
++        let mut connection = LoungeConnection {
++            volume_rx: None,
++            http: reqwest::Client::new(),
++            bind_url: Url::parse(&format!("{}/bind", server.uri())).unwrap(),
++            bound: BoundSession {
++                sid: "SID".into(),
++                gsession_id: "GSID".into(),
++                aid: 0,
++                rid: 1,
++                ofs: 0,
++            },
++            screen_id: "screen".into(),
++            device_id: "device".into(),
++            discovery_device_id: "cast".into(),
++            current: retryable_media(),
++        };
++        let (command_tx, mut command_rx) = mpsc::channel(8);
++        let (playback_tx, mut playback_rx) = mpsc::channel(8);
++        let (control_tx, mut control_rx) = mpsc::channel(8);
++        let (cancel_tx, mut cancel_rx) = watch::channel(false);
++        let task = tokio::spawn(async move {
++            connection
++                .run_bound(
++                    &command_tx,
++                    &mut playback_rx,
++                    &mut control_rx,
++                    &mut cancel_rx,
++                )
++                .await
++                .unwrap();
++            connection
++        });
++        playback_tx.send(failed_start()).await.unwrap();
++        assert!(matches!(
++            tokio::time::timeout(Duration::from_secs(2), command_rx.recv())
++                .await
++                .unwrap()
++                .unwrap(),
++            LoungeCommand::ReloadCurrent {
++                current_time: 66.0,
++                ..
++            }
++        ));
++        playback_tx.send(failed_start()).await.unwrap();
++        playback_tx
++            .send(PlaybackState {
++                player_state: PlayerState::Buffering,
++                current_time: 66.0,
++                duration: Some(230.0),
++                idle_reason: None,
++            })
++            .await
++            .unwrap();
++        playback_tx.send(failed_start()).await.unwrap();
++        tokio::time::timeout(Duration::from_secs(2), async {
++            loop {
++                if server
++                    .received_requests()
++                    .await
++                    .unwrap()
++                    .iter()
++                    .any(|r| String::from_utf8_lossy(&r.body).contains("playabilityStatus=ERROR"))
++                {
++                    break;
++                }
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .unwrap();
++        // A direct Cast/output Play must use the same fresh-load recovery as
++        // Lounge Play, even while the long poll is still outstanding.
++        control_tx.send(OutputControl::Play).await.unwrap();
++        assert!(matches!(
++            tokio::time::timeout(Duration::from_secs(2), command_rx.recv())
++                .await
++                .unwrap()
++                .unwrap(),
++            LoungeCommand::ReloadCurrent {
++                current_time: 66.0,
++                autoplay: true,
++                ..
++            }
++        ));
++        cancel_tx.send(true).unwrap();
++        let mut connection = task.await.unwrap();
++        assert!(command_rx.try_recv().is_err());
++        for request in server.received_requests().await.unwrap() {
++            assert!(!String::from_utf8_lossy(&request.body).contains("req0_state=0"));
++        }
++        let mut stopped = failed_start();
++        stopped.idle_reason = Some(IdleReason::Cancelled);
++        let (state, retry) = connection.current.accept_state(stopped).unwrap();
++        assert!(retry.is_none());
++        connection.current.state = Some(state);
++        let play = connection
++            .current
++            .coalesce_pending_selection(Incoming::Command(LoungeCommand::Play));
++        assert!(matches!(
++            play,
++            Incoming::Command(LoungeCommand::ReloadCurrent { autoplay: true, .. })
++        ));
++        assert!(matches!(
++            connection.handle_internal(&play),
++            Some(Outbound::NowPlaying)
++        ));
++        assert!(connection.current.recovery.reloading);
++        assert!(!connection.current.recovery.retry_used);
++        connection.handle_internal(&Incoming::Command(LoungeCommand::Stop));
++        assert!(!connection.current.recovery.enabled);
++        assert!(!connection.current.recovery.reloading);
++    }
++
+     #[tokio::test]
+     async fn repeat_commands_reach_playback_and_feedback_without_reloading_on_toggle() {
+         let server = MockServer::start().await;
+diff --git a/crates/vibecast-apps-youtube/src/resolver.rs b/crates/vibecast-apps-youtube/src/resolver.rs
+index f797344..3e01fa0 100644
+--- a/crates/vibecast-apps-youtube/src/resolver.rs
++++ b/crates/vibecast-apps-youtube/src/resolver.rs
+@@ -154,7 +154,13 @@ impl Resolver {
+         } else {
+             "application/octet-stream"
+         };
+-        media.streams = vec![PlaybackStream::url(url, content_type)];
++        media.streams = vec![if capabilities.local_audio_cache
++            && content_type == "application/octet-stream"
++        {
++            PlaybackStream::cached_url(url, content_type)
++        } else {
++            PlaybackStream::url(url, content_type)
++        }];
+         Ok(media)
+     }
+ 
+@@ -168,14 +174,17 @@ impl Resolver {
+         let mut watch_url = Url::parse(&self.endpoints.watch)
+             .map_err(|_| ResolveError::Protocol("invalid watch endpoint"))?;
+         watch_url.query_pairs_mut().append_pair("v", video_id);
+-        let html = self
+-            .http
+-            .get(watch_url)
+-            .send()
+-            .await?
+-            .error_for_status()?
+-            .text()
+-            .await?;
++        let html = async {
++            self.http
++                .get(watch_url)
++                .send()
++                .await?
++                .error_for_status()?
++                .text()
++                .await
++        }
++        .await
++        .map_err(|error| diagnose_http("watch_metadata", error))?;
+ 
+         let api_key = extract_config_string(&html, "INNERTUBE_API_KEY").ok_or(
+             ResolveError::Protocol("watch page omitted InnerTube API key"),
+@@ -186,16 +195,19 @@ impl Resolver {
+         let mut player_url = Url::parse(&self.endpoints.player)
+             .map_err(|_| ResolveError::Protocol("invalid player endpoint"))?;
+         player_url.query_pairs_mut().append_pair("key", &api_key);
+-        let response: PlayerResponse = self
+-            .http
+-            .post(player_url)
+-            .header("User-Agent", CLIENT_USER_AGENT)
+-            .json(&PlayerRequest::new(video_id, visitor_data.as_deref()))
+-            .send()
+-            .await?
+-            .error_for_status()?
+-            .json()
+-            .await?;
++        let response: PlayerResponse = async {
++            self.http
++                .post(player_url)
++                .header("User-Agent", CLIENT_USER_AGENT)
++                .json(&PlayerRequest::new(video_id, visitor_data.as_deref()))
++                .send()
++                .await?
++                .error_for_status()?
++                .json()
++                .await
++        }
++        .await
++        .map_err(|error| diagnose_http("player_metadata", error))?;
+ 
+         if response.playability_status.status != "OK" {
+             return Err(ResolveError::Unplayable(
+@@ -374,6 +386,20 @@ async fn checked_process_output(
+     }
+ }
+ 
++// Never format reqwest errors here: their URL can contain API keys or tokens.
++fn diagnose_http(stage: &'static str, error: reqwest::Error) -> reqwest::Error {
++    tracing::warn!(
++        stage,
++        status = error.status().map(|s| s.as_u16()),
++        timeout = error.is_timeout(),
++        connect = error.is_connect(),
++        decode = error.is_decode(),
++        body = error.is_body(),
++        "YouTube metadata request failed"
++    );
++    error
++}
++
+ #[derive(Debug, Error)]
+ pub(crate) enum ResolveError {
+     #[error("YouTube HTTP request failed")]
+@@ -1865,6 +1891,31 @@ mod tests {
+         assert!(!mpd.contains("contentType=\"text\""));
+     }
+ 
++    #[tokio::test]
++    async fn metadata_http_status_survives_diagnostics_and_rate_limit_is_not_retried() {
++        for status in [429, 503] {
++            let server = MockServer::start().await;
++            Mock::given(method("GET"))
++                .respond_with(ResponseTemplate::new(status))
++                .mount(&server)
++                .await;
++            let resolver = Resolver::with_endpoints(reqwest::Client::new(), &server.uri());
++            let error = resolver
++                .resolve_metadata(
++                    "example",
++                    0.0,
++                    &PlayerCapabilities::default(),
++                    PreferredVideoCodec::Auto,
++                )
++                .await
++                .unwrap_err();
++            assert!(
++                matches!(&error, ResolveError::Http(e) if e.status().unwrap().as_u16() == status)
++            );
++            assert_eq!(crate::retryable_resolution_error(&error), status != 429);
++        }
++    }
++
+     #[tokio::test]
+     async fn metadata_fixture_returns_audio_and_metadata_without_external_extraction() {
+         let server = MockServer::start().await;
+diff --git a/crates/vibecast-bridge/src/bridge.rs b/crates/vibecast-bridge/src/bridge.rs
+index e1fcf6d..115a090 100644
+--- a/crates/vibecast-bridge/src/bridge.rs
++++ b/crates/vibecast-bridge/src/bridge.rs
+@@ -44,6 +44,27 @@ use vibecast_settings::{
+ #[cfg(feature = "browser-player")]
+ use crate::web::{PLAYER_HTML, PLAYER_HTML_CONTENT_TYPE, PLAYER_JS, PLAYER_JS_CONTENT_TYPE};
+ 
++async fn bind_player_listener(host: &str, port: u16) -> std::io::Result<tokio::net::TcpListener> {
++    // The local audio proxy relies on socket backpressure. Default multi-MiB
++    // send queues otherwise eagerly consume an entire song even with mpv paused.
++    // Leave externally exposed/browser bridge listeners unchanged.
++    if let Ok(ip) = host.parse::<std::net::IpAddr>() {
++        if ip.is_loopback() {
++            let socket = if ip.is_ipv4() {
++                tokio::net::TcpSocket::new_v4()?
++            } else {
++                tokio::net::TcpSocket::new_v6()?
++            };
++            #[cfg(unix)]
++            socket.set_reuseaddr(true)?;
++            socket.set_send_buffer_size(64 * 1024)?;
++            socket.bind(std::net::SocketAddr::new(ip, port))?;
++            return socket.listen(1024);
++        }
++    }
++    tokio::net::TcpListener::bind((host, port)).await
++}
++
+ /// Lifecycle events emitted by the bridge as players connect and disconnect.
+ ///
+ /// Both variants carry an `epoch`: a per-connection token, unique across the
+@@ -190,8 +211,7 @@ impl PlayerBridge {
+         }
+ 
+         let listener =
+-            tokio::net::TcpListener::bind((self.bind_host.as_ref(), self.state.configured_port))
+-                .await?;
++            bind_player_listener(self.bind_host.as_ref(), self.state.configured_port).await?;
+         let port = listener.local_addr()?.port();
+         self.state.port.store(port, Ordering::SeqCst);
+ 
+@@ -781,6 +801,47 @@ async fn manifest_handler(
+         return StatusCode::NOT_FOUND.into_response();
+     };
+ 
++    if route_path.starts_with("cache-") {
++        let Some(response) = handler
++            .handle_cached_media(
++                &route_path,
++                method.clone(),
++                filter_upstream_headers(&request_headers),
++            )
++            .await
++        else {
++            return StatusCode::NOT_FOUND.into_response();
++        };
++        let mut builder = Response::builder().status(response.status);
++        for name in [
++            "content-type",
++            "content-length",
++            "content-range",
++            "accept-ranges",
++            "cache-control",
++            "location",
++        ] {
++            if let Some(value) = response.headers.get(name) {
++                builder = builder.header(name, value);
++            }
++        }
++        let body = match response.body.filter(|_| method != Method::HEAD) {
++            Some(body) => {
++                Body::from_stream(futures_util::stream::unfold(Some(body), |body| async {
++                    let mut body = body?;
++                    match body.next_chunk().await {
++                        Ok(Some(bytes)) => Some((Ok::<_, std::io::Error>(bytes), Some(body))),
++                        Ok(None) => None,
++                        Err(error) => Some((Err(error), None)),
++                    }
++                }))
++            }
++            None => Body::empty(),
++        };
++        return builder
++            .body(body)
++            .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response());
++    }
+     let route_segment = route_path.split('.').next().unwrap_or("");
+     let Ok(route_id) = route_segment.parse::<RouteId>() else {
+         return StatusCode::BAD_REQUEST.into_response();
+@@ -1577,6 +1638,93 @@ mod tests {
+ 
+     struct StaticManifest;
+ 
++    struct TestChunks(Vec<Vec<u8>>);
++    #[async_trait]
++    impl vibecast_player_api::CachedMediaBody for TestChunks {
++        async fn next_chunk(&mut self) -> std::io::Result<Option<Vec<u8>>> {
++            Ok(self.0.pop())
++        }
++    }
++
++    struct CachedManifest;
++    #[async_trait]
++    impl ManifestHandler for CachedManifest {
++        async fn handle_manifest(
++            &self,
++            request: ManifestProxyRequest,
++        ) -> ProxyResult<ManifestProxyResponse> {
++            StaticManifest.handle_manifest(request).await
++        }
++        async fn handle_cached_media(
++            &self,
++            token: &str,
++            method: Method,
++            headers: HeaderMap,
++        ) -> Option<vibecast_player_api::CachedMediaResponse> {
++            if token != "cache-current" {
++                return None;
++            }
++            assert_eq!(headers["range"], "bytes=3-5");
++            let mut response_headers = HeaderMap::new();
++            for (name, value) in [
++                ("content-length", "3"),
++                ("content-type", "audio/mp4"),
++                ("content-range", "bytes 3-5/10"),
++                ("accept-ranges", "bytes"),
++            ] {
++                response_headers.insert(
++                    http::HeaderName::from_static(name),
++                    http::HeaderValue::from_static(value),
++                );
++            }
++            Some(vibecast_player_api::CachedMediaResponse {
++                status: 206,
++                headers: response_headers,
++                body: if method == Method::HEAD {
++                    None
++                } else {
++                    Some(Box::new(TestChunks(vec![b"ef".to_vec(), b"d".to_vec()])))
++                },
++            })
++        }
++    }
++
++    #[tokio::test]
++    async fn cache_route_streams_ranges_preserves_length_and_rejects_old_tokens() {
++        let (bridge, _events) = bridge().await;
++        bridge.register_manifest_handler("sess", Arc::new(CachedManifest));
++        for method in [Method::GET, Method::HEAD] {
++            let request = Request::builder()
++                .method(method.clone())
++                .uri("/manifest/sess/cache-current")
++                .header("Range", "bytes=3-5")
++                .body(Body::empty())
++                .unwrap();
++            let (status, headers, body) = drive(&bridge, request).await;
++            assert_eq!(status, StatusCode::PARTIAL_CONTENT);
++            assert_eq!(headers["content-length"], "3");
++            assert_eq!(headers["content-type"], "audio/mp4");
++            assert_eq!(headers["content-range"], "bytes 3-5/10");
++            assert_eq!(
++                body,
++                if method == Method::HEAD {
++                    b"".as_slice()
++                } else {
++                    b"def".as_slice()
++                }
++            );
++        }
++        assert_eq!(
++            http_get(&bridge, "/manifest/sess/cache-old").await.0,
++            StatusCode::NOT_FOUND
++        );
++        bridge.unregister_manifest_handler("sess");
++        assert_eq!(
++            http_get(&bridge, "/manifest/sess/cache-current").await.0,
++            StatusCode::NOT_FOUND
++        );
++    }
++
+     #[async_trait]
+     impl ManifestHandler for StaticManifest {
+         async fn handle_manifest(
+diff --git a/crates/vibecast-cast/src/connection.rs b/crates/vibecast-cast/src/connection.rs
+index 118736e..ed90c7d 100644
+--- a/crates/vibecast-cast/src/connection.rs
++++ b/crates/vibecast-cast/src/connection.rs
+@@ -154,23 +154,23 @@ pub async fn run_connection<S>(
+         return;
+     }
+ 
+-    loop {
++    let close_reason = loop {
+         match reader.next().await {
+             Some(Ok(message)) => {
+                 if !dispatch(message, &auth, &handle, &events).await {
+-                    break;
++                    break "dispatch_closed";
+                 }
+             }
+-            Some(Err(FramingError::Io(_))) => break, // transport disconnect
++            Some(Err(FramingError::Io(_))) => break "transport_io", // no raw network error/URL
+             Some(Err(err)) => {
+                 tracing::warn!(peer = %peer, error = %err, "framing error, closing");
+-                break;
++                break "framing_error";
+             }
+-            None => break, // clean EOF
++            None => break "peer_eof",
+         }
+-    }
++    };
+ 
+-    tracing::info!(peer = %peer, "connection closed");
++    tracing::info!(peer = %peer, close_reason, "connection closed");
+     let _ = events.send(ServerEvent::Disconnected { id, peer }).await;
+ }
+ 
+diff --git a/crates/vibecast-core/src/audio_cache.rs b/crates/vibecast-core/src/audio_cache.rs
+new file mode 100644
+index 0000000..44b8628
+--- /dev/null
++++ b/crates/vibecast-core/src/audio_cache.rs
+@@ -0,0 +1,912 @@
++//! One bounded progressive audio object per active output. No disk/archive.
++use std::collections::VecDeque;
++use std::sync::{Arc, Mutex};
++use std::time::Duration;
++
++use async_trait::async_trait;
++use http::{header, HeaderMap, HeaderValue, Method};
++use tokio::sync::{watch, OwnedSemaphorePermit, Semaphore};
++use tokio::task::JoinHandle;
++use vibecast_player_api::{CachedMediaBody, CachedMediaResponse};
++use vibecast_sdk::MediaCacheHint;
++
++pub(crate) const MAX_AUDIO_BYTES: usize = 32 * 1024 * 1024;
++const CHUNK: usize = 64 * 1024;
++const BLOCK: usize = 128 * 1024;
++
++#[derive(Clone, Copy, PartialEq, Eq)]
++enum Phase {
++    Pending,
++    Streaming,
++    Complete,
++    Bypass,
++    Failed,
++    Cancelled,
++}
++
++struct Data {
++    phase: Phase,
++    blocks: Vec<Vec<u8>>,
++    wanted: VecDeque<usize>,
++    length: usize,
++    content_type: HeaderValue,
++}
++
++struct Shared {
++    data: Mutex<Data>,
++    changed: watch::Sender<()>,
++    hint: MediaCacheHint,
++}
++
++pub(crate) struct AudioCache {
++    pub token: String,
++    pub hint: MediaCacheHint,
++    url: String,
++    http: reqwest::Client,
++    shared: Arc<Shared>,
++    task: Mutex<Option<JoinHandle<()>>>,
++    readers: Arc<Semaphore>,
++    limit: usize,
++    idle_timeout: Duration,
++}
++
++impl AudioCache {
++    pub fn new(http: reqwest::Client, url: String, hint: MediaCacheHint) -> Self {
++        Self {
++            token: format!("cache-{}", uuid::Uuid::new_v4()),
++            hint: hint.clone(),
++            url,
++            http,
++            shared: Arc::new(Shared {
++                data: Mutex::new(Data {
++                    phase: Phase::Pending,
++                    blocks: Vec::new(),
++                    wanted: VecDeque::new(),
++                    length: 0,
++                    content_type: HeaderValue::from_static("application/octet-stream"),
++                }),
++                changed: watch::channel(()).0,
++                hint,
++            }),
++            task: Mutex::new(None),
++            readers: Arc::new(Semaphore::new(8)),
++            limit: MAX_AUDIO_BYTES,
++            idle_timeout: Duration::from_secs(30),
++        }
++    }
++
++    pub fn cancel(&self) {
++        if let Some(task) = self.task.lock().unwrap().take() {
++            task.abort();
++        }
++        let mut data = self.shared.data.lock().unwrap();
++        data.phase = Phase::Cancelled;
++        data.blocks = Vec::new();
++        data.wanted.clear();
++        self.hint.invalidate();
++        self.shared.changed.send_replace(());
++    }
++
++    fn start(&self) {
++        let mut task = self.task.lock().unwrap();
++        if task.is_some() || self.shared.data.lock().unwrap().phase != Phase::Pending {
++            return;
++        }
++        let shared = self.shared.clone();
++        let http = self.http.clone();
++        let url = self.url.clone();
++        let limit = self.limit;
++        let idle_timeout = self.idle_timeout;
++        *task = Some(tokio::spawn(async move {
++            if download(&http, &url, &shared, limit, idle_timeout)
++                .await
++                .is_err()
++            {
++                let mut data = shared.data.lock().unwrap();
++                if data.phase != Phase::Cancelled {
++                    data.phase = Phase::Failed;
++                    data.blocks = Vec::new();
++                    data.wanted.clear();
++                    shared.hint.invalidate();
++                    tracing::warn!("current audio cache fetch failed");
++                    shared.changed.send_replace(());
++                }
++            }
++        }));
++    }
++
++    pub async fn response(&self, method: Method, headers: HeaderMap) -> CachedMediaResponse {
++        let Ok(permit) = self.readers.clone().try_acquire_owned() else {
++            return empty(503);
++        };
++        self.start();
++        let mut changed = self.shared.changed.subscribe();
++        let (phase, length, content_type) = loop {
++            changed.borrow_and_update();
++            let snapshot = {
++                let data = self.shared.data.lock().unwrap();
++                (data.phase, data.length, data.content_type.clone())
++            };
++            if snapshot.0 != Phase::Pending {
++                break snapshot;
++            }
++            if changed.changed().await.is_err() {
++                return empty(502);
++            }
++        };
++        if phase == Phase::Bypass {
++            let mut response = empty(307);
++            if let Ok(location) = HeaderValue::from_str(&self.url) {
++                response.headers.insert(header::LOCATION, location);
++            } else {
++                response.status = 502;
++            }
++            return response;
++        }
++        if matches!(phase, Phase::Failed | Phase::Cancelled) {
++            return empty(502);
++        }
++        // Without validators, If-Range requires the full representation.
++        let range = if headers.contains_key(header::IF_RANGE) {
++            None
++        } else {
++            headers.get(header::RANGE).and_then(|v| v.to_str().ok())
++        };
++        let (start, end) = match byte_range(range, length) {
++            Ok(range) => range,
++            Err(()) => {
++                let mut response = empty(416);
++                response.headers.insert(
++                    header::CONTENT_RANGE,
++                    HeaderValue::from_str(&format!("bytes */{length}")).unwrap(),
++                );
++                return response;
++            }
++        };
++        let mut response = empty(if range.is_some() { 206 } else { 200 });
++        response.headers.insert(header::CONTENT_TYPE, content_type);
++        response
++            .headers
++            .insert(header::ACCEPT_RANGES, HeaderValue::from_static("bytes"));
++        response.headers.insert(
++            header::CONTENT_LENGTH,
++            HeaderValue::from_str(&(end - start).to_string()).unwrap(),
++        );
++        if range.is_some() {
++            response.headers.insert(
++                header::CONTENT_RANGE,
++                HeaderValue::from_str(&format!("bytes {start}-{}/{length}", end - 1)).unwrap(),
++            );
++        }
++        if method != Method::HEAD {
++            response.body = Some(Box::new(Reader {
++                shared: self.shared.clone(),
++                changed,
++                position: start,
++                end,
++                _permit: permit,
++            }));
++        }
++        response
++    }
++}
++
++impl Drop for AudioCache {
++    fn drop(&mut self) {
++        self.cancel();
++    }
++}
++
++fn empty(status: u16) -> CachedMediaResponse {
++    let mut headers = HeaderMap::new();
++    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
++    CachedMediaResponse {
++        status,
++        headers,
++        body: None,
++    }
++}
++
++async fn download(
++    http: &reqwest::Client,
++    url: &str,
++    shared: &Shared,
++    limit: usize,
++    idle_timeout: Duration,
++) -> Result<(), ()> {
++    // Fetch only requested blocks, not the rest of the song. A single worker
++    // coalesces concurrent decoder reads; holes from seeking stay unallocated.
++    let mut changed = shared.changed.subscribe();
++    let mut index = 0;
++    loop {
++        let start = index * BLOCK;
++        let known_length = shared.data.lock().unwrap().length;
++        let end = if known_length == 0 {
++            start + BLOCK
++        } else {
++            (start + BLOCK).min(known_length)
++        };
++        let request = http
++            .get(url)
++            .header(header::ACCEPT_ENCODING, "identity")
++            .header(header::RANGE, format!("bytes={start}-{}", end - 1))
++            .timeout(Duration::from_secs(120));
++        let mut response = tokio::time::timeout(Duration::from_secs(15), request.send())
++            .await
++            .map_err(|_| ())?
++            .map_err(|_| ())?;
++        if response.status().as_u16() == 200 && known_length == 0 {
++            // Do not silently turn a range-ignoring origin into an eager download.
++            let mut data = shared.data.lock().unwrap();
++            if data.phase != Phase::Cancelled {
++                data.phase = Phase::Bypass;
++                shared.changed.send_replace(());
++            }
++            return Ok(());
++        }
++        if response.status().as_u16() != 206 {
++            tracing::warn!(
++                status = response.status().as_u16(),
++                "current audio cache HTTP failure"
++            );
++            return Err(());
++        }
++        let range_header = response
++            .headers()
++            .get(header::CONTENT_RANGE)
++            .and_then(|h| h.to_str().ok())
++            .ok_or(())?;
++        if known_length == 0 && range_header.ends_with("/*") {
++            let mut data = shared.data.lock().unwrap();
++            if data.phase != Phase::Cancelled {
++                data.phase = Phase::Bypass;
++                shared.changed.send_replace(());
++            }
++            return Ok(());
++        }
++        let (first, last, length) = content_range(range_header)?;
++        if length == 0 || length > limit {
++            if known_length != 0 {
++                return Err(());
++            }
++            let mut data = shared.data.lock().unwrap();
++            if data.phase != Phase::Cancelled {
++                data.phase = Phase::Bypass;
++                shared.changed.send_replace(());
++            }
++            return Ok(());
++        }
++        if first != start
++            || last + 1 != end.min(length)
++            || (known_length != 0 && length != known_length)
++            || response
++                .content_length()
++                .is_some_and(|n| n != (last + 1 - first) as u64)
++        {
++            return Err(());
++        }
++        {
++            let mut data = shared.data.lock().unwrap();
++            if data.phase == Phase::Cancelled {
++                return Ok(());
++            }
++            if known_length == 0 {
++                data.length = length;
++                data.blocks = (0..length.div_ceil(BLOCK)).map(|_| Vec::new()).collect();
++                data.content_type = response
++                    .headers()
++                    .get(header::CONTENT_TYPE)
++                    .cloned()
++                    .unwrap_or_else(|| HeaderValue::from_static("application/octet-stream"));
++                data.phase = Phase::Streaming;
++                shared.changed.send_replace(());
++            }
++        }
++        let expected = last + 1 - first;
++        while let Some(chunk) = tokio::time::timeout(idle_timeout, response.chunk())
++            .await
++            .map_err(|_| ())?
++            .map_err(|_| ())?
++        {
++            let mut data = shared.data.lock().unwrap();
++            if data.phase == Phase::Cancelled {
++                return Ok(());
++            }
++            let bytes = &mut data.blocks[index];
++            if chunk.len() > expected - bytes.len() {
++                return Err(());
++            }
++            bytes.extend_from_slice(&chunk);
++            shared.changed.send_replace(());
++        }
++        {
++            let mut data = shared.data.lock().unwrap();
++            if data.phase == Phase::Cancelled {
++                return Ok(());
++            }
++            if data.blocks[index].len() != expected {
++                return Err(());
++            }
++            if data.blocks.iter().map(Vec::len).sum::<usize>() == length {
++                data.phase = Phase::Complete;
++                shared.hint.mark_complete();
++                shared.changed.send_replace(());
++                tracing::info!(bytes = length, "current audio cache complete");
++                return Ok(());
++            }
++        }
++        // Being paused/no demand is not a network stall. Wait without a timer.
++        index = loop {
++            changed.borrow_and_update();
++            {
++                let mut data = shared.data.lock().unwrap();
++                if data.phase == Phase::Cancelled {
++                    return Ok(());
++                }
++                let mut next = None;
++                while let Some(i) = data.wanted.pop_front() {
++                    if data.blocks[i].len() != BLOCK.min(length - i * BLOCK) {
++                        next = Some(i);
++                        break;
++                    }
++                }
++                if let Some(i) = next {
++                    break i;
++                }
++            }
++            changed.changed().await.map_err(|_| ())?;
++        };
++    }
++}
++
++fn content_range(value: &str) -> Result<(usize, usize, usize), ()> {
++    let (range, total) = value
++        .strip_prefix("bytes ")
++        .ok_or(())?
++        .split_once('/')
++        .ok_or(())?;
++    let (start, end) = range.split_once('-').ok_or(())?;
++    let start = start.parse::<usize>().map_err(|_| ())?;
++    let end = end.parse::<usize>().map_err(|_| ())?;
++    let total = total.parse::<usize>().map_err(|_| ())?;
++    if start > end || end >= total {
++        return Err(());
++    }
++    Ok((start, end, total))
++}
++
++/// Half-open range. Multiple ranges are intentionally unsupported.
++fn byte_range(value: Option<&str>, length: usize) -> Result<(usize, usize), ()> {
++    let Some(value) = value else {
++        return Ok((0, length));
++    };
++    let (start, end) = value
++        .strip_prefix("bytes=")
++        .ok_or(())?
++        .split_once('-')
++        .ok_or(())?;
++    if start.is_empty() {
++        let suffix: usize = end.parse().map_err(|_| ())?;
++        return if suffix == 0 {
++            Err(())
++        } else {
++            Ok((length.saturating_sub(suffix), length))
++        };
++    }
++    let start: usize = start.parse().map_err(|_| ())?;
++    let end = if end.is_empty() {
++        length
++    } else {
++        end.parse::<usize>()
++            .map_err(|_| ())?
++            .saturating_add(1)
++            .min(length)
++    };
++    if start >= end {
++        Err(())
++    } else {
++        Ok((start, end))
++    }
++}
++
++struct Reader {
++    shared: Arc<Shared>,
++    changed: watch::Receiver<()>,
++    position: usize,
++    end: usize,
++    _permit: OwnedSemaphorePermit,
++}
++
++#[async_trait]
++impl CachedMediaBody for Reader {
++    async fn next_chunk(&mut self) -> std::io::Result<Option<Vec<u8>>> {
++        loop {
++            self.changed.borrow_and_update();
++            {
++                let mut data = self.shared.data.lock().unwrap();
++                if matches!(data.phase, Phase::Failed | Phase::Cancelled) {
++                    return Err(std::io::Error::other("audio cache unavailable"));
++                }
++                if self.position == self.end {
++                    return Ok(None);
++                }
++                let index = self.position / BLOCK;
++                let offset = self.position % BLOCK;
++                let end = (index * BLOCK + data.blocks[index].len())
++                    .min(self.end)
++                    .min(self.position + CHUNK);
++                if end > self.position {
++                    let bytes = data.blocks[index][offset..offset + end - self.position].to_vec();
++                    self.position = end;
++                    return Ok(Some(bytes));
++                }
++                if !data.wanted.contains(&index) {
++                    data.wanted.push_back(index);
++                    self.shared.changed.send_replace(());
++                    // Consume our own notification; only incoming data should wake us.
++                    self.changed.borrow_and_update();
++                }
++            }
++            self.changed
++                .changed()
++                .await
++                .map_err(|_| std::io::Error::other("audio cache closed"))?;
++        }
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use std::sync::atomic::{AtomicUsize, Ordering};
++    use tokio::io::{AsyncReadExt, AsyncWriteExt};
++    use tokio::net::TcpListener;
++
++    struct Origin {
++        url: String,
++        count: Arc<AtomicUsize>,
++        ranges: Arc<Mutex<Vec<(usize, usize)>>>,
++        release: watch::Sender<bool>,
++        task: JoinHandle<()>,
++    }
++    impl Drop for Origin {
++        fn drop(&mut self) {
++            self.task.abort();
++        }
++    }
++
++    async fn origin(payload: &[u8], declared: Option<usize>, status: u16) -> Origin {
++        origin_with_ranges(payload, declared, status, true).await
++    }
++
++    async fn origin_with_ranges(
++        payload: &[u8],
++        declared: Option<usize>,
++        status: u16,
++        supports_range: bool,
++    ) -> Origin {
++        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
++        let url = format!("http://{}/audio", listener.local_addr().unwrap());
++        let count = Arc::new(AtomicUsize::new(0));
++        let observed = count.clone();
++        let ranges = Arc::new(Mutex::new(Vec::new()));
++        let observed_ranges = ranges.clone();
++        let (release, rx) = watch::channel(false);
++        let payload = payload.to_vec();
++        let task = tokio::spawn(async move {
++            let mut children = tokio::task::JoinSet::new();
++            loop {
++                tokio::select! {
++                    accepted = listener.accept() => {
++                        let (mut socket, _) = accepted.unwrap();
++                        let payload = payload.clone();
++                        let mut rx = rx.clone();
++                        let observed = observed.clone();
++                        let observed_ranges = observed_ranges.clone();
++                        children.spawn(async move {
++                            let mut request = vec![0; 8192];
++                            let n = socket.read(&mut request).await.unwrap();
++                            observed.fetch_add(1, Ordering::SeqCst);
++                            let request = String::from_utf8_lossy(&request[..n]).to_ascii_lowercase();
++                            let range = request.lines().find_map(|l| l.strip_prefix("range: "));
++                            let (status, length, content_range, payload) = if status == 200 && declared.is_some() && supports_range {
++                                let total = declared.unwrap();
++                                let (start, end) = byte_range(range, total).unwrap();
++                                observed_ranges.lock().unwrap().push((start, end));
++                                (206, Some(end - start), format!("Content-Range: bytes {start}-{}/{total}\r\n", end - 1),
++                                    payload[start.min(payload.len())..end.min(payload.len())].to_vec())
++                            } else { (status, declared, String::new(), payload) };
++                            let length = length.map(|n| format!("Content-Length: {n}\r\n")).unwrap_or_default();
++                            let header = format!("HTTP/1.1 {status} Test\r\n{length}{content_range}Content-Type: audio/mp4\r\nConnection: close\r\n\r\n");
++                            if socket.write_all(header.as_bytes()).await.is_err() { return; }
++                            let mid = payload.len() / 2;
++                            if socket.write_all(&payload[..mid]).await.is_err() { return; }
++                            while !*rx.borrow_and_update() {
++                                if rx.changed().await.is_err() { return; }
++                            }
++                            let _ = socket.write_all(&payload[mid..]).await;
++                        });
++                    }
++                    _ = children.join_next(), if !children.is_empty() => {}
++                }
++            }
++        });
++        Origin {
++            url,
++            count,
++            ranges,
++            release,
++            task,
++        }
++    }
++
++    async fn open(cache: &AudioCache, range: Option<&str>, method: Method) -> CachedMediaResponse {
++        let mut headers = HeaderMap::new();
++        if let Some(range) = range {
++            headers.insert(header::RANGE, HeaderValue::from_str(range).unwrap());
++        }
++        tokio::time::timeout(Duration::from_secs(2), cache.response(method, headers))
++            .await
++            .unwrap()
++    }
++
++    async fn read_all(mut response: CachedMediaResponse) -> Vec<u8> {
++        tokio::time::timeout(Duration::from_secs(2), async move {
++            let mut out = Vec::new();
++            if let Some(body) = &mut response.body {
++                while let Some(chunk) = body.next_chunk().await.unwrap() {
++                    out.extend(chunk);
++                }
++            }
++            out
++        })
++        .await
++        .unwrap()
++    }
++
++    #[tokio::test]
++    async fn starts_before_download_finishes_then_replays_and_seeks_without_network() {
++        let origin = origin(b"abcdefghij", Some(10), 200).await;
++        let hint = MediaCacheHint::default();
++        let cache = AudioCache::new(reqwest::Client::new(), origin.url.clone(), hint.clone());
++        let mut first = open(&cache, None, Method::GET).await;
++        assert_eq!(first.status, 200);
++        assert_eq!(first.headers[header::CONTENT_LENGTH], "10");
++        assert_eq!(
++            tokio::time::timeout(
++                Duration::from_secs(2),
++                first.body.as_mut().unwrap().next_chunk()
++            )
++            .await
++            .unwrap()
++            .unwrap()
++            .unwrap(),
++            b"abcde"
++        );
++        assert!(!hint.is_complete());
++        assert_eq!(
++            read_all(open(&cache, Some("bytes=1-3"), Method::GET).await).await,
++            b"bcd"
++        );
++        origin.release.send(true).unwrap();
++        assert_eq!(read_all(first).await, b"fghij");
++        tokio::time::timeout(Duration::from_secs(2), async {
++            while !hint.is_complete() {
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .unwrap();
++        origin.task.abort(); // Offline repeat/seek must still work.
++        for range in [None, Some("bytes=0-")] {
++            assert_eq!(
++                read_all(open(&cache, range, Method::GET).await).await,
++                b"abcdefghij"
++            );
++        }
++        let suffix = open(&cache, Some("bytes=-3"), Method::GET).await;
++        assert_eq!(suffix.status, 206);
++        assert_eq!(suffix.headers[header::CONTENT_RANGE], "bytes 7-9/10");
++        assert_eq!(read_all(suffix).await, b"hij");
++        assert_eq!(origin.count.load(Ordering::SeqCst), 1);
++        let head = open(&cache, None, Method::HEAD).await;
++        assert!(head.body.is_none());
++        assert_eq!(head.headers[header::CONTENT_LENGTH], "10");
++        assert_eq!(
++            open(&cache, Some("bytes=10-"), Method::GET).await.status,
++            416
++        );
++    }
++
++    #[tokio::test]
++    async fn cancel_releases_bytes_and_unblocks_readers_without_refetch() {
++        let origin = origin(b"abcdefghij", Some(10), 200).await;
++        let hint = MediaCacheHint::default();
++        let cache = AudioCache::new(reqwest::Client::new(), origin.url.clone(), hint.clone());
++        let mut tail = open(&cache, Some("bytes=8-"), Method::GET)
++            .await
++            .body
++            .unwrap();
++        cache.cancel();
++        assert!(
++            tokio::time::timeout(Duration::from_secs(2), tail.next_chunk())
++                .await
++                .unwrap()
++                .is_err()
++        );
++        assert!(cache.shared.data.lock().unwrap().blocks.is_empty());
++        assert_eq!(cache.shared.data.lock().unwrap().blocks.capacity(), 0);
++        assert!(hint.is_failed());
++        assert_eq!(open(&cache, None, Method::GET).await.status, 502);
++        assert_eq!(origin.count.load(Ordering::SeqCst), 1);
++    }
++
++    #[tokio::test]
++    async fn unknown_or_oversized_sources_bypass_without_retained_audio() {
++        for length in [None, Some(MAX_AUDIO_BYTES + 1)] {
++            let origin = origin(b"abcdefghij", length, 200).await;
++            let cache = AudioCache::new(
++                reqwest::Client::new(),
++                origin.url.clone(),
++                MediaCacheHint::default(),
++            );
++            let response = open(&cache, None, Method::GET).await;
++            assert_eq!(response.status, 307);
++            assert_eq!(response.headers[header::LOCATION], origin.url);
++            assert!(cache.shared.data.lock().unwrap().blocks.is_empty());
++            assert!(!cache.hint.is_complete());
++        }
++    }
++
++    #[tokio::test]
++    async fn truncated_or_rejected_audio_is_never_marked_complete() {
++        for status in [200, 403, 429] {
++            let origin = origin(b"short", Some(20), status).await;
++            let cache = AudioCache::new(
++                reqwest::Client::new(),
++                origin.url.clone(),
++                MediaCacheHint::default(),
++            );
++            origin.release.send(true).unwrap();
++            let mut response = open(&cache, None, Method::GET).await;
++            if let Some(body) = &mut response.body {
++                tokio::time::timeout(Duration::from_secs(2), async {
++                    loop {
++                        if body.next_chunk().await.is_err() {
++                            break;
++                        }
++                    }
++                })
++                .await
++                .unwrap();
++            } else {
++                assert_eq!(response.status, 502);
++            }
++            assert!(!cache.hint.is_complete());
++            assert!(cache.hint.is_failed());
++            assert!(cache.shared.data.lock().unwrap().blocks.is_empty());
++        }
++    }
++
++    #[tokio::test]
++    async fn stalled_download_fails_and_releases_partial_bytes() {
++        let origin = origin(b"abcdefghij", Some(10), 200).await;
++        let mut cache = AudioCache::new(
++            reqwest::Client::new(),
++            origin.url.clone(),
++            MediaCacheHint::default(),
++        );
++        cache.idle_timeout = Duration::from_millis(100);
++        let mut response = open(&cache, Some("bytes=8-"), Method::GET).await;
++        let result = tokio::time::timeout(
++            Duration::from_secs(2),
++            response.body.as_mut().unwrap().next_chunk(),
++        )
++        .await
++        .unwrap();
++        assert!(result.is_err());
++        assert!(cache.hint.is_failed());
++        assert_eq!(cache.shared.data.lock().unwrap().blocks.capacity(), 0);
++    }
++
++    #[test]
++    fn range_validation_and_bounds() {
++        assert_eq!(content_range("bytes 0-9/10"), Ok((0, 9, 10)));
++        for value in [
++            "bytes 0-10/10",
++            "bytes 9-1/10",
++            "bytes 0-9/*",
++            "items 0-9/10",
++        ] {
++            assert!(content_range(value).is_err());
++        }
++        assert_eq!(byte_range(Some("bytes=2-99"), 10), Ok((2, 10)));
++        assert_eq!(byte_range(Some("bytes=-99"), 10), Ok((0, 10)));
++        for value in [
++            "bytes=-0",
++            "bytes=9-3",
++            "bytes=0-1,3-4",
++            "items=0-1",
++            "bytes=20-",
++            "bytes=a-b",
++        ] {
++            assert_eq!(byte_range(Some(value), 10), Err(()));
++        }
++    }
++
++    #[tokio::test]
++    async fn demand_fetches_only_needed_blocks_and_retains_sparse_seeks() {
++        let payload: Vec<u8> = (0..BLOCK * 5 + 13).map(|i| (i % 251) as u8).collect();
++        let origin = origin(&payload, Some(payload.len()), 200).await;
++        origin.release.send(true).unwrap();
++        let cache = AudioCache::new(
++            reqwest::Client::new(),
++            origin.url.clone(),
++            MediaCacheHint::default(),
++        );
++        assert_eq!(
++            read_all(open(&cache, Some("bytes=0-9"), Method::GET).await).await,
++            payload[..10]
++        );
++        tokio::time::sleep(Duration::from_millis(150)).await;
++        assert_eq!(
++            origin.count.load(Ordering::SeqCst),
++            1,
++            "idle cache must not download ahead"
++        );
++        let tail = format!("bytes={}-", BLOCK * 5);
++        let (a, b) = tokio::join!(
++            read_all(open(&cache, Some(&tail), Method::GET).await),
++            read_all(open(&cache, Some(&tail), Method::GET).await)
++        );
++        assert_eq!(a, payload[BLOCK * 5..]);
++        assert_eq!(a, b);
++        assert_eq!(
++            origin.count.load(Ordering::SeqCst),
++            2,
++            "concurrent reads share one fetch"
++        );
++        assert_eq!(
++            *origin.ranges.lock().unwrap(),
++            vec![(0, BLOCK), (BLOCK * 5, payload.len())]
++        );
++        assert!(
++            !cache.hint.is_complete(),
++            "a hole is not a complete cached song"
++        );
++        assert_eq!(
++            read_all(open(&cache, None, Method::GET).await).await,
++            payload
++        );
++        tokio::time::timeout(Duration::from_secs(2), async {
++            while !cache.hint.is_complete() {
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .unwrap();
++        assert_eq!(origin.count.load(Ordering::SeqCst), 6);
++        origin.task.abort();
++        assert_eq!(
++            read_all(open(&cache, None, Method::GET).await).await,
++            payload
++        );
++        assert_eq!(origin.count.load(Ordering::SeqCst), 6);
++    }
++
++    #[tokio::test]
++    async fn origin_ignoring_ranges_bypasses_instead_of_eager_download() {
++        let origin = origin_with_ranges(b"abcdefghij", Some(10), 200, false).await;
++        let cache = AudioCache::new(
++            reqwest::Client::new(),
++            origin.url.clone(),
++            MediaCacheHint::default(),
++        );
++        let response = open(&cache, None, Method::GET).await;
++        assert_eq!(response.status, 307);
++        assert!(cache.shared.data.lock().unwrap().blocks.is_empty());
++        assert!(!cache.hint.is_complete());
++    }
++
++    #[tokio::test]
++    #[ignore = "requires installed mpv; silent real-decoder buffering check"]
++    async fn real_mpv_does_not_eagerly_fetch_whole_song() {
++        let audio_size = 180_u32 * 8_000 * 2;
++        let mut wav = Vec::new();
++        wav.extend_from_slice(b"RIFF");
++        wav.extend_from_slice(&(audio_size + 36).to_le_bytes());
++        wav.extend_from_slice(b"WAVEfmt ");
++        wav.extend_from_slice(&16_u32.to_le_bytes());
++        for value in [1_u16, 1] {
++            wav.extend_from_slice(&value.to_le_bytes());
++        }
++        for value in [8_000_u32, 16_000] {
++            wav.extend_from_slice(&value.to_le_bytes());
++        }
++        for value in [2_u16, 16] {
++            wav.extend_from_slice(&value.to_le_bytes());
++        }
++        wav.extend_from_slice(b"data");
++        wav.extend_from_slice(&audio_size.to_le_bytes());
++        wav.resize(44 + audio_size as usize, 0);
++        let origin = origin(&wav, Some(wav.len()), 200).await;
++        origin.release.send(true).unwrap();
++        let cache = Arc::new(AudioCache::new(
++            reqwest::Client::new(),
++            origin.url.clone(),
++            MediaCacheHint::default(),
++        ));
++        let socket = tokio::net::TcpSocket::new_v4().unwrap();
++        socket.set_send_buffer_size(64 * 1024).unwrap();
++        socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
++        let listener = socket.listen(128).unwrap();
++        let address = listener.local_addr().unwrap();
++        let serving = cache.clone();
++        let server = tokio::spawn(async move {
++            let mut children = tokio::task::JoinSet::new();
++            loop {
++                tokio::select! {
++                    accepted = listener.accept() => {
++                        let (mut socket, _) = accepted.unwrap();
++                        let cache = serving.clone();
++                        children.spawn(async move {
++                            let mut input = vec![0; 8192];
++                            let n = socket.read(&mut input).await.unwrap();
++                            let input = String::from_utf8_lossy(&input[..n]).to_ascii_lowercase();
++                            let range = input.lines().find_map(|l| l.strip_prefix("range: "));
++                            let mut response = open(&cache, range, Method::GET).await;
++                            let mut headers = format!("HTTP/1.1 {} Test\r\nConnection: close\r\n", response.status);
++                            for (key, value) in response.headers.iter() {
++                                headers.push_str(&format!("{key}: {}\r\n", value.to_str().unwrap()));
++                            }
++                            headers.push_str("\r\n");
++                            if socket.write_all(headers.as_bytes()).await.is_err() { return; }
++                            if let Some(body) = &mut response.body {
++                                while let Ok(Some(bytes)) = body.next_chunk().await {
++                                    if socket.write_all(&bytes).await.is_err() { return; }
++                                }
++                            }
++                        });
++                    }
++                    _ = children.join_next(), if !children.is_empty() => {}
++                }
++            }
++        });
++        let mut player = std::process::Command::new("mpv")
++            .args([
++                "--no-config",
++                "--ao=null",
++                "--vo=null",
++                "--pause",
++                "--cache=yes",
++                "--cache-secs=30",
++                "--demuxer-max-bytes=512KiB",
++                "--stream-buffer-size=64KiB",
++            ])
++            .arg(format!("http://{address}/cache/audio.wav"))
++            .stdout(std::process::Stdio::null())
++            .stderr(std::process::Stdio::null())
++            .spawn()
++            .unwrap();
++        tokio::time::sleep(Duration::from_secs(3)).await;
++        let bytes: usize = cache
++            .shared
++            .data
++            .lock()
++            .unwrap()
++            .blocks
++            .iter()
++            .map(Vec::len)
++            .sum();
++        eprintln!("paused real decoder retained {bytes}/{} bytes", wav.len());
++        player.kill().unwrap();
++        player.wait().unwrap();
++        server.abort();
++        assert!(bytes > 0, "decoder did not load");
++        assert!(
++            bytes < wav.len() / 2,
++            "paused decoder fetched {bytes}/{} bytes",
++            wav.len()
++        );
++    }
++}
+diff --git a/crates/vibecast-core/src/hub.rs b/crates/vibecast-core/src/hub.rs
+index 6790ece..e4be546 100644
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -42,6 +42,7 @@ use crate::registry::AppRegistry;
+ use vibecast_player_api::ProxyRegistrar;
+ 
+ const RECEIVER_0: &str = "receiver-0";
++const SENDER_RECONNECT_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+ 
+ /// A per-callback [`SenderChannel`] that writes custom-namespace app messages
+ /// directly to the relevant connection(s), never through the hub mailbox (which
+@@ -270,6 +271,7 @@ async fn run_app_session(app: Arc<dyn AppSession>, mut jobs: mpsc::Receiver<AppJ
+ 
+ /// A running app session registered as a Cast transport (id == transport id).
+ struct Session {
++    audio_cache: Option<Arc<crate::audio_cache::AudioCache>>,
+     app_id: String,
+     app_key: String,
+     display_name: String,
+@@ -330,6 +332,7 @@ pub struct DeviceHub {
+     /// session id (== transport id) -> session.
+     sessions: HashMap<String, Session>,
+     session_owners: HashMap<String, u64>,
++    sender_disconnect_deadlines: HashMap<String, tokio::time::Instant>,
+     self_tx: mpsc::Sender<HubEvent>,
+     events: Option<mpsc::Receiver<HubEvent>>,
+ }
+@@ -374,6 +377,7 @@ impl DeviceHub {
+             platform_subscriptions: HashSet::new(),
+             sessions: HashMap::new(),
+             session_owners: HashMap::new(),
++            sender_disconnect_deadlines: HashMap::new(),
+             self_tx: tx,
+             events: Some(rx),
+         }
+@@ -393,11 +397,36 @@ impl DeviceHub {
+     /// the loop, so the task completes and can be awaited during shutdown.
+     pub async fn run(mut self) {
+         let mut events = self.events.take().expect("run called once");
+-        while let Some(event) = events.recv().await {
+-            let stop = matches!(event, HubEvent::Shutdown(_));
+-            self.dispatch(event).await;
+-            if stop {
+-                break;
++        loop {
++            let deadline = self.sender_disconnect_deadlines.values().copied().min();
++            tokio::select! {
++                // A queued status request/late CONNECT must not starve an
++                // already expired deadline. No detached timers can outlive us.
++                biased;
++                _ = async {
++                    if let Some(deadline) = deadline {
++                        tokio::time::sleep_until(deadline).await;
++                    } else {
++                        std::future::pending::<()>().await;
++                    }
++                } => {
++                    let now = tokio::time::Instant::now();
++                    let expired: Vec<_> = self.sender_disconnect_deadlines.iter()
++                        .filter(|(_, deadline)| **deadline <= now)
++                        .map(|(session, _)| session.clone()).collect();
++                    for session_id in expired {
++                        tracing::info!(%session_id, "sender reconnect grace expired; stopping app");
++                        self.stop_session(&session_id).await;
++                    }
++                    let response = self.receiver_status(0);
++                    self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
++                }
++                event = events.recv() => {
++                    let Some(event) = event else { break; };
++                    let stop = matches!(event, HubEvent::Shutdown(_));
++                    self.dispatch(event).await;
++                    if stop { break; }
++                }
+             }
+         }
+     }
+@@ -408,25 +437,20 @@ impl DeviceHub {
+                 self.connections.insert(handle.id(), handle);
+             }
+             HubEvent::Server(ServerEvent::Disconnected { id, .. }) => {
+-                let owned: Vec<String> = self
++                let owned: HashSet<String> = self
+                     .session_owners
+                     .iter()
+                     .filter(|(_, owner)| **owner == id)
+                     .map(|(session, _)| session.clone())
+                     .collect();
+-                for session in owned {
+-                    self.stop_session(&session).await;
+-                }
+-                // A sender can leave without sending an explicit Cast STOP.
+-                // Keep sessions that still have another subscribed sender, but
+-                // tear down sessions whose last sender connection disappeared;
+-                // otherwise receiver status advertises a stale app forever.
+-                let affected_sessions: Vec<String> = self
++                let mut affected_sessions: HashSet<String> = self
+                     .subscriptions
+                     .iter()
+                     .filter(|((conn, _), _)| *conn == id)
+                     .map(|(_, transport)| transport.clone())
+                     .collect();
++                affected_sessions.extend(owned.iter().cloned());
++                self.session_owners.retain(|_, owner| *owner != id);
+                 self.subscriptions.retain(|(conn, _), _| *conn != id);
+                 self.platform_subscriptions.retain(|(conn, _)| *conn != id);
+                 self.connections.remove(&id);
+@@ -435,9 +459,26 @@ impl DeviceHub {
+                         .subscriptions
+                         .values()
+                         .any(|transport| transport == &session_id);
+-                    if !still_subscribed {
+-                        self.stop_session(&session_id).await;
++                    if !owned.contains(&session_id) && still_subscribed {
++                        continue;
++                    }
++                    if self
++                        .sessions
++                        .get(&session_id)
++                        .is_some_and(|s| s.app.allows_sender_reconnect_grace())
++                    {
++                        // Additional disappearing sockets must not extend an
++                        // existing deadline. Platform discovery is not control.
++                        self.sender_disconnect_deadlines
++                            .entry(session_id.clone())
++                            .or_insert_with(|| {
++                                tokio::time::Instant::now() + SENDER_RECONNECT_GRACE
++                            });
++                        tracing::info!(%session_id, grace_seconds = 10, "waiting for sender reconnect");
++                        continue;
+                     }
++                    tracing::info!(%session_id, "stopping app after sender transport disconnect");
++                    self.stop_session(&session_id).await;
+                 }
+                 let response = self.receiver_status(0);
+                 self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
+@@ -548,6 +589,7 @@ impl DeviceHub {
+             }
+             ReceiverRequest::Launch(r) => self.handle_launch(conn_id, source, r).await,
+             ReceiverRequest::Stop(r) => {
++                tracing::info!(session_id = %r.session_id, "explicit receiver STOP");
+                 self.stop_session(&r.session_id).await;
+                 let response = self.receiver_status(r.request_id);
+                 self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
+@@ -695,6 +737,7 @@ impl DeviceHub {
+         tokio::spawn(run_app_session(app.clone(), jobs_rx));
+ 
+         let session = Session {
++            audio_cache: None,
+             app_id: request.app_id.clone(),
+             app_key: app_key.to_string(),
+             display_name: manifest.display_name.to_string(),
+@@ -714,10 +757,14 @@ impl DeviceHub {
+     }
+ 
+     async fn stop_session(&mut self, session_id: &str) {
++        self.sender_disconnect_deadlines.remove(session_id);
+         self.session_owners.remove(session_id);
+         let Some(mut session) = self.sessions.remove(session_id) else {
+             return;
+         };
++        if let Some(cache) = session.audio_cache.take() {
++            cache.cancel();
++        }
+         tracing::info!(session_id = %session_id, app_key = %session.app_key, "stopping session");
+         // Observers (e.g. Home Assistant) retain their last MEDIA_STATUS even
+         // after the application disappears. Publish the terminal state while
+@@ -798,6 +845,14 @@ impl DeviceHub {
+                 Ok(ConnectionMessage::Connect(_)) => {
+                     self.subscriptions
+                         .insert((conn_id, source.clone()), transport.clone());
++                    if self
++                        .sender_disconnect_deadlines
++                        .remove(&transport)
++                        .is_some()
++                    {
++                        self.session_owners.insert(transport.clone(), conn_id);
++                        tracing::info!(session_id = %transport, "sender reattached within reconnect grace");
++                    }
+                     let (ctx, response, jobs) = match self.sessions.get(&transport) {
+                         Some(session) => (
+                             self.callback_context(session, Some((conn_id, source.clone()))),
+@@ -821,7 +876,13 @@ impl DeviceHub {
+                         .subscriptions
+                         .values()
+                         .any(|target| target == &transport);
+-                    if !still_subscribed {
++                    let grace_owner_left = self.session_owners.get(&transport) == Some(&conn_id)
++                        && self
++                            .sessions
++                            .get(&transport)
++                            .is_some_and(|s| s.app.allows_sender_reconnect_grace());
++                    if !still_subscribed || grace_owner_left {
++                        tracing::info!(session_id = %transport, "explicit owner or last-sender app CLOSE");
+                         self.stop_session(&transport).await;
+                     }
+                     // CLOSE only leaves the app channel. The platform socket
+@@ -893,7 +954,7 @@ impl DeviceHub {
+             }
+             MediaRequest::Play(r) => {
+                 tracing::debug!(session_id = %transport, request_id = r.request_id, "PLAY");
+-                self.play(transport, r.request_id).await;
++                self.request_play(transport, r.request_id).await;
+             }
+             MediaRequest::Pause(r) => {
+                 tracing::debug!(session_id = %transport, request_id = r.request_id, "PAUSE");
+@@ -1016,6 +1077,27 @@ impl DeviceHub {
+         self.broadcast(transport, ns::MEDIA, &response).await;
+     }
+ 
++    async fn request_play(&mut self, session_id: &str, request_id: i64) {
++        if let Some(session) = self.sessions.get(session_id) {
++            if session.app.handles_play_requests() {
++                let jobs = session.jobs.clone();
++                let ctx = session.ctx.clone();
++                // Acknowledge the actual state, not optimistic PLAYING for an
++                // empty decoder. The app will load fresh media when necessary.
++                let response = session.coordinator.status_response(request_id);
++                self.broadcast(session_id, ns::MEDIA, &response).await;
++                let _ = jobs
++                    .send(AppJob::OutputControl {
++                        ctx,
++                        control: OutputControl::Play,
++                    })
++                    .await;
++                return;
++            }
++        }
++        self.play(session_id, request_id).await;
++    }
++
+     async fn play(&mut self, session_id: &str, request_id: i64) {
+         self.transition(session_id, request_id, |coordinator| {
+             coordinator.player_state = PlayerState::Playing;
+@@ -1060,6 +1142,7 @@ impl DeviceHub {
+     }
+ 
+     async fn stop_playback(&mut self, session_id: &str, request_id: i64) {
++        self.clear_audio_cache(session_id);
+         self.transition(session_id, request_id, |coordinator| {
+             coordinator.set_idle(Some(IdleReason::Cancelled));
+         })
+@@ -1241,13 +1324,48 @@ impl DeviceHub {
+     }
+ 
+     fn attach_proxies(
+-        &self,
++        &mut self,
+         session_id: &str,
+         media_session_id: i64,
+         mut media: PlaybackMedia,
+     ) -> PlaybackMedia {
++        // Exactly one current progressive object per output; speculative queue
++        // resolution never reaches this point. A repeat carries the same hint.
++        let requested = media
++            .streams
++            .first()
++            .filter(|s| s.drm.is_none())
++            .and_then(|s| {
++                if let vibecast_sdk::StreamSource::CachedUrl { url, cache } = &s.source {
++                    Some((url.clone(), cache.clone()))
++                } else {
++                    None
++                }
++            });
++        if let Some(session) = self.sessions.get_mut(session_id) {
++            let same = match (&session.audio_cache, &requested) {
++                (Some(current), Some((_, hint))) => current.hint == *hint && !hint.is_failed(),
++                _ => false,
++            };
++            if !same {
++                if let Some(old) = session.audio_cache.take() {
++                    old.cancel();
++                }
++                session.audio_cache = requested.map(|(url, hint)| {
++                    Arc::new(crate::audio_cache::AudioCache::new(
++                        self.http.clone(),
++                        url,
++                        hint,
++                    ))
++                });
++            }
++        }
+         let (manifest_routes, license_routes) = collect_routes(&media);
+-        let has_manifest = !manifest_routes.is_empty();
++        let audio_cache = self
++            .sessions
++            .get(session_id)
++            .and_then(|s| s.audio_cache.clone());
++        let has_manifest = !manifest_routes.is_empty() || audio_cache.is_some();
+         let has_license = !license_routes.is_empty();
+         if !has_manifest && !has_license {
+             return media;
+@@ -1255,12 +1373,14 @@ impl DeviceHub {
+         let Some(session) = self.sessions.get(session_id) else {
+             return media;
+         };
+-        let proxy = Arc::new(SessionProxy::new(
++        let mut proxy = SessionProxy::new(
+             session.app.clone(),
+             self.callback_context(session, None),
+             manifest_routes,
+             license_routes,
+-        ));
++        );
++        proxy.audio_cache = audio_cache.clone();
++        let proxy = Arc::new(proxy);
+         let manifest_base =
+             has_manifest.then(|| self.proxy.register_manifest(session_id, proxy.clone()));
+         let license_base =
+@@ -1271,9 +1391,23 @@ impl DeviceHub {
+             license_base.as_deref(),
+             media_session_id,
+         );
++        if let (Some(cache), Some(base)) = (audio_cache, manifest_base) {
++            media.streams[0].source =
++                vibecast_sdk::StreamSource::Url(format!("{base}/{}", cache.token));
++        }
+         media
+     }
+ 
++    fn clear_audio_cache(&mut self, session_id: &str) {
++        if let Some(cache) = self
++            .sessions
++            .get_mut(session_id)
++            .and_then(|s| s.audio_cache.take())
++        {
++            cache.cancel();
++        }
++    }
++
+     async fn fail_load(
+         &mut self,
+         session_id: &str,
+@@ -1302,6 +1436,7 @@ impl DeviceHub {
+             None => return,
+         };
+         self.unregister_proxies(session_id);
++        self.clear_audio_cache(session_id);
+         self.send_to(conn_id, session_id, sender_id, ns::MEDIA, &failed)
+             .await;
+         self.broadcast(session_id, ns::MEDIA, &status).await;
+@@ -1421,7 +1556,7 @@ impl DeviceHub {
+ 
+     async fn on_output_control(&mut self, session_id: &str, control: PlayerControlRequest) {
+         match control {
+-            PlayerControlRequest::Play => self.play(session_id, 0).await,
++            PlayerControlRequest::Play => self.request_play(session_id, 0).await,
+             PlayerControlRequest::Pause => self.pause(session_id, 0).await,
+             PlayerControlRequest::Stop => self.stop_playback(session_id, 0).await,
+             PlayerControlRequest::Seek { position } if position.is_finite() => {
+@@ -1480,6 +1615,11 @@ impl DeviceHub {
+             None => return,
+         };
+         if player_state == PlayerState::Idle {
++            // EOF is not eviction: repeat-one reopens the same bytes. Errors,
++            // user Stop, a new title and session teardown release them.
++            if idle_reason != Some(IdleReason::Finished) {
++                self.clear_audio_cache(session_id);
++            }
+             self.unregister_proxies(session_id);
+         }
+         self.broadcast(session_id, ns::MEDIA, &response).await;
+diff --git a/crates/vibecast-core/src/lib.rs b/crates/vibecast-core/src/lib.rs
+index 3504b24..71460e5 100644
+--- a/crates/vibecast-core/src/lib.rs
++++ b/crates/vibecast-core/src/lib.rs
+@@ -9,6 +9,7 @@
+ 
+ #![forbid(unsafe_code)]
+ 
++mod audio_cache;
+ mod coordinator;
+ mod hub;
+ mod identity;
+diff --git a/crates/vibecast-core/src/proxy.rs b/crates/vibecast-core/src/proxy.rs
+index e7cd97f..f77dbe8 100644
+--- a/crates/vibecast-core/src/proxy.rs
++++ b/crates/vibecast-core/src/proxy.rs
+@@ -53,6 +53,7 @@ pub(crate) struct ManifestRoute {
+ 
+ /// Session-scoped proxy handler backing the bridge's license/manifest routes.
+ pub(crate) struct SessionProxy {
++    pub(crate) audio_cache: Option<Arc<crate::audio_cache::AudioCache>>,
+     app: Arc<dyn AppSession>,
+     ctx: AppContext,
+     license_routes: HashMap<RouteId, LicenseRoute>,
+@@ -67,6 +68,7 @@ impl SessionProxy {
+         license_routes: HashMap<RouteId, LicenseRoute>,
+     ) -> Self {
+         Self {
++            audio_cache: None,
+             app,
+             ctx,
+             license_routes,
+@@ -149,6 +151,19 @@ impl LicenseHandler for SessionProxy {
+ 
+ #[async_trait]
+ impl ManifestHandler for SessionProxy {
++    async fn handle_cached_media(
++        &self,
++        token: &str,
++        method: http::Method,
++        headers: HeaderMap,
++    ) -> Option<vibecast_player_api::CachedMediaResponse> {
++        let cache = self.audio_cache.as_ref()?;
++        if cache.token != token {
++            return None;
++        }
++        Some(cache.response(method, headers).await)
++    }
++
+     async fn handle_manifest(
+         &self,
+         request: ManifestProxyRequest,
+@@ -350,6 +365,7 @@ fn drm_headers(map: &HashMap<String, String>) -> HeaderMap {
+ /// routes and the rewritten URLs line up.
+ fn manifest_kind_for(stream: &PlaybackStream) -> Option<ManifestKind> {
+     match &stream.source {
++        StreamSource::CachedUrl { .. } => None,
+         StreamSource::Url(url) => {
+             let kind = infer_manifest_kind(Some(&stream.content_type), url);
+             (kind != ManifestKind::Unknown).then_some(kind)
+@@ -372,7 +388,9 @@ pub(crate) fn collect_routes(
+     for (index, stream) in media.streams.iter().enumerate() {
+         if let Some(kind) = manifest_kind_for(stream) {
+             let source = match &stream.source {
+-                StreamSource::Url(url) => ManifestSource::Upstream(url.clone()),
++                StreamSource::Url(url) | StreamSource::CachedUrl { url, .. } => {
++                    ManifestSource::Upstream(url.clone())
++                }
+                 StreamSource::InlineManifest(body) => {
+                     ManifestSource::Inline(body.clone().into_bytes())
+                 }
+@@ -442,7 +460,7 @@ pub(crate) fn to_payload(media: &PlaybackMedia) -> PlaybackMediaPayload {
+                 // inline manifest that reached here unrewritten (no proxy base)
+                 // has no player-facing URL, so it is dropped to an empty string.
+                 url: match &stream.source {
+-                    StreamSource::Url(url) => url.clone(),
++                    StreamSource::Url(url) | StreamSource::CachedUrl { url, .. } => url.clone(),
+                     StreamSource::InlineManifest(_) => String::new(),
+                 },
+                 content_type: stream.content_type.clone(),
+diff --git a/crates/vibecast-core/src/tests.rs b/crates/vibecast-core/src/tests.rs
+index ab32d26..19c34a6 100644
+--- a/crates/vibecast-core/src/tests.rs
++++ b/crates/vibecast-core/src/tests.rs
+@@ -49,6 +49,7 @@ impl FakePlayer {
+ #[derive(Default)]
+ struct FakeProxy {
+     events: Mutex<Vec<String>>,
++    manifests: Mutex<std::collections::HashMap<String, Arc<dyn ManifestHandler>>>,
+ }
+ 
+ impl ProxyRegistrar for FakeProxy {
+@@ -65,7 +66,11 @@ impl ProxyRegistrar for FakeProxy {
+             .unwrap()
+             .push(format!("-license:{session_id}"));
+     }
+-    fn register_manifest(&self, session_id: &str, _handler: Arc<dyn ManifestHandler>) -> String {
++    fn register_manifest(&self, session_id: &str, handler: Arc<dyn ManifestHandler>) -> String {
++        self.manifests
++            .lock()
++            .unwrap()
++            .insert(session_id.into(), handler);
+         self.events
+             .lock()
+             .unwrap()
+@@ -73,6 +78,7 @@ impl ProxyRegistrar for FakeProxy {
+         format!("http://proxy/manifest/{session_id}")
+     }
+     fn unregister_manifest(&self, session_id: &str) {
++        self.manifests.lock().unwrap().remove(session_id);
+         self.events
+             .lock()
+             .unwrap()
+@@ -122,16 +128,45 @@ impl AppProvider for FakeApp {
+             .snapshot()
+             .get(FAKE_SETTING)
+             .expect("fake setting has string type");
+-        Ok(Arc::new(FakeSession))
++        Ok(Arc::new(FakeSession(
++            std::sync::atomic::AtomicBool::new(false),
++            Mutex::new(None),
++            std::sync::atomic::AtomicBool::new(false),
++        )))
+     }
+ }
+ 
+ const FAKE_NS: &str = "urn:x-cast:test.fake";
+ 
+-struct FakeSession;
++struct FakeSession(
++    std::sync::atomic::AtomicBool,
++    Mutex<Option<PlaybackStream>>,
++    std::sync::atomic::AtomicBool,
++);
+ 
+ #[async_trait]
+ impl AppSession for FakeSession {
++    fn allows_sender_reconnect_grace(&self) -> bool {
++        self.2.load(std::sync::atomic::Ordering::Relaxed)
++    }
++    fn handles_play_requests(&self) -> bool {
++        self.0.load(std::sync::atomic::Ordering::Relaxed)
++    }
++
++    async fn on_output_control(&self, ctx: &AppContext, control: vibecast_sdk::OutputControl) {
++        if control == vibecast_sdk::OutputControl::Play {
++            let media = PlaybackMedia::new(
++                ctx.session_id.clone(),
++                vec![PlaybackStream::url(
++                    "https://example.test/fresh",
++                    "audio/mp4",
++                )],
++                StreamType::Buffered,
++            );
++            ctx.playback_controller().load(media).await;
++        }
++    }
++
+     async fn resolve_media(
+         &self,
+         ctx: &AppContext,
+@@ -162,6 +197,35 @@ impl AppSession for FakeSession {
+     ) -> vibecast_sdk::MessageDisposition {
+         if namespace == FAKE_NS {
+             match data.get("type").and_then(Value::as_str) {
++                Some("KEEP_ON_DISCONNECT") => {
++                    self.2.store(true, std::sync::atomic::Ordering::Relaxed);
++                    ctx.send_custom(namespace, serde_json::json!({"type":"READY"}))
++                        .await;
++                }
++                Some("PUSH_CACHE") | Some("REPEAT_CACHE") => {
++                    let stream = {
++                        let mut current = self.1.lock().unwrap();
++                        if data["type"] == "PUSH_CACHE" || current.is_none() {
++                            *current = Some(PlaybackStream::cached_url(
++                                "http://127.0.0.1:1/never-requested",
++                                "audio/mp4",
++                            ));
++                        }
++                        current.clone().unwrap()
++                    };
++                    ctx.playback_controller()
++                        .load(PlaybackMedia::new(
++                            ctx.session_id.clone(),
++                            vec![stream],
++                            StreamType::Buffered,
++                        ))
++                        .await;
++                }
++                Some("HANDLE_PLAY") => {
++                    self.0.store(true, std::sync::atomic::Ordering::Relaxed);
++                    ctx.send_custom(namespace, serde_json::json!({"type":"READY"}))
++                        .await;
++                }
+                 Some("PUSH_MEDIA") => {
+                     let mut media = PlaybackMedia::new(
+                         ctx.session_id.clone(),
+@@ -366,6 +430,202 @@ async fn launch_id(client: &mut Framed<DuplexStream, CastCodec>, app_id: &str) -
+ 
+ // -- tests -----------------------------------------------------------------
+ 
++#[tokio::test]
++async fn current_cache_survives_eof_repeat_but_not_title_change_or_stop() {
++    async fn push(h: &mut Harness, session: &str, kind: &str, loads: usize) -> String {
++        send(
++            &mut h.client,
++            FAKE_NS,
++            session,
++            &serde_json::json!({"type":kind}).to_string(),
++        )
++        .await;
++        tokio::time::timeout(std::time::Duration::from_secs(2), async {
++            loop {
++                let urls: Vec<String> = h
++                    .player
++                    .commands()
++                    .iter()
++                    .filter_map(|c| match c {
++                        PlayerCommand::Load { media, .. } => Some(media.streams[0].url.clone()),
++                        _ => None,
++                    })
++                    .collect();
++                if urls.len() == loads {
++                    break urls.last().unwrap().clone();
++                }
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .unwrap()
++    }
++    async fn wait_unregistered(h: &Harness, session: &str) {
++        tokio::time::timeout(std::time::Duration::from_secs(2), async {
++            while h.proxy.manifests.lock().unwrap().contains_key(session) {
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .unwrap();
++    }
++    let mut h = setup().await;
++    let session = launch(&mut h.client).await;
++    let first = push(&mut h, &session, "PUSH_CACHE", 1).await;
++    let token = first.rsplit('/').next().unwrap();
++    assert!(token.starts_with("cache-"));
++    let old = h.proxy.manifests.lock().unwrap()[&session].clone();
++    h.hub
++        .send_player_report(PlayerReport::State {
++            session_id: session.clone(),
++            player_state: PlayerState::Idle,
++            current_time: 100.0,
++            duration: Some(100.0),
++            idle_reason: Some(vibecast_messages::IdleReason::Finished),
++            volume: None,
++            muted: None,
++        })
++        .await
++        .unwrap();
++    wait_unregistered(&h, &session).await;
++    assert_eq!(push(&mut h, &session, "REPEAT_CACHE", 2).await, first);
++    // A normal selection (including playlist traversal) gets a new single slot,
++    // even if its upstream URL happens to be identical.
++    let second = push(&mut h, &session, "PUSH_CACHE", 3).await;
++    assert_ne!(first, second);
++    assert_eq!(
++        old.handle_cached_media(token, http::Method::GET, http::HeaderMap::new())
++            .await
++            .unwrap()
++            .status,
++        502
++    );
++    let current = h.proxy.manifests.lock().unwrap()[&session].clone();
++    assert!(current
++        .handle_cached_media(token, http::Method::GET, http::HeaderMap::new())
++        .await
++        .is_none());
++    send(&mut h.client, FAKE_NS, &session, r#"{"type":"APP_STOP"}"#).await;
++    wait_unregistered(&h, &session).await;
++    assert_eq!(
++        current
++            .handle_cached_media(
++                second.rsplit('/').next().unwrap(),
++                http::Method::GET,
++                http::HeaderMap::new()
++            )
++            .await
++            .unwrap()
++            .status,
++        502
++    );
++}
++
++#[tokio::test]
++async fn app_owned_cast_play_loads_fresh_media_without_false_playing() {
++    let mut harness = setup().await;
++    let transport = launch(&mut harness.client).await;
++    send(
++        &mut harness.client,
++        ns::CONNECTION,
++        &transport,
++        r#"{"type":"CONNECT"}"#,
++    )
++    .await;
++    let _ = next_json(&mut harness.client).await;
++    send(
++        &mut harness.client,
++        FAKE_NS,
++        &transport,
++        r#"{"type":"HANDLE_PLAY"}"#,
++    )
++    .await;
++    assert_eq!(next_json(&mut harness.client).await["type"], "READY");
++    send(
++        &mut harness.client,
++        ns::MEDIA,
++        &transport,
++        r#"{"type":"PLAY","requestId":71,"mediaSessionId":1}"#,
++    )
++    .await;
++    let ack = next_json(&mut harness.client).await;
++    assert_eq!(ack["requestId"], 71);
++    assert_ne!(ack["status"][0]["playerState"], "PLAYING");
++    tokio::time::timeout(std::time::Duration::from_secs(2), async {
++        loop {
++            if harness
++                .player
++                .commands()
++                .iter()
++                .any(|c| matches!(c, PlayerCommand::Load { .. }))
++            {
++                break;
++            }
++            tokio::task::yield_now().await;
++        }
++    })
++    .await
++    .unwrap();
++    assert!(!harness
++        .player
++        .commands()
++        .iter()
++        .any(|c| matches!(c, PlayerCommand::Play { .. })));
++    harness
++        .hub
++        .send_player_report(PlayerReport::ControlRequest {
++            session_id: transport.clone(),
++            control: vibecast_player_api::PlayerControlRequest::Play,
++        })
++        .await
++        .unwrap();
++    tokio::time::timeout(std::time::Duration::from_secs(2), async {
++        loop {
++            if harness
++                .player
++                .commands()
++                .iter()
++                .filter(|c| matches!(c, PlayerCommand::Load { .. }))
++                .count()
++                == 2
++            {
++                break;
++            }
++            tokio::task::yield_now().await;
++        }
++    })
++    .await
++    .unwrap();
++    assert!(!harness
++        .player
++        .commands()
++        .iter()
++        .any(|c| matches!(c, PlayerCommand::Play { .. })));
++    // App-originated Play must bypass interception (no callback loop).
++    send(
++        &mut harness.client,
++        FAKE_NS,
++        &transport,
++        r#"{"type":"APP_PLAY"}"#,
++    )
++    .await;
++    tokio::time::timeout(std::time::Duration::from_secs(2), async {
++        loop {
++            if harness
++                .player
++                .commands()
++                .iter()
++                .any(|c| matches!(c, PlayerCommand::Play { .. }))
++            {
++                break;
++            }
++            tokio::task::yield_now().await;
++        }
++    })
++    .await
++    .unwrap();
++}
++
+ #[tokio::test]
+ async fn launch_injects_player_scoped_settings() {
+     let mut harness = setup().await;
+@@ -765,35 +1025,400 @@ async fn receiver_stop_publishes_terminal_media_before_removing_app() {
+ 
+ #[tokio::test]
+ async fn app_close_refreshes_platform_status_without_transport_disconnect() {
+-    let mut harness = setup().await;
+-    let client = &mut harness.client;
+-    let transport = launch(client).await;
+-    send(client, ns::CONNECTION, &transport, r#"{"type":"CONNECT"}"#).await;
+-    let _ = next_json(client).await;
+-    send(client, FAKE_NS, &transport, r#"{"type":"PUSH_MEDIA"}"#).await;
+-    let _ = next_json(client).await;
+-    let _ = next_json(client).await;
+-    // The sender closes its app channel, not the still-subscribed platform
+-    // connection. No later socket disconnect or GET_STATUS should be required.
+-    send(client, ns::CONNECTION, &transport, r#"{"type":"CLOSE"}"#).await;
+-    let receiver = tokio::time::timeout(std::time::Duration::from_secs(2), next_json(client))
++    for preserve in [false, true] {
++        let mut harness = setup().await;
++        let client = &mut harness.client;
++        let transport = launch(client).await;
++        if preserve {
++            send(
++                client,
++                FAKE_NS,
++                &transport,
++                r#"{"type":"KEEP_ON_DISCONNECT"}"#,
++            )
++            .await;
++            assert_eq!(next_json(client).await["type"], "READY");
++        }
++        send(client, ns::CONNECTION, &transport, r#"{"type":"CONNECT"}"#).await;
++        let _ = next_json(client).await;
++        send(client, FAKE_NS, &transport, r#"{"type":"PUSH_MEDIA"}"#).await;
++        let _ = next_json(client).await;
++        let _ = next_json(client).await;
++        // The sender closes its app channel, not the still-subscribed platform
++        // connection. No later socket disconnect or GET_STATUS should be required.
++        send(client, ns::CONNECTION, &transport, r#"{"type":"CLOSE"}"#).await;
++        let receiver = tokio::time::timeout(std::time::Duration::from_secs(2), next_json(client))
++            .await
++            .expect("platform observer must learn that the app stopped");
++        assert_eq!(receiver["type"], "RECEIVER_STATUS");
++        assert!(receiver["status"]["applications"]
++            .as_array()
++            .unwrap()
++            .is_empty());
++        assert!(harness
++            .player
++            .commands()
++            .iter()
++            .any(|c| matches!(c, PlayerCommand::Stop { .. })));
++        // The same socket can immediately create a new app session.
++        assert_ne!(launch(client).await, transport);
++    }
++}
++
++/// Losing the control socket must not end an opted-in receiver-owned session.
++#[tokio::test]
++async fn opted_in_owner_disconnect_preserves_cache_and_allows_explicit_stop() {
++    retained_session_disconnect(true, DisconnectAction::Reattach).await;
++}
++
++#[tokio::test]
++async fn opted_in_last_subscriber_disconnect_preserves_cache_and_allows_explicit_stop() {
++    retained_session_disconnect(false, DisconnectAction::Reattach).await;
++}
++
++#[tokio::test]
++async fn owner_disconnect_grace_expires_despite_existing_observer_and_platform_probes() {
++    retained_session_disconnect(true, DisconnectAction::Expire).await;
++}
++
++#[tokio::test]
++async fn last_subscriber_disconnect_grace_expires() {
++    retained_session_disconnect(false, DisconnectAction::Expire).await;
++}
++
++#[tokio::test]
++async fn explicit_stop_during_grace_is_immediate() {
++    retained_session_disconnect(true, DisconnectAction::Stop).await;
++}
++
++#[tokio::test]
++async fn explicit_close_during_grace_is_immediate() {
++    retained_session_disconnect(true, DisconnectAction::Close).await;
++}
++
++#[tokio::test]
++async fn explicit_owner_close_stops_even_with_an_observer() {
++    retained_session_disconnect(true, DisconnectAction::OwnerClose).await;
++}
++
++#[tokio::test]
++async fn observer_disconnect_does_not_start_grace_while_owner_is_attached() {
++    retained_session_disconnect(false, DisconnectAction::ObserverLost).await;
++}
++
++#[tokio::test]
++async fn replacement_session_is_not_stopped_by_old_grace_deadline() {
++    retained_session_disconnect(true, DisconnectAction::Replace).await;
++}
++
++#[derive(Clone, Copy)]
++enum DisconnectAction {
++    Reattach,
++    Expire,
++    Stop,
++    Close,
++    Replace,
++    OwnerClose,
++    ObserverLost,
++}
++
++async fn retained_session_disconnect(drop_owner: bool, action: DisconnectAction) {
++    let mut h = setup().await;
++    let transport = launch(&mut h.client).await;
++    send(
++        &mut h.client,
++        FAKE_NS,
++        &transport,
++        r#"{"type":"KEEP_ON_DISCONNECT"}"#,
++    )
++    .await;
++    assert_eq!(next_json(&mut h.client).await["type"], "READY");
++    send(
++        &mut h.client,
++        FAKE_NS,
++        &transport,
++        r#"{"type":"PUSH_CACHE"}"#,
++    )
++    .await;
++    tokio::time::timeout(std::time::Duration::from_secs(2), async {
++        while !h.proxy.manifests.lock().unwrap().contains_key(&transport) {
++            tokio::task::yield_now().await;
++        }
++    })
++    .await
++    .unwrap();
++    let cache_proxy = h.proxy.manifests.lock().unwrap()[&transport].clone();
++    let (server_end, client_end) = tokio::io::duplex(64 * 1024);
++    let (events_tx, mut events_rx) = mpsc::channel::<ServerEvent>(32);
++    tokio::spawn(run_connection(
++        server_end,
++        2,
++        Arc::from("observer"),
++        Arc::new(dummy_auth()),
++        events_tx,
++    ));
++    let hub = h.hub.clone();
++    tokio::spawn(async move {
++        while let Some(event) = events_rx.recv().await {
++            if hub.send_server_event(event).await.is_err() {
++                break;
++            }
++        }
++    });
++    let mut observer = Framed::new(client_end, CastCodec);
++    send(
++        &mut observer,
++        ns::CONNECTION,
++        "receiver-0",
++        r#"{"type":"CONNECT"}"#,
++    )
++    .await;
++    send(
++        &mut observer,
++        ns::CONNECTION,
++        &transport,
++        r#"{"type":"CONNECT"}"#,
++    )
++    .await;
++    assert_eq!(next_json(&mut observer).await["type"], "MEDIA_STATUS");
++    if matches!(action, DisconnectAction::OwnerClose) {
++        send(
++            &mut h.client,
++            ns::CONNECTION,
++            &transport,
++            r#"{"type":"CLOSE"}"#,
++        )
++        .await;
++        tokio::time::timeout(std::time::Duration::from_secs(2), async {
++            loop {
++                let status = next_json(&mut observer).await;
++                if status["type"] == "RECEIVER_STATUS" {
++                    assert!(status["status"]["applications"]
++                        .as_array()
++                        .unwrap()
++                        .is_empty());
++                    break;
++                }
++            }
++        })
+         .await
+-        .expect("platform observer must learn that the app stopped");
+-    assert_eq!(receiver["type"], "RECEIVER_STATUS");
+-    assert!(receiver["status"]["applications"]
+-        .as_array()
+-        .unwrap()
+-        .is_empty());
+-    assert!(harness
++        .unwrap();
++        assert!(h
++            .player
++            .commands()
++            .iter()
++            .any(|c| matches!(c, PlayerCommand::Stop { .. })));
++        return;
++    }
++    if matches!(action, DisconnectAction::ObserverLost) {
++        send(
++            &mut h.client,
++            ns::CONNECTION,
++            &transport,
++            r#"{"type":"CONNECT"}"#,
++        )
++        .await;
++        assert_eq!(next_json(&mut h.client).await["type"], "MEDIA_STATUS");
++    }
++    let mut survivor = if drop_owner {
++        drop(h.client);
++        observer
++    } else {
++        drop(observer);
++        h.client
++    };
++    let status = tokio::time::timeout(std::time::Duration::from_secs(2), next_json(&mut survivor))
++        .await
++        .unwrap();
++    assert_eq!(status["type"], "RECEIVER_STATUS");
++    assert_eq!(
++        status["status"]["applications"][0]["transportId"],
++        transport
++    );
++    assert!(!h
++        .player
++        .commands()
++        .iter()
++        .any(|c| matches!(c, PlayerCommand::Stop { .. })));
++    assert!(Arc::ptr_eq(
++        &cache_proxy,
++        &h.proxy.manifests.lock().unwrap()[&transport]
++    ));
++    if matches!(action, DisconnectAction::ObserverLost) {
++        tokio::time::sleep(std::time::Duration::from_millis(10100)).await;
++        assert!(!h
++            .player
++            .commands()
++            .iter()
++            .any(|c| matches!(c, PlayerCommand::Stop { .. })));
++        h.hub.shutdown().await;
++        return;
++    }
++    if matches!(action, DisconnectAction::Expire) {
++        // Discovery/status traffic at the end of the grace must not reset it.
++        tokio::time::sleep(std::time::Duration::from_secs(9)).await;
++        send(
++            &mut survivor,
++            ns::CONNECTION,
++            "receiver-0",
++            r#"{"type":"CONNECT"}"#,
++        )
++        .await;
++        send(
++            &mut survivor,
++            ns::RECEIVER,
++            "receiver-0",
++            r#"{"type":"GET_STATUS","requestId":80}"#,
++        )
++        .await;
++        assert_eq!(
++            next_json(&mut survivor).await["status"]["applications"][0]["transportId"],
++            transport
++        );
++        tokio::time::timeout(std::time::Duration::from_secs(3), async {
++            loop {
++                let status = next_json(&mut survivor).await;
++                if status["type"] == "RECEIVER_STATUS" {
++                    assert!(status["status"]["applications"]
++                        .as_array()
++                        .unwrap()
++                        .is_empty());
++                    break;
++                }
++            }
++        })
++        .await
++        .unwrap();
++        assert!(h
++            .player
++            .commands()
++            .iter()
++            .any(|c| matches!(c, PlayerCommand::Stop { .. })));
++        assert!(!h.proxy.manifests.lock().unwrap().contains_key(&transport));
++        return;
++    }
++    if matches!(action, DisconnectAction::Replace) {
++        send(
++            &mut survivor,
++            ns::RECEIVER,
++            "receiver-0",
++            r#"{"type":"LAUNCH","requestId":81,"appId":"APP1"}"#,
++        )
++        .await;
++        let replacement = tokio::time::timeout(std::time::Duration::from_secs(2), async {
++            loop {
++                let status = next_json(&mut survivor).await;
++                if status["type"] == "RECEIVER_STATUS" {
++                    break status["status"]["applications"][0]["transportId"]
++                        .as_str()
++                        .unwrap()
++                        .to_string();
++                }
++            }
++        })
++        .await
++        .unwrap();
++        assert_ne!(replacement, transport);
++        tokio::time::sleep(std::time::Duration::from_millis(10100)).await;
++        send(
++            &mut survivor,
++            ns::RECEIVER,
++            "receiver-0",
++            r#"{"type":"GET_STATUS","requestId":82}"#,
++        )
++        .await;
++        assert_eq!(
++            next_json(&mut survivor).await["status"]["applications"][0]["transportId"],
++            replacement
++        );
++        h.hub.shutdown().await;
++        return;
++    }
++    if matches!(action, DisconnectAction::Reattach) {
++        // Reattach to the same app and repeat without replacing its cache URL.
++        send(
++            &mut survivor,
++            ns::CONNECTION,
++            &transport,
++            r#"{"type":"CONNECT"}"#,
++        )
++        .await;
++        assert_eq!(next_json(&mut survivor).await["type"], "MEDIA_STATUS");
++        send(
++            &mut survivor,
++            FAKE_NS,
++            &transport,
++            r#"{"type":"REPEAT_CACHE"}"#,
++        )
++        .await;
++        tokio::time::timeout(std::time::Duration::from_secs(2), async {
++            loop {
++                let urls: Vec<_> = h
++                    .player
++                    .commands()
++                    .into_iter()
++                    .filter_map(|c| match c {
++                        PlayerCommand::Load { media, .. } => Some(media.streams[0].url.clone()),
++                        _ => None,
++                    })
++                    .collect();
++                if urls.len() == 2 {
++                    assert_eq!(urls[0], urls[1]);
++                    break;
++                }
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .unwrap();
++        // The old expiry must not stop a successfully reattached app later.
++        tokio::time::sleep(std::time::Duration::from_millis(10100)).await;
++        assert!(!h
++            .player
++            .commands()
++            .iter()
++            .any(|c| matches!(c, PlayerCommand::Stop { .. })));
++    }
++    if matches!(action, DisconnectAction::Close) {
++        send(
++            &mut survivor,
++            ns::CONNECTION,
++            &transport,
++            r#"{"type":"CLOSE"}"#,
++        )
++        .await;
++    } else {
++        send(
++            &mut survivor,
++            ns::RECEIVER,
++            "receiver-0",
++            &serde_json::json!({"type":"STOP", "requestId":90, "sessionId":transport}).to_string(),
++        )
++        .await;
++    }
++    tokio::time::timeout(std::time::Duration::from_secs(2), async {
++        loop {
++            let status = next_json(&mut survivor).await;
++            if status["type"] == "RECEIVER_STATUS" {
++                assert!(status["status"]["applications"]
++                    .as_array()
++                    .unwrap()
++                    .is_empty());
++                break;
++            }
++        }
++    })
++    .await
++    .unwrap();
++    assert!(h
+         .player
+         .commands()
+         .iter()
+         .any(|c| matches!(c, PlayerCommand::Stop { .. })));
+-    // The same socket can immediately create a new app session.
+-    assert_ne!(launch(client).await, transport);
++    assert!(!h.proxy.manifests.lock().unwrap().contains_key(&transport));
+ }
+ 
+-/// A separate monitoring connection must not retain the owner's stopped media.
++/// Non-opted-in apps keep the existing owner-disconnect cleanup policy.
+ #[tokio::test]
+ async fn owner_disconnect_notifies_a_separate_observer_and_allows_takeover() {
+     let mut harness = setup().await;
+diff --git a/crates/vibecast-platform/src/manager.rs b/crates/vibecast-platform/src/manager.rs
+index dccce57..b8dc6e9 100644
+--- a/crates/vibecast-platform/src/manager.rs
++++ b/crates/vibecast-platform/src/manager.rs
+@@ -308,6 +308,7 @@ impl PlayerManager {
+ fn player_capabilities(payload: PlayerCapabilitiesPayload) -> PlayerCapabilities {
+     let default = PlayerCapabilities::default();
+     PlayerCapabilities {
++        local_audio_cache: payload.local_audio_cache,
+         platform: payload.platform.map_or(default.platform, parse_platform),
+         drm: payload
+             .drm
+diff --git a/crates/vibecast-player-api/src/lib.rs b/crates/vibecast-player-api/src/lib.rs
+index e4087db..593fc84 100644
+--- a/crates/vibecast-player-api/src/lib.rs
++++ b/crates/vibecast-player-api/src/lib.rs
+@@ -33,7 +33,7 @@ pub use protocol::{
+     SettingsUpdateResultMessage, SettingsUpdateStatus, PLAYER_PROTOCOL_VERSION,
+ };
+ pub use proxy::{
+-    LicenseHandler, LicenseRequest, LicenseResponse, ManifestHandler, ManifestProxyRequest,
+-    ManifestProxyResponse, ProxyError, ProxyRegistrar, ProxyResult, RouteId, RouteIdParseError,
+-    RouteKind,
++    CachedMediaBody, CachedMediaResponse, LicenseHandler, LicenseRequest, LicenseResponse,
++    ManifestHandler, ManifestProxyRequest, ManifestProxyResponse, ProxyError, ProxyRegistrar,
++    ProxyResult, RouteId, RouteIdParseError, RouteKind,
+ };
+diff --git a/crates/vibecast-player-api/src/protocol.rs b/crates/vibecast-player-api/src/protocol.rs
+index 72dfd30..833145d 100644
+--- a/crates/vibecast-player-api/src/protocol.rs
++++ b/crates/vibecast-player-api/src/protocol.rs
+@@ -290,6 +290,7 @@ pub struct PlayerRegistration {
+ #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+ #[serde(rename_all = "camelCase", default)]
+ pub struct PlayerCapabilitiesPayload {
++    pub local_audio_cache: bool,
+     pub platform: Option<String>,
+     pub drm: Vec<DrmCapabilityPayload>,
+     pub video_codecs: Vec<String>,
+diff --git a/crates/vibecast-player-api/src/proxy.rs b/crates/vibecast-player-api/src/proxy.rs
+index d2d88d6..62d3b4e 100644
+--- a/crates/vibecast-player-api/src/proxy.rs
++++ b/crates/vibecast-player-api/src/proxy.rs
+@@ -186,6 +186,16 @@ pub trait LicenseHandler: Send + Sync {
+ /// Session-scoped manifest resolver.
+ #[async_trait]
+ pub trait ManifestHandler: Send + Sync {
++    /// Optional progressive media route, served without buffering the response.
++    async fn handle_cached_media(
++        &self,
++        _token: &str,
++        _method: http::Method,
++        _headers: HeaderMap,
++    ) -> Option<CachedMediaResponse> {
++        None
++    }
++
+     /// Resolve one proxied manifest request.
+     async fn handle_manifest(
+         &self,
+@@ -193,6 +203,19 @@ pub trait ManifestHandler: Send + Sync {
+     ) -> ProxyResult<ManifestProxyResponse>;
+ }
+ 
++/// Pull-based body: client backpressure bounds transient response buffers.
++#[async_trait]
++pub trait CachedMediaBody: Send {
++    async fn next_chunk(&mut self) -> std::io::Result<Option<Vec<u8>>>;
++}
++
++/// Response for a current-title progressive media cache.
++pub struct CachedMediaResponse {
++    pub status: u16,
++    pub headers: HeaderMap,
++    pub body: Option<Box<dyn CachedMediaBody>>,
++}
++
+ /// Registration seam for a player's session-scoped proxy routes.
+ ///
+ /// The receiver hub registers per-session license/manifest handlers through
+diff --git a/crates/vibecast-sdk/src/capabilities.rs b/crates/vibecast-sdk/src/capabilities.rs
+index 9876354..218335b 100644
+--- a/crates/vibecast-sdk/src/capabilities.rs
++++ b/crates/vibecast-sdk/src/capabilities.rs
+@@ -110,6 +110,8 @@ impl Resolution {
+ /// translate these into their backend's own vocabulary.
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub struct PlayerCapabilities {
++    /// Decoder can fetch the receiver's local current-title audio cache.
++    pub local_audio_cache: bool,
+     /// The player's runtime platform.
+     pub platform: Platform,
+     /// DRM systems the player supports, with security levels.
+@@ -166,6 +168,7 @@ impl Default for PlayerCapabilities {
+     fn default() -> Self {
+         Self {
+             platform: Platform::Other("unknown".to_string()),
++            local_audio_cache: false,
+             drm: Vec::new(),
+             video_codecs: vec!["h264".to_string(), "hevc".to_string()],
+             audio_codecs: vec!["aac".to_string()],
+diff --git a/crates/vibecast-sdk/src/lib.rs b/crates/vibecast-sdk/src/lib.rs
+index d2bec31..228174f 100644
+--- a/crates/vibecast-sdk/src/lib.rs
++++ b/crates/vibecast-sdk/src/lib.rs
+@@ -92,8 +92,8 @@ pub use context::{
+ pub use error::{LaunchError, MediaResolveCode, MediaResolveError};
+ pub use license::{LicenseForwarder, LicenseRequest, LicenseResponse, LicenseRoute};
+ pub use types::{
+-    DrmInfo, DrmSystem, LaunchCredentials, OutputControl, PlaybackMedia, PlaybackState,
+-    PlaybackStream, StreamSource,
++    DrmInfo, DrmSystem, LaunchCredentials, MediaCacheHint, OutputControl, PlaybackMedia,
++    PlaybackState, PlaybackStream, StreamSource,
+ };
+ 
+ // Re-export the Cast protocol types apps need so they depend on this crate only.
+@@ -253,7 +253,20 @@ pub trait AppSession: Send + Sync {
+     /// Output volume, including changes made directly at the player.
+     async fn on_volume_update(&self, _ctx: &AppContext, _level: f64, _muted: bool) {}
+ 
+-    /// Queue navigation initiated at the physical output device.
++    /// Whether sender/output Play must go through app-owned recovery instead of
++    /// directly unpausing the decoder. App-originated Play is never intercepted.
++    fn handles_play_requests(&self) -> bool {
++        false
++    }
++
++    /// Allow the runtime's bounded (10-second) reconnect grace after a lost
++    /// physical Cast connection. The app is stopped if no sender reattaches to
++    /// its transport. Explicit STOP/CLOSE and replacement remain immediate.
++    fn allows_sender_reconnect_grace(&self) -> bool {
++        false
++    }
++
++    /// User control forwarded to the app (including opted-in Play requests).
+     async fn on_output_control(&self, _ctx: &AppContext, _control: OutputControl) {}
+ 
+     /// Called before the session is torn down.
+diff --git a/crates/vibecast-sdk/src/types.rs b/crates/vibecast-sdk/src/types.rs
+index c9ff8b9..7a9490b 100644
+--- a/crates/vibecast-sdk/src/types.rs
++++ b/crates/vibecast-sdk/src/types.rs
+@@ -52,6 +52,8 @@ impl DrmInfo {
+ pub enum StreamSource {
+     /// Fetch (and normalize, for DASH/HLS) the manifest/media from this URL.
+     Url(String),
++    /// Progressive clear media eligible for a bounded, current-title RAM cache.
++    CachedUrl { url: String, cache: MediaCacheHint },
+     /// Serve this app-generated manifest body directly. The `content_type`
+     /// on the owning [`PlaybackStream`] selects the manifest kind.
+     InlineManifest(String),
+@@ -62,12 +64,41 @@ impl StreamSource {
+     #[must_use]
+     pub fn as_url(&self) -> Option<&str> {
+         match self {
+-            StreamSource::Url(url) => Some(url),
++            StreamSource::Url(url) | StreamSource::CachedUrl { url, .. } => Some(url),
+             StreamSource::InlineManifest(_) => None,
+         }
+     }
+ }
+ 
++/// Shared cache identity/status; contains no media bytes or transport objects.
++/// Only a fully downloaded entry is safe to replay after its source URL expires.
++#[derive(Debug, Clone, Default)]
++pub struct MediaCacheHint(std::sync::Arc<std::sync::atomic::AtomicU8>);
++
++impl PartialEq for MediaCacheHint {
++    fn eq(&self, other: &Self) -> bool {
++        std::sync::Arc::ptr_eq(&self.0, &other.0)
++    }
++}
++impl Eq for MediaCacheHint {}
++
++impl MediaCacheHint {
++    pub fn is_complete(&self) -> bool {
++        self.0.load(std::sync::atomic::Ordering::Acquire) == 1
++    }
++    pub fn is_failed(&self) -> bool {
++        self.0.load(std::sync::atomic::Ordering::Acquire) == 2
++    }
++    /// Receiver-side completion notification.
++    pub fn mark_complete(&self) {
++        self.0.store(1, std::sync::atomic::Ordering::Release);
++    }
++    /// Receiver-side failure/cancellation notification.
++    pub fn invalidate(&self) {
++        self.0.store(2, std::sync::atomic::Ordering::Release);
++    }
++}
++
+ /// A single playable stream candidate with optional DRM.
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub struct PlaybackStream {
+@@ -80,6 +111,17 @@ pub struct PlaybackStream {
+ }
+ 
+ impl PlaybackStream {
++    /// Cache only the current progressive title, never a playlist/archive.
++    pub fn cached_url(url: impl Into<String>, content_type: impl Into<String>) -> Self {
++        Self {
++            source: StreamSource::CachedUrl {
++                url: url.into(),
++                cache: MediaCacheHint::default(),
++            },
++            content_type: content_type.into(),
++            drm: None,
++        }
++    }
+     /// A clear stream the proxy fetches from `url`.
+     #[must_use]
+     pub fn url(url: impl Into<String>, content_type: impl Into<String>) -> Self {
+@@ -176,9 +218,10 @@ pub struct PlaybackState {
+     pub idle_reason: Option<IdleReason>,
+ }
+ 
+-/// Queue navigation requested by a user at the physical output device.
++/// User control forwarded to an app from Cast or a physical output device.
+ #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+ pub enum OutputControl {
++    Play,
+     Next,
+     Previous,
+ }

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Minimal protobuf and Cast V2 framing for the historical receiver."""
 
 from __future__ import annotations

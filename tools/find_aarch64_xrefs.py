@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Find simple ADRP+ADD references to strings in an AArch64 ELF image."""
 
 from __future__ import annotations

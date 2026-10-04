@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Apply the bounded source-export checks to all reachable Git history.
 
 No automatic secret scan establishes publication clearance. This catches known

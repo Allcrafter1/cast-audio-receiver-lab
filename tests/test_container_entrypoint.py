@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 import json
 from io import BytesIO
 from pathlib import Path

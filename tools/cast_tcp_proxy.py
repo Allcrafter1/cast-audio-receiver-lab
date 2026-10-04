@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Transparent TCP proxy for reversible Cast discovery experiments.
 
 The proxy does not terminate TLS or inspect Cast messages. It only gives an

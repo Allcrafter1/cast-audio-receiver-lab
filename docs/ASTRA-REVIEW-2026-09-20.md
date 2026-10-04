@@ -154,9 +154,12 @@ Rewrite the README around this project's identity:
 6. Present one management UI only; call port 8010/internal bridge an
    implementation detail, not a user destination.
 
-Keep original product code GPL-3.0-or-later and the Vibecast fork MIT unless an
-actual provenance finding requires another treatment. Preserve MIT notices and
-modified-source history; do not claim that root GPL relicenses third-party code.
+Historical decision at the time of this review: keep original product code
+GPL-3.0-or-later and the Vibecast fork MIT unless an actual provenance finding
+requires another treatment. The project-code decision was superseded by the
+owner-authorized MPL-2.0 transition on 2026-10-04; the MIT and other third-party
+boundaries remain. Preserve MIT notices and modified-source history; no root
+project license relicenses third-party code.
 Finish or precisely mark incomplete the source/licence inventory for the exact
 FFmpeg, mpv, Rust, Python and airplay-cli artifacts. Add the missing Chromium
 BSD attribution for `cast_channel.proto`. Record that current libraop upstream

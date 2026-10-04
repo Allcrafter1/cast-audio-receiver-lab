@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Map /setup path comparisons to their branch targets in an AArch64 ELF."""
 
 from __future__ import annotations

@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 import copy
 import hashlib
 import io

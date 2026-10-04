@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MPL-2.0
 // Browser regression tests use only synthetic routes; no receiver is contacted.
 const {chromium} = require('playwright');
 const assert = require('node:assert/strict');

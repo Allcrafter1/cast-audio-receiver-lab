@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Validated private route configuration; identity is independent of names."""
 from __future__ import annotations
 

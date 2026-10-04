@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: MPL-2.0
 """Read-only lookup of an integer status code in an APK's DEX instructions.
 
 Requires androguard. Reports method locations and matching instructions only;

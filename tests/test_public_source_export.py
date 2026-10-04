@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 import hashlib
 import json
 from pathlib import Path
@@ -29,6 +30,7 @@ class PublicSourceExportTests(unittest.TestCase):
             target = Path(temporary) / "export"
             report = create(target)
             self.assertTrue((target / "Containerfile").is_file())
+            self.assertTrue((target / "LICENSING.md").is_file())
             self.assertTrue((target / "SECURITY.md").is_file())
             self.assertTrue((target / "docs/installation.md").is_file())
             self.assertTrue((target / "src/cast_audio_lab/runtime.py").is_file())

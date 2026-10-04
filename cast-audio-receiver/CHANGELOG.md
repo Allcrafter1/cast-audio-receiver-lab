@@ -1,5 +1,22 @@
 # App changelog
 
+## 0.6.0-dev22 — playback recovery, current-title cache and MPL 2.0
+
+- Recover a failed YouTube Music load with one fresh bounded retry; **Retry/Play**
+  now performs a real reload instead of trying to unpause an empty decoder.
+- Stream the current progressive audio into a bounded 32 MiB memory cache while
+  it plays. Seeking can fetch sparse ranges, and single-title repeat can reuse a
+  complete cached title without caching the whole playlist or delaying startup
+  for a full download.
+- Keep playback alive for at most ten seconds after an unexpected YouTube Cast
+  control disconnect so the sender can reattach. Explicit disconnect/Close and
+  Stop still stop immediately.
+- Match IPv6 discovery with dual-stack listeners where the host supports them.
+- Original project files are now MPL-2.0, allowing file-level reuse in larger
+  Apache-2.0 projects while keeping modifications to those files open. Existing
+  Vibecast MIT, Chromium BSD, `airplay-cli` GPLv3 and other third-party licenses
+  remain unchanged; releases through dev21 remain GPL-3.0-or-later.
+
 ## 0.6.0-dev21 — AirPlay diagnostics
 
 - The Add-on `log_level: debug` setting now reaches AirPlay output adapters.

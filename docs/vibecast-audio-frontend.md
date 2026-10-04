@@ -15,9 +15,11 @@ Pinned upstream revision: `b4616f8f399be706a1409ed21922aa2df892e303`.
 
 ## Authentication bundle
 
-Shanocast publishes one fixed peer key and 795 SHA-256 device-auth signatures
-for deterministic two-day TLS certificates from 2023-08-15 through 2027-12-21.
-Generate a Vibecast manifest from a local Shanocast checkout:
+Shanocast makes one fixed peer key and 795 SHA-256 device-auth signatures
+publicly accessible for deterministic two-day TLS certificates from 2023-08-15
+through 2027-12-21. Its repository has no license grant; public availability is
+not permission to copy or redistribute its code/data. For local historical
+research, the independently written importer can read a user-supplied checkout:
 
 ```bash
 python3 tools/import_shanocast_bundle.py \
@@ -25,7 +27,8 @@ python3 tools/import_shanocast_bundle.py \
   .state/vibecast/certs.json
 ```
 
-The importer recreates each TLS certificate byte-for-byte and verifies every
+The importer contains no Shanocast arrays or implementation code. It recreates
+each TLS certificate byte-for-byte and verifies every
 signature against the manufacturing certificate before writing output. The
 result contains authentication/private material and is intentionally ignored by
 Git. It is replaceable as one file when a newer capture set becomes available.

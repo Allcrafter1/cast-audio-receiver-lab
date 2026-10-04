@@ -6,15 +6,16 @@ contributors. Our glue code and practical testing do not replace that work, and
 no upstream author is implied to endorse or support this experiment.
 
 This is a source-based inventory, not legal advice or a claim that every
-transitive component has one uniform licence. Do not interpret the project's
-GPL declaration as relicensing third-party material or authentication artifacts.
+transitive component has one uniform licence. The root MPL-2.0 declaration
+applies only as described in `LICENSING.md`; it does not relicense third-party
+material, executables or authentication artifacts.
 
 ## Main implementation and research foundations
 
 | Project / author | Actual role here | Recorded source / license status |
 | --- | --- | --- |
 | [Vibecast](https://github.com/emilsvennesson/vibecast), Nils Emil Svensson and contributors | Active Cast frontend, application/player architecture and YouTube implementation, maintained in our [reviewable fork](https://github.com/Allcrafter1/vibecast/commit/f28befe02fe930db300294d6bf49cdf5fec5a747) | Fork commit `f28befe02fe930db300294d6bf49cdf5fec5a747`, based on upstream `b4616f8f399be706a1409ed21922aa2df892e303`; MIT. Preserve upstream copyright/license; copy in `licenses/Vibecast-MIT.txt`. |
-| [Shanocast](https://github.com/rgerganov/shanocast), rgerganov and contributors | Earlier compatibility research, public precomputed-signature format and importer reference | Local research checkout `1b57813f2a92c5dbb68c916263127b75e9c8164f`; README links [the author's explanation](https://xakcop.com/post/shanocast/). No standalone license file found in that checkout; do not assume the entire repository or embedded material is MIT/GPL. |
+| [Shanocast](https://github.com/rgerganov/shanocast), rgerganov and contributors | Earlier compatibility research and externally supplied format input supported by an independently written importer | Local research checkout `1b57813f2a92c5dbb68c916263127b75e9c8164f`; README links [the author's explanation](https://xakcop.com/post/shanocast/). No standalone license file exists in the checked tree, so its code is treated as all rights reserved. No Shanocast source, patch, key or signature table is included here; see the dated audit. |
 | [Music Assistant airplay-cli](https://github.com/music-assistant/airplay-cli) and contributors | Actual persistent AirPlay output executable | v0.5.4, commit `431c5c582eef9307c4e39c50a0ea65e970bc1128`; combined binary declared GPLv3 by upstream. Exact x86_64 artifact hash in `config/cliairplay-linux-x86_64.lock.json`; preserved notices in `licenses/airplay-cli-THIRD_PARTY_NOTICES.md`. |
 | [Chromium](https://chromium.googlesource.com/chromium/src/), The Chromium Authors | `cast_channel.proto` envelope schema incorporated through Vibecast | File copyright 2014; BSD-3-Clause notice in `licenses/Chromium-BSD.txt`. This protocol file is not the Google Cast SDK. |
 | [philippe44/libraop](https://github.com/philippe44/libraop), Shiro Ninomiya and other authors listed upstream | RAOP/transport work incorporated by airplay-cli, not independently reimplemented here | Retain airplay-cli's full third-party notices and component texts; see caveat below. |
@@ -30,11 +31,14 @@ frontend is Vibecast, not a claim that this repository contains or maintains a
 complete Open Screen runtime. Additional individual research articles mentioned
 during discussion must have their exact contribution/link verified before being
 added as implementation credits; do not invent attribution or endorsements.
+The source/history comparison in `docs/licensing-audit-2026-10-04.md` found no
+copied Shanocast implementation code in the current release tree. That narrow,
+reproducible finding is not a blanket legal guarantee.
 
 ## AirPlay native licence evidence
 
 Current maintained Vibecast build input is commit
-`e67628fa72550095f92197550d60d8e94c503d4e`, recorded in
+`9a7f443946680f705f8196ad2e7827aa5341c1e2`, recorded in
 `config/vibecast-frontend.lock.json`. It incorporates the previously separate
 bridge overlay and corrects the fork README. The older commit in the provenance
 table remains the integration base; MIT notices remain unchanged.

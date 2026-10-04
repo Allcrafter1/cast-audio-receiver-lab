@@ -1,3 +1,4 @@
+# SPDX-License-Identifier: MPL-2.0
 """Historical standalone Python Cast/DIAL receiver research.
 
 This package is intentionally outside ``src`` and is not part of the supported
