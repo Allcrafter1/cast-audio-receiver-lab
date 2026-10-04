@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.6.0.dev25 — correlated desktop MDX status
+
+- Echo the optional `requestId` from YouTube's `getMdxSessionStatus` request in
+  the matching `mdxSessionStatus` response. YouTube Music Desktop uses that
+  correlation before pairing its Lounge controller and submitting a playlist;
+  without it the session can look connected while Play remains ineffective.
+- Extend the MDX regression to assert the correlated request and response.
+
 ## 0.6.0.dev24 — desktop YouTube Music MDX bootstrap
 
 - Answer the explicit YouTube MDX `getMdxSessionStatus` request with the

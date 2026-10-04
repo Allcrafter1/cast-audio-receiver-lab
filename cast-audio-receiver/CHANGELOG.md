@@ -1,5 +1,11 @@
 # App changelog
 
+## 0.6.0-dev25 — correlated desktop MDX status
+
+- Complete the desktop YouTube Music handshake by returning its MDX
+  `requestId` with the screen/device status. This lets the browser accept the
+  response and proceed from a connected session to playlist playback.
+
 ## 0.6.0-dev24 — desktop YouTube Music MDX bootstrap
 
 - Fix the remaining desktop YouTube Music startup failure after a successful

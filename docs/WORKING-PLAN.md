@@ -1,5 +1,19 @@
 # Working plan
 
+## Desktop MDX request correlation — 2026-10-04
+
+- Physical dev24 acceptance still produced no Lounge playlist after a complete
+  LAUNCH and app-transport connection.
+- The maintained historical implementation and observation notes show that an
+  explicit `getMdxSessionStatus` response must echo an optional request id.
+  The dev24 Rust handler returned the correct screen/device data but omitted
+  that correlation, while the earlier standalone probe sent no request id and
+  therefore could not expose the mismatch.
+- Echo the request id without changing the connect-time unsolicited response.
+  Regression now asserts the correlated value. Maintained fork commit is
+  `262a5c77828e634cfa8a91f6e406fce98b74fc3a`; physical acceptance is pending
+  the dev25 image deployment.
+
 ## Desktop YouTube Music MDX bootstrap — 2026-10-04
 
 - Physical dev23 acceptance proved that Chromium received the LAUNCH response,
@@ -14,9 +28,8 @@
   sent on sender connect. Keep the response bound to the requesting sender and
   retain the bounded wait for Lounge identity readiness.
 - Regression covers the explicit request, handled disposition and returned MDX
-  payload. Maintained fork commit is
-  `e4743892e85fb0aaf36e86f1b779dd734a2b5830`; physical acceptance is pending
-  the dev24 image deployment.
+  payload. Physical dev24 acceptance exposed the missing request correlation
+  recorded above.
 
 ## Desktop YouTube Music LAUNCH response — 2026-10-04
 

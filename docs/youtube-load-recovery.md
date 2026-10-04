@@ -312,7 +312,7 @@ normal explicit LOAD after a decoder error.
   `35ffe1b5ceca4962903a4f217cb18ef7d3dfb071`, not an automatically applied overlay.
 
 The reviewed frontend is now committed and pinned at
-`e4743892e85fb0aaf36e86f1b779dd734a2b5830`. Container, lock and CI use that exact
+`262a5c77828e634cfa8a91f6e406fce98b74fc3a`. Container, lock and CI use that exact
 revision. Do not apply the snapshot again. Build/test/publish the chosen version
 through `release-runbook.md`, including the dual-stack runtime change and dev21
 AirPlay diagnostics.
@@ -327,6 +327,11 @@ YouTube MDX namespace. Desktop YouTube Music sends this request after connecting
 the returned app transport and waits for the screen/device identity before it
 submits a Lounge playlist; mobile senders often accepted the connect-time status
 without the explicit request path.
+
+The dev25 correction also echoes the request's optional `requestId` in the
+`mdxSessionStatus` response. Desktop YouTube Music requires that correlation;
+an unsolicited-style response without it leaves the UI connected but does not
+advance to playlist selection.
 
 ## Validation and deployment
 

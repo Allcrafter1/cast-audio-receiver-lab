@@ -28,7 +28,7 @@
     {
       "bytes": 4332,
       "path": ".github/workflows/ci.yml",
-      "sha256": "be6338e1d5a0e2b9e56aa5159c7b5e4f373f17b48d080e6cb2e86d9487855a4f"
+      "sha256": "a15e8f627015ed042a450bb53edaa831ce73d017fdf630ed44f1afdb0760add5"
     },
     {
       "bytes": 6663,
@@ -61,9 +61,9 @@
       "sha256": "57d61edc4a7b995c3d99fdf77e29ee7b3252576491e697c682682051c96b054b"
     },
     {
-      "bytes": 45825,
+      "bytes": 46261,
       "path": "CHANGELOG.md",
-      "sha256": "b706a3670a11dd32471c7022218e6153efa20cb2831407ead985eb5c904ddbc2"
+      "sha256": "1665d67258082786cf335aefd6235002cca00298dbc9e890ee3dec072db8eca0"
     },
     {
       "bytes": 3104,
@@ -73,7 +73,7 @@
     {
       "bytes": 4736,
       "path": "Containerfile",
-      "sha256": "36f56d8a0909b6bd607e5fb63bf55f60a36fc96ca89b814221401f9eb219457b"
+      "sha256": "0bbafafde88c9ad1df46aa1d05f0e1198dbf0b91855a558317f69167f13c13b4"
     },
     {
       "bytes": 16726,
@@ -88,7 +88,7 @@
     {
       "bytes": 8682,
       "path": "README.md",
-      "sha256": "816f170cc6798b87faba96f2fcf5bab678273695fb50349b95bee90c3b007664"
+      "sha256": "5eac277dec61acca31fa9624e8112ff9ebd0cde32f1cb1f96cd4fe8726b67c49"
     },
     {
       "bytes": 1140,
@@ -98,12 +98,12 @@
     {
       "bytes": 9861,
       "path": "THIRD_PARTY_NOTICES.md",
-      "sha256": "d53bcda624da62f6699928f5556d86b1d14e4cb590370068f0ccdbac888f8994"
+      "sha256": "9c0c6da6d211bd12d675a57fb85f8c557e93923ab176bc255b753850422e561d"
     },
     {
-      "bytes": 4760,
+      "bytes": 5027,
       "path": "cast-audio-receiver/CHANGELOG.md",
-      "sha256": "056266c4ba0a45d494993df93ea0fb2900b4e35006546aa926a56a5005a5d9dc"
+      "sha256": "2c2643b2da8c4fb484af66f604af62794673743a0a7655c8d9da4b8a4859a748"
     },
     {
       "bytes": 3138,
@@ -118,7 +118,7 @@
     {
       "bytes": 744,
       "path": "cast-audio-receiver/config.yaml",
-      "sha256": "aed660e9d49568ebf185c099d38805b7f7060e03f80fe76c5db7e4bff839b20c"
+      "sha256": "ffdae2943d25978d657768f893a692bd33fc8a77ea63c247df4caaf9aecbf3cf"
     },
     {
       "bytes": 3957,
@@ -261,9 +261,9 @@
       "sha256": "5c9bb649c499dc8f7b217ad18267d839273803c6bfdab49f9ef87014006060de"
     },
     {
-      "bytes": 851,
+      "bytes": 861,
       "path": "config/vibecast-frontend.lock.json",
-      "sha256": "ccb8bcba73e8970611e93c02dadb5a3cce8b0fbe2477e46abab360e9fa5bb395"
+      "sha256": "51be134a407a4c29c780f472ef78e69e400cd886e11424604d0d2fa1ff26e709"
     },
     {
       "bytes": 134,
@@ -296,9 +296,9 @@
       "sha256": "e23a00b7a392aa4b072905e707510d91a413a14b18b66761044f324f8cf4edac"
     },
     {
-      "bytes": 171923,
+      "bytes": 172654,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "903598f703b760be030607fcba7e090db6304a63d135f3691b376b945ceeaddc"
+      "sha256": "9e151dcef1c1db302546c700729e650e81ec71e00252a31cdf228d60654567ab"
     },
     {
       "bytes": 4535,
@@ -488,7 +488,7 @@
     {
       "bytes": 5552,
       "path": "docs/installation.md",
-      "sha256": "0a6da6cce8759cfa3cbc35c70e8a4b5379958b45b239259e2d02b15519deb6d3"
+      "sha256": "16e7ac016a47571b74e95e685530feb9cdb439fdc3ec26bd4c8ceec012a7ee10"
     },
     {
       "bytes": 4635,
@@ -508,7 +508,7 @@
     {
       "bytes": 14166,
       "path": "docs/maintenance.md",
-      "sha256": "2fa3584c1d6ed9961174668969862ce7dd761d7f868454d298f31f5da95c40aa"
+      "sha256": "561cfef04c7aa0241c6645582c5b75e411095ec195abc1689078d5395878fe8c"
     },
     {
       "bytes": 3148,
@@ -548,7 +548,7 @@
     {
       "bytes": 5630,
       "path": "docs/release-runbook.md",
-      "sha256": "9ce5dce534fcc13acaa503d016810be5968fb126dc5c09536b192e782ed52554"
+      "sha256": "1bc6339d32c86f1e45f0b3c1aebad791d8e03e602dcac91f836c95136916f797"
     },
     {
       "bytes": 6476,
@@ -573,7 +573,7 @@
     {
       "bytes": 8997,
       "path": "docs/source-reconstruction.md",
-      "sha256": "54fdc14026fd3dc5c30d71024519b4229fb22732f4cebae0163e071735fcd411"
+      "sha256": "0b41627995529775b08558405f2970add10e42369a30e9c27b70c85308056ada"
     },
     {
       "bytes": 5071,
@@ -591,9 +591,9 @@
       "sha256": "b047a8bbfa34348e1b1184944149e99c07c2072458cf5e12e1eb57919626aa6e"
     },
     {
-      "bytes": 23608,
+      "bytes": 23871,
       "path": "docs/youtube-load-recovery.md",
-      "sha256": "81e3ef2ceb11d3f7bd7fd5c7ba207b9e9cc6a428c081bfaf629c37585a9e7907"
+      "sha256": "0487b9b619e5d748275062ddc2238f112cb904bd1d4c7d143bd4eec9cd38d1dd"
     },
     {
       "bytes": 3666,
@@ -791,9 +791,9 @@
       "sha256": "fd44db52815ba3dcc8fb3bfef81fa0d25e1cc5e1f2949b326c8133d0408ac39b"
     },
     {
-      "bytes": 153923,
+      "bytes": 154188,
       "path": "patches/vibecast-load-recovery-20261002.patch",
-      "sha256": "c4c4750885c559f23642aac420dc367b929c5dd1fa6982fa58ea31da3098f16f"
+      "sha256": "f5effca3a7e92d52f84f4aa2fbc504ee0c23fabd0912a64868f7365571b0552c"
     },
     {
       "bytes": 8522,
@@ -818,7 +818,7 @@
     {
       "bytes": 1305,
       "path": "pyproject.toml",
-      "sha256": "b482e19a14f69ba317e5b935b794348f429b3d9c14f1834d4de35f7903ebda1a"
+      "sha256": "d593d7f9608f22278acd4f4eb2cc6b9f68bce6c150fafcfd3ee7b2054b3eaefa"
     },
     {
       "bytes": 114,
@@ -883,7 +883,7 @@
     {
       "bytes": 113,
       "path": "src/cast_audio_lab/__init__.py",
-      "sha256": "a92b18fe579b6faf62a195f432a15ec6e791b5a1ab0488d2df5a3dcc24a64774"
+      "sha256": "a8fb012f99f9e54b8eb681a8873c142f8be92eb8931d6e9d712553046ec2755e"
     },
     {
       "bytes": 153,
