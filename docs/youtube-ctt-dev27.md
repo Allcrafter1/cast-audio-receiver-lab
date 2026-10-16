@@ -61,6 +61,16 @@ its highest referenced GLIBC symbol version is 2.34.
 
 The source/Python/container candidate is `0.6.0.dev27`; Home Assistant store
 metadata remains at published `0.6.0-dev26` until an image is built, verified and
-promoted through the release workflow. Physical acceptance must separately show
-that the sender supplies a CTT and that `Fuck My Computer` (`lENt7-t8I-I`)
-becomes playable. No token value is required in evidence or logs.
+promoted through the release workflow.
+
+The compatible binary was activated in the existing `.110` test container at
+2026-10-16 21:03 CEST. The mounted and in-container SHA-256 both matched
+`cc51e5aee11e40b177bffa039845e924e90207ff8c9a6190f41ef6688a43e59c`.
+After startup, management, frontend bridge and both enabled routes reported
+ready/responsive with zero restarts. The displaced binary (SHA-256
+`40c8796f288715988b56373ff9272445c64fe43d5183557215e91ea7b1ca5619`)
+is retained in the host-private, timestamped dev27 rollback directory.
+
+Physical acceptance must separately show that the sender supplies a CTT and
+that `Fuck My Computer` (`lENt7-t8I-I`) becomes playable. No token value is
+required in evidence or logs.

@@ -16,9 +16,14 @@
 - Complete maintained frontend is locally versioned at
   `c730201523c2a1c1541de4fa7f2662e082e0eb21` and preserved as the hash-locked
   dev27 snapshot over public dev26. This local commit is not a public pin.
-- Deployment to .110 and physical `Fuck My Computer` acceptance remain pending.
-  Store metadata stays dev26 until normal image verification/promotion. See
-  `docs/youtube-ctt-dev27.md`.
+- Activated the compatible binary in the existing `.110` test container at
+  2026-10-16 21:03 CEST. Installed hash matches the candidate; management,
+  frontend bridge and both enabled routes are ready/responsive with zero
+  restarts. The previous binary is retained in the timestamped rollback
+  directory documented in `docs/youtube-ctt-dev27.md`.
+- Physical `Fuck My Computer` acceptance remains pending because it requires a
+  real signed-in sender to supply the CTT. Store metadata stays dev26 until
+  normal image verification/promotion.
 
 ## Cross-area reliability review, third round — 2026-10-08 (unreleased)
 
