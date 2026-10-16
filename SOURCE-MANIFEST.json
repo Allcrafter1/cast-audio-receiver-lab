@@ -263,7 +263,7 @@
     {
       "bytes": 1081,
       "path": "config/vibecast-frontend.lock.json",
-      "sha256": "42a47c1d5ec7cc4296a98d28f7054e36f6eea97f5acfde65a706d0c473a2423e"
+      "sha256": "f93522bf8179bd30af6699252bdb33bfd6c3abcad99115dd0391f74887472154"
     },
     {
       "bytes": 134,
@@ -296,9 +296,9 @@
       "sha256": "e23a00b7a392aa4b072905e707510d91a413a14b18b66761044f324f8cf4edac"
     },
     {
-      "bytes": 213789,
+      "bytes": 214053,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "528244525be84fb3124f525f6d45b91239b1e0f0045675a9172d040e4ca019ca"
+      "sha256": "dc7b5758798100be0a84f9bb7c532a14f5ed6863d765717386f77ce0341010cc"
     },
     {
       "bytes": 4535,
@@ -591,9 +591,9 @@
       "sha256": "b047a8bbfa34348e1b1184944149e99c07c2072458cf5e12e1eb57919626aa6e"
     },
     {
-      "bytes": 3509,
+      "bytes": 4798,
       "path": "docs/youtube-ctt-dev27.md",
-      "sha256": "50a6734c0eec51d632d3c9a812bc410217b27853be9e1e2a22ce9c5dea9639ee"
+      "sha256": "8790c235bc79a45eedba5d8336820a6894fb92ac4fed54fea110c0925d87c14c"
     },
     {
       "bytes": 23871,
@@ -671,9 +671,9 @@
       "sha256": "4812a4d1542ee214bb268e1cef7abfa5e8180630ea77d5297e3a9e2f2f7184a0"
     },
     {
-      "bytes": 324193,
+      "bytes": 326243,
       "path": "patches/vibecast-0.6.0.dev27-current.patch",
-      "sha256": "56cbee6d784aa262fd5bd156bd1711fd3fe5feaab696f922551e606ba4c7ede0"
+      "sha256": "02ed71eec0bf69304436f7d7b21da12640b0d4b9efba93d9b92bafe9cb9a8397"
     },
     {
       "bytes": 110036,

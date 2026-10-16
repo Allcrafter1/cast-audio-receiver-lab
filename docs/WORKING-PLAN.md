@@ -14,16 +14,19 @@
   GLIBC-compatible binary SHA-256:
   `cc51e5aee11e40b177bffa039845e924e90207ff8c9a6190f41ef6688a43e59c`.
 - Complete maintained frontend is locally versioned at
-  `c730201523c2a1c1541de4fa7f2662e082e0eb21` and preserved as the hash-locked
+  `2975e7b7d997bb896951656a004c5e94a7b8633f` and preserved as the hash-locked
   dev27 snapshot over public dev26. This local commit is not a public pin.
 - Activated the compatible binary in the existing `.110` test container at
   2026-10-16 21:03 CEST. Installed hash matches the candidate; management,
   frontend bridge and both enabled routes are ready/responsive with zero
   restarts. The previous binary is retained in the timestamped rollback
   directory documented in `docs/youtube-ctt-dev27.md`.
-- Physical `Fuck My Computer` acceptance remains pending because it requires a
-  real signed-in sender to supply the CTT. Store metadata stays dev26 until
-  normal image verification/promotion.
+- First live `Fuck My Computer` attempt received a CTT but YouTube rejected all
+  three requests with the inappropriate-content message. Follow-up adds the
+  missing content acknowledgement and MDX fields for matching credentials;
+  99 YouTube tests pass, one optional live test ignored. Follow-up playback
+  acceptance remains pending. See `docs/youtube-ctt-dev27.md` for binary hash.
+  Store metadata stays dev26 until normal image verification/promotion.
 
 ## Cross-area reliability review, third round — 2026-10-08 (unreleased)
 

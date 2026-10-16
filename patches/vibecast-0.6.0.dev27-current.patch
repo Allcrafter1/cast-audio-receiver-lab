@@ -1,5 +1,5 @@
 diff --git a/Cargo.lock b/Cargo.lock
-index 97f20733dbf738fa530dec762c1d0d5dec2c34cd..b53fa63b481609b65a76ae04138b1bab5232205b 100644
+index 97f2073..b53fa63 100644
 --- a/Cargo.lock
 +++ b/Cargo.lock
 @@ -3301,6 +3301,7 @@ name = "vibecast-core"
@@ -11,7 +11,7 @@ index 97f20733dbf738fa530dec762c1d0d5dec2c34cd..b53fa63b481609b65a76ae04138b1bab
   "http",
   "reqwest",
 diff --git a/crates/vibecast-apps-primevideo/src/lib.rs b/crates/vibecast-apps-primevideo/src/lib.rs
-index 657de247aa7619b745ebda6dbdff3551b6b5df12..591ce2414a4cc17d27ae8ddc267a44a0a31bd49f 100644
+index 657de24..591ce24 100644
 --- a/crates/vibecast-apps-primevideo/src/lib.rs
 +++ b/crates/vibecast-apps-primevideo/src/lib.rs
 @@ -752,6 +752,7 @@ mod tests {
@@ -23,7 +23,7 @@ index 657de247aa7619b745ebda6dbdff3551b6b5df12..591ce2414a4cc17d27ae8ddc267a44a0
              drm: vec![DrmCapability::new(
                  DrmSystem::Widevine,
 diff --git a/crates/vibecast-apps-tv4play/src/lib.rs b/crates/vibecast-apps-tv4play/src/lib.rs
-index 97b16041ec071eb2260700daeb6e51e0a922a26d..0fbee5dd0fe194f9debcbf4e134ae0606e4025a2 100644
+index 97b1604..0fbee5d 100644
 --- a/crates/vibecast-apps-tv4play/src/lib.rs
 +++ b/crates/vibecast-apps-tv4play/src/lib.rs
 @@ -823,6 +823,7 @@ mod tests {
@@ -35,7 +35,7 @@ index 97b16041ec071eb2260700daeb6e51e0a922a26d..0fbee5dd0fe194f9debcbf4e134ae060
              )
              .await;
 diff --git a/crates/vibecast-apps-viaplay/src/lib.rs b/crates/vibecast-apps-viaplay/src/lib.rs
-index 10e682b6b320fb05270922d87af0ce6fcf0d1d5b..818b22b28c9fd0595e2dd228165b2f7f4a2b00c8 100644
+index 10e682b..818b22b 100644
 --- a/crates/vibecast-apps-viaplay/src/lib.rs
 +++ b/crates/vibecast-apps-viaplay/src/lib.rs
 @@ -1126,6 +1126,7 @@ mod tests {
@@ -47,7 +47,7 @@ index 10e682b6b320fb05270922d87af0ce6fcf0d1d5b..818b22b28c9fd0595e2dd228165b2f7f
              )
              .await;
 diff --git a/crates/vibecast-apps-youtube/src/lib.rs b/crates/vibecast-apps-youtube/src/lib.rs
-index 769fa27f766b21996e81b89a30cb1ab66429c7af..91fcf6b4c17426efa476d9805a88944cb0f7393a 100644
+index 769fa27..91fcf6b 100644
 --- a/crates/vibecast-apps-youtube/src/lib.rs
 +++ b/crates/vibecast-apps-youtube/src/lib.rs
 @@ -28,6 +28,35 @@ const MDX_NAMESPACE: &str = "urn:x-cast:com.google.youtube.mdx";
@@ -1189,7 +1189,7 @@ index 769fa27f766b21996e81b89a30cb1ab66429c7af..91fcf6b4c17426efa476d9805a88944c
      }
  
 diff --git a/crates/vibecast-apps-youtube/src/lounge.rs b/crates/vibecast-apps-youtube/src/lounge.rs
-index 22473086188250025efa552abc7dde7f8debab0e..538e12c405e5bf113ef5a16d4a84973a250775ce 100644
+index 2247308..538e12c 100644
 --- a/crates/vibecast-apps-youtube/src/lounge.rs
 +++ b/crates/vibecast-apps-youtube/src/lounge.rs
 @@ -14,6 +14,8 @@ use tokio::sync::{mpsc, watch};
@@ -2351,7 +2351,7 @@ index 22473086188250025efa552abc7dde7f8debab0e..538e12c405e5bf113ef5a16d4a84973a
                  current_time: 20.0,
                  duration: Some(20.0),
 diff --git a/crates/vibecast-apps-youtube/src/resolver.rs b/crates/vibecast-apps-youtube/src/resolver.rs
-index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610c93c8c1a 100644
+index 7dd9ef4..ba9e320 100644
 --- a/crates/vibecast-apps-youtube/src/resolver.rs
 +++ b/crates/vibecast-apps-youtube/src/resolver.rs
 @@ -13,6 +13,8 @@ use vibecast_sdk::{
@@ -2411,7 +2411,7 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
          }
      }
  
-@@ -122,18 +145,48 @@ impl Resolver {
+@@ -122,18 +145,49 @@ impl Resolver {
          start_time: f64,
          capabilities: &PlayerCapabilities,
          preferred_video_codec: PreferredVideoCodec,
@@ -2431,7 +2431,7 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
 +        let credential = credential.filter(|credential| credential.applies_to(video_id));
          let started = std::time::Instant::now();
 +        if credential.is_some() {
-+            let media = self
++            let mut media = self
 +                .resolve_metadata(
 +                    video_id,
 +                    start_time,
@@ -2440,6 +2440,7 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
 +                    credential,
 +                )
 +                .await?;
++            make_first_stream_cacheable(&mut media, capabilities.local_audio_cache);
 +            tracing::info!(
 +                %video_id,
 +                has_ctt = true,
@@ -2462,7 +2463,7 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
          let audio = async {
              let result = external_audio_url(video_id).await;
              let elapsed = started.elapsed().as_millis();
-@@ -178,6 +231,7 @@ impl Resolver {
+@@ -178,6 +232,7 @@ impl Resolver {
          start_time: f64,
          capabilities: &PlayerCapabilities,
          preferred_video_codec: PreferredVideoCodec,
@@ -2470,7 +2471,7 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
      ) -> Result<PlaybackMedia, ResolveError> {
          let mut watch_url = Url::parse(&self.endpoints.watch)
              .map_err(|_| ResolveError::Protocol("invalid watch endpoint"))?;
-@@ -207,7 +261,11 @@ impl Resolver {
+@@ -207,7 +262,11 @@ impl Resolver {
              self.http
                  .post(player_url)
                  .header("User-Agent", CLIENT_USER_AGENT)
@@ -2483,7 +2484,31 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
                  .send()
                  .await?
                  .error_for_status()?
-@@ -608,7 +666,11 @@ struct PlayerRequest<'a> {
+@@ -217,6 +276,14 @@ impl Resolver {
+         .await
+         .map_err(|error| diagnose_http("player_metadata", error))?;
+ 
++        tracing::info!(
++            %video_id,
++            has_ctt = credential.is_some(),
++            client = CLIENT_NAME,
++            status = %response.playability_status.status,
++            has_streaming_data = response.streaming_data.is_some(),
++            "YouTube player authorization result"
++        );
+         if response.playability_status.status != "OK" {
+             return Err(ResolveError::Unplayable(
+                 response
+@@ -605,12 +672,29 @@ struct PlayerRequest<'a> {
+     #[serde(rename = "videoId")]
+     video_id: &'a str,
+     context: RequestContext<'a>,
++    #[serde(rename = "racyCheckOk", skip_serializing_if = "Option::is_none")]
++    racy_check_ok: Option<bool>,
++    #[serde(rename = "contentCheckOk", skip_serializing_if = "Option::is_none")]
++    content_check_ok: Option<bool>,
++    #[serde(rename = "isMdxPlayback", skip_serializing_if = "Option::is_none")]
++    is_mdx_playback: Option<bool>,
  }
  
  impl<'a> PlayerRequest<'a> {
@@ -2493,10 +2518,19 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
 +        visitor_data: Option<&'a str>,
 +        credential: Option<&'a CredentialTransferToken>,
 +    ) -> Self {
++        let credential = credential.filter(|value| value.applies_to(video_id));
          Self {
              video_id,
++            // The sender explicitly selected this video with its account
++            // credential. Acknowledge the content interstitial and identify
++            // the remote playback; YouTube still validates the credential.
++            racy_check_ok: credential.map(|_| true),
++            content_check_ok: credential.map(|_| true),
++            is_mdx_playback: credential.map(|_| true),
              context: RequestContext {
-@@ -620,6 +682,12 @@ impl<'a> PlayerRequest<'a> {
+                 client: ClientContext {
+                     client_name: CLIENT_NAME,
+@@ -620,6 +704,12 @@ impl<'a> PlayerRequest<'a> {
                      gl: "US",
                      android_sdk_version: 32,
                  },
@@ -2509,7 +2543,7 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
              },
          }
      }
-@@ -628,6 +696,20 @@ impl<'a> PlayerRequest<'a> {
+@@ -628,6 +718,20 @@ impl<'a> PlayerRequest<'a> {
  #[derive(Serialize)]
  struct RequestContext<'a> {
      client: ClientContext<'a>,
@@ -2530,7 +2564,7 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
  }
  
  #[derive(Serialize)]
-@@ -1584,6 +1666,7 @@ mod tests {
+@@ -1584,6 +1688,7 @@ mod tests {
                      0.0,
                      &Default::default(),
                      super::PreferredVideoCodec::Auto,
@@ -2538,7 +2572,7 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
                  )
                  .await;
              println!(
-@@ -1595,9 +1678,29 @@ mod tests {
+@@ -1595,9 +1700,38 @@ mod tests {
          }
      }
      use super::*;
@@ -2564,12 +2598,21 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
 +        let anonymous =
 +            serde_json::to_value(PlayerRequest::new("dQw4w9WgXcQ", Some("visitor"), None)).unwrap();
 +        assert!(anonymous["context"].get("user").is_none());
++        for field in ["racyCheckOk", "contentCheckOk", "isMdxPlayback"] {
++            assert_eq!(authenticated[field], true);
++            assert!(anonymous.get(field).is_none());
++        }
++        let mismatched =
++            serde_json::to_value(PlayerRequest::new("different-id", None, Some(&credential)))
++                .unwrap();
++        assert!(mismatched["context"].get("user").is_none());
++        assert!(mismatched.get("racyCheckOk").is_none());
 +    }
 +
      #[test]
      fn extracts_supported_video_id_forms() {
          for value in [
-@@ -2141,6 +2244,7 @@ mod tests {
+@@ -2141,6 +2275,7 @@ mod tests {
                      0.0,
                      &PlayerCapabilities::default(),
                      PreferredVideoCodec::Auto,
@@ -2577,7 +2620,7 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
                  )
                  .await
                  .unwrap_err();
-@@ -2192,7 +2296,13 @@ mod tests {
+@@ -2192,7 +2327,13 @@ mod tests {
          let mut capabilities = caps(&["av1", "vp9", "h264"], &["opus", "aac"], &[], (3840, 2160));
          capabilities.subtitle_formats = vec!["vtt".into()];
          let media = resolver
@@ -2592,10 +2635,47 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
              .await
              .unwrap();
  
-@@ -2204,4 +2314,69 @@ mod tests {
+@@ -2204,4 +2345,109 @@ mod tests {
          assert_eq!(media.duration, Some(213.0));
          assert_eq!(media.start_time, 12.5);
      }
++
++    #[tokio::test]
++    async fn credential_bound_resolution_preserves_server_denial() {
++        let server = MockServer::start().await;
++        Mock::given(method("GET"))
++            .and(path("/watch"))
++            .respond_with(
++                ResponseTemplate::new(200)
++                    .set_body_string(r#"ytcfg.set({"INNERTUBE_API_KEY":"test-key"});"#),
++            )
++            .mount(&server)
++            .await;
++        Mock::given(method("POST"))
++            .and(path("/youtubei/v1/player"))
++            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
++                "playabilityStatus": {
++                    "status": "LOGIN_REQUIRED",
++                    "reason": "This video may be inappropriate for some users."
++                }
++            })))
++            .expect(1)
++            .mount(&server)
++            .await;
++        let resolver = Resolver::with_endpoints(reqwest::Client::new(), &server.uri());
++        let credential =
++            CredentialTransferToken::new("dQw4w9WgXcQ".into(), "synthetic-credential".into());
++        let result = resolver
++            .resolve(
++                "dQw4w9WgXcQ",
++                0.0,
++                &Default::default(),
++                PreferredVideoCodec::Auto,
++                Some(&credential),
++            )
++            .await;
++        assert!(matches!(result, Err(ResolveError::Unplayable(_))));
++    }
 +
 +    #[tokio::test]
 +    async fn credential_bound_resolution_posts_ctt_and_uses_innertube_audio() {
@@ -2612,6 +2692,9 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
 +            .and(path("/youtubei/v1/player"))
 +            .and(body_json(serde_json::json!({
 +                "videoId": "dQw4w9WgXcQ",
++                "racyCheckOk": true,
++                "contentCheckOk": true,
++                "isMdxPlayback": true,
 +                "context": {
 +                    "client": {
 +                        "clientName": "ANDROID",
@@ -2663,7 +2746,7 @@ index 7dd9ef404c9c9197cf88a53fc5cf30ae98504b76..e78a5ba75d2505355f93a9b41d299610
 +    }
  }
 diff --git a/crates/vibecast-bridge/src/bridge.rs b/crates/vibecast-bridge/src/bridge.rs
-index 115a0901589ff2e190129c8f4fdc60966b518f82..4171b97c98a6e2c2c00ed36512229e50a36fe644 100644
+index 115a090..4171b97 100644
 --- a/crates/vibecast-bridge/src/bridge.rs
 +++ b/crates/vibecast-bridge/src/bridge.rs
 @@ -13,8 +13,11 @@
@@ -3626,7 +3709,7 @@ index 115a0901589ff2e190129c8f4fdc60966b518f82..4171b97c98a6e2c2c00ed36512229e50
  
      #[async_trait]
 diff --git a/crates/vibecast-cast/src/connection.rs b/crates/vibecast-cast/src/connection.rs
-index ed90c7d23a14cb109cb9c22126d2c463dacf44ea..daf5d045943f3f2a4d68b59d530ba949ffb07e50 100644
+index ed90c7d..daf5d04 100644
 --- a/crates/vibecast-cast/src/connection.rs
 +++ b/crates/vibecast-cast/src/connection.rs
 @@ -6,11 +6,12 @@
@@ -3790,7 +3873,7 @@ index ed90c7d23a14cb109cb9c22126d2c463dacf44ea..daf5d045943f3f2a4d68b59d530ba949
      let _ = events.send(ServerEvent::Disconnected { id, peer }).await;
  }
 diff --git a/crates/vibecast-cast/src/server.rs b/crates/vibecast-cast/src/server.rs
-index 15e6d3e5bdc2382bf4a561c7cacfb402332cf8db..a942a83a254f9654db1a9cc27f4e0fe943d14a11 100644
+index 15e6d3e..a942a83 100644
 --- a/crates/vibecast-cast/src/server.rs
 +++ b/crates/vibecast-cast/src/server.rs
 @@ -2,11 +2,13 @@
@@ -3964,7 +4047,7 @@ index 15e6d3e5bdc2382bf4a561c7cacfb402332cf8db..a942a83a254f9654db1a9cc27f4e0fe9
 +    }
 +}
 diff --git a/crates/vibecast-cast/src/tests.rs b/crates/vibecast-cast/src/tests.rs
-index 1ef9cfdcb12c03500dd61d495f43f7f2e4cebb6b..a51f46cfedac4313140464015f5c06baae555423 100644
+index 1ef9cfd..a51f46c 100644
 --- a/crates/vibecast-cast/src/tests.rs
 +++ b/crates/vibecast-cast/src/tests.rs
 @@ -177,6 +177,103 @@ async fn dropping_client_emits_disconnected() {
@@ -4072,7 +4155,7 @@ index 1ef9cfdcb12c03500dd61d495f43f7f2e4cebb6b..a51f46cfedac4313140464015f5c06ba
      let key = rcgen::KeyPair::generate().unwrap();
      let mut params = rcgen::CertificateParams::new(vec!["localhost".to_string()]).unwrap();
 diff --git a/crates/vibecast-cli/src/main.rs b/crates/vibecast-cli/src/main.rs
-index 70a6d0bf2c9732bad82e211b20921a94b494ce77..af9d24051cfcd6cc5920ea0afeb234e0d0c1f159 100644
+index 70a6d0b..af9d240 100644
 --- a/crates/vibecast-cli/src/main.rs
 +++ b/crates/vibecast-cli/src/main.rs
 @@ -103,10 +103,10 @@ async fn run(args: Args) -> anyhow::Result<()> {
@@ -4110,7 +4193,7 @@ index 70a6d0bf2c9732bad82e211b20921a94b494ce77..af9d24051cfcd6cc5920ea0afeb234e0
 +    }
  }
 diff --git a/crates/vibecast-core/Cargo.toml b/crates/vibecast-core/Cargo.toml
-index 0040bb74edf51a1b7a9fcb2070d727b42a8c6a81..f26f7f1357a545b8da16457f5743ddbf99c3135d 100644
+index 0040bb7..f26f7f1 100644
 --- a/crates/vibecast-core/Cargo.toml
 +++ b/crates/vibecast-core/Cargo.toml
 @@ -23,6 +23,7 @@ tracing.workspace = true
@@ -4122,7 +4205,7 @@ index 0040bb74edf51a1b7a9fcb2070d727b42a8c6a81..f26f7f1357a545b8da16457f5743ddbf
  
  [dev-dependencies]
 diff --git a/crates/vibecast-core/src/audio_cache.rs b/crates/vibecast-core/src/audio_cache.rs
-index 44b8628d516bf86091f6b79b4670e1fd11cc9260..70008f0dba301b4a13ac2f57e3e9b38a3b66b512 100644
+index 44b8628..70008f0 100644
 --- a/crates/vibecast-core/src/audio_cache.rs
 +++ b/crates/vibecast-core/src/audio_cache.rs
 @@ -13,6 +13,7 @@ use vibecast_sdk::MediaCacheHint;
@@ -5243,7 +5326,7 @@ index 44b8628d516bf86091f6b79b4670e1fd11cc9260..70008f0dba301b4a13ac2f57e3e9b38a
      }
  }
 diff --git a/crates/vibecast-core/src/hub.rs b/crates/vibecast-core/src/hub.rs
-index 0246d9defd584235a69565b3a4a1a86fe1a72b73..ae4031ea7df27d69ac0734163d4b800197e7fd29 100644
+index 0246d9d..ae4031e 100644
 --- a/crates/vibecast-core/src/hub.rs
 +++ b/crates/vibecast-core/src/hub.rs
 @@ -161,6 +161,7 @@ enum AppPlaybackCommand {
@@ -6034,7 +6117,7 @@ index 0246d9defd584235a69565b3a4a1a86fe1a72b73..ae4031ea7df27d69ac0734163d4b8001
  
      fn unregister_proxies(&self, session_id: &str) {
 diff --git a/crates/vibecast-core/src/proxy.rs b/crates/vibecast-core/src/proxy.rs
-index f77dbe8f9a4cd01d15434976f9f9a74691c0baa3..ada4c22391d8d587c35ec7156032a92ae6dcf567 100644
+index f77dbe8..ada4c22 100644
 --- a/crates/vibecast-core/src/proxy.rs
 +++ b/crates/vibecast-core/src/proxy.rs
 @@ -29,6 +29,37 @@ use vibecast_sdk::{
@@ -6192,7 +6275,7 @@ index f77dbe8f9a4cd01d15434976f9f9a74691c0baa3..ada4c22391d8d587c35ec7156032a92a
          PlaybackMedia::new(
              "sess",
 diff --git a/crates/vibecast-core/src/tests.rs b/crates/vibecast-core/src/tests.rs
-index 3ba74b085a72d9d8a7269d82824c0705d8ffae4d..dac5d2d554b7c352e810a679b2e963a5db6add0e 100644
+index 3ba74b0..dac5d2d 100644
 --- a/crates/vibecast-core/src/tests.rs
 +++ b/crates/vibecast-core/src/tests.rs
 @@ -149,6 +149,20 @@ struct FakeSession(
@@ -7374,7 +7457,7 @@ index 3ba74b085a72d9d8a7269d82824c0705d8ffae4d..dac5d2d554b7c352e810a679b2e963a5
 +    assert_eq!(harness.player.commands().len(), before);
 +}
 diff --git a/crates/vibecast-discovery/src/mdns.rs b/crates/vibecast-discovery/src/mdns.rs
-index 6365d765c5cf1841448a9ed38242c8205feac689..52e292950f668f612bbfa2a3a7acc4b9122ae378 100644
+index 6365d76..52e2929 100644
 --- a/crates/vibecast-discovery/src/mdns.rs
 +++ b/crates/vibecast-discovery/src/mdns.rs
 @@ -254,18 +254,34 @@ impl MdnsResponder {
@@ -7484,7 +7567,7 @@ index 6365d765c5cf1841448a9ed38242c8205feac689..52e292950f668f612bbfa2a3a7acc4b9
      fn cleans_and_builds_instance_and_bs() {
          assert_eq!(clean_device_id("ab-cd-ef"), "abcdef");
 diff --git a/crates/vibecast-ffi/src/lib.rs b/crates/vibecast-ffi/src/lib.rs
-index 500b1710a7f4066c97e5f652ebd99a99e59c0f63..e92c3bf73c623d8b6c616afce07ade2b72ebe435 100644
+index 500b171..e92c3bf 100644
 --- a/crates/vibecast-ffi/src/lib.rs
 +++ b/crates/vibecast-ffi/src/lib.rs
 @@ -308,6 +308,8 @@ impl From<PlatformError> for ReceiverError {
@@ -7497,7 +7580,7 @@ index 500b1710a7f4066c97e5f652ebd99a99e59c0f63..e92c3bf73c623d8b6c616afce07ade2b
              | PlatformError::Settings(_) => ReceiverError::Config { reason: message },
              PlatformError::Discovery(_)
 diff --git a/crates/vibecast-platform/src/lib.rs b/crates/vibecast-platform/src/lib.rs
-index b6c3abbb8ddc1f4f2bb5e19d701108cbb940b94b..4916cc42721ce52ff204b041c664e1153a6c1439 100644
+index b6c3abb..4916cc4 100644
 --- a/crates/vibecast-platform/src/lib.rs
 +++ b/crates/vibecast-platform/src/lib.rs
 @@ -90,6 +90,18 @@ pub struct PlatformInputs {
@@ -7787,7 +7870,7 @@ index b6c3abbb8ddc1f4f2bb5e19d701108cbb940b94b..4916cc42721ce52ff204b041c664e115
      fn app_providers_are_registered() {
          let providers = build_app_providers();
 diff --git a/crates/vibecast-platform/src/manager.rs b/crates/vibecast-platform/src/manager.rs
-index b8dc6e9ed9f0ce696c270ec8e161a8497ad24215..56e5b187350ae0723f755a02a29c840c31131b3c 100644
+index b8dc6e9..56e5b18 100644
 --- a/crates/vibecast-platform/src/manager.rs
 +++ b/crates/vibecast-platform/src/manager.rs
 @@ -75,6 +75,7 @@ pub(crate) struct ManagerConfig {
@@ -7842,7 +7925,7 @@ index b8dc6e9ed9f0ce696c270ec8e161a8497ad24215..56e5b187350ae0723f755a02a29c840c
              volume: self.config.volume.clone(),
              user_agent: self.config.user_agent.clone(),
 diff --git a/crates/vibecast-player-api/src/protocol.rs b/crates/vibecast-player-api/src/protocol.rs
-index 833145d65435d170f0cccf4850e134f9c26a91e7..fef281ad118437d6208b39e4e8262ab20149c69c 100644
+index 833145d..fef281a 100644
 --- a/crates/vibecast-player-api/src/protocol.rs
 +++ b/crates/vibecast-player-api/src/protocol.rs
 @@ -62,6 +62,9 @@ pub struct PlaybackStreamPayload {
@@ -8002,7 +8085,7 @@ index 833145d65435d170f0cccf4850e134f9c26a91e7..fef281ad118437d6208b39e4e8262ab2
      fn load_command_serializes_camel_case_with_type_tag() {
          let command = PlayerCommand::Load {
 diff --git a/crates/vibecast-receiver/src/lib.rs b/crates/vibecast-receiver/src/lib.rs
-index f63ea3b4863aa1f5b2116e646ded8ee508a27fac..3a673bfd27c489105ff72d3130c39514bd6b811d 100644
+index f63ea3b..3a673bf 100644
 --- a/crates/vibecast-receiver/src/lib.rs
 +++ b/crates/vibecast-receiver/src/lib.rs
 @@ -21,8 +21,8 @@ use std::time::Duration;
@@ -8176,7 +8259,7 @@ index f63ea3b4863aa1f5b2116e646ded8ee508a27fac..3a673bfd27c489105ff72d3130c39514
 +    }
 +}
 diff --git a/crates/vibecast-sdk/src/lib.rs b/crates/vibecast-sdk/src/lib.rs
-index 6e0d72b3c12fe43f83dfbba25c43e2f09a958a1c..721cfce500d0abe39a5f9f187e049164c56f0f8d 100644
+index 6e0d72b..721cfce 100644
 --- a/crates/vibecast-sdk/src/lib.rs
 +++ b/crates/vibecast-sdk/src/lib.rs
 @@ -92,8 +92,8 @@ pub use context::{
@@ -8191,7 +8274,7 @@ index 6e0d72b3c12fe43f83dfbba25c43e2f09a958a1c..721cfce500d0abe39a5f9f187e049164
  
  // Re-export the Cast protocol types apps need so they depend on this crate only.
 diff --git a/crates/vibecast-sdk/src/types.rs b/crates/vibecast-sdk/src/types.rs
-index 7a9490b83f0d6af1204dc63d7a7db4502be4c52c..3264f009973edcd31d69b810398d1d166dd4e4e7 100644
+index 7a9490b..3264f00 100644
 --- a/crates/vibecast-sdk/src/types.rs
 +++ b/crates/vibecast-sdk/src/types.rs
 @@ -70,10 +70,25 @@ impl StreamSource {

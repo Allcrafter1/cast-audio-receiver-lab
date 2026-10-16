@@ -46,10 +46,10 @@ anonymous result.
 ## Version and evidence
 
 The maintained frontend was versioned locally as commit
-`c730201523c2a1c1541de4fa7f2662e082e0eb21`. It is represented in the product
+`2975e7b7d997bb896951656a004c5e94a7b8633f`. It is represented in the product
 tree by `patches/vibecast-0.6.0.dev27-current.patch`, applied once over public
 dev26 base `83ba470158189de3bc223701decdc4c502d47644`. Patch SHA-256:
-`56cbee6d784aa262fd5bd156bd1711fd3fe5feaab696f922551e606ba4c7ede0`.
+`02ed71eec0bf69304436f7d7b21da12640b0d4b9efba93d9b92bafe9cb9a8397`.
 The local commit is not claimed to exist on the public remote.
 
 Automated verification ran 390 Rust unit/integration tests: 388 passed and two
@@ -74,3 +74,26 @@ is retained in the host-private, timestamped dev27 rollback directory.
 Physical acceptance must separately show that the sender supplies a CTT and
 that `Fuck My Computer` (`lENt7-t8I-I`) becomes playable. No token value is
 required in evidence or logs.
+
+## First live attempt and follow-up
+
+At 19:05:58 UTC on 2026-10-16, selection of `lENt7-t8I-I` carried a CTT
+and entered the credential-bound resolver. All three attempts were rejected
+with "This video may be inappropriate for some users." No audio LOAD succeeded.
+This confirms token receipt, not successful account authorization.
+
+Comparison with the issue reporter's VideoLoader showed missing content
+acknowledgement and MDX playback fields. The follow-up adds `racyCheckOk`,
+`contentCheckOk` and `isMdxPlayback` only for matching sender credentials.
+Anonymous requests remain unchanged. A mismatched video credential is also
+rejected at request construction. The authenticated stream now uses the
+existing optional audio cache, preserving URL-refresh behavior.
+
+Follow-up source commit: `2975e7b7d997bb896951656a004c5e94a7b8633f`.
+Compatible binary SHA-256:
+`c6be61d4a0985cd4e4ec6eb834af5442e872d6c7f0acc3fb88103beb17991d7c`.
+Activated on `.110` at approximately 21:10 CEST; the in-container hash matched
+and both routes were responsive after restart.
+YouTube tests: 99 passed, one live test ignored. A new rejection fixture ensures
+that server denial is preserved. Live acceptance of this follow-up is pending;
+the ANDROID client still differs from the reporter's Music/TV clients.
