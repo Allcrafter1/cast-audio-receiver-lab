@@ -130,7 +130,9 @@ def _dlna_target(value: object) -> dict:
     if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password:
         raise ValueError("invalid DLNA description URL")
     host = _network_host(parsed.hostname, "DLNA host")
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    port = parsed.port if parsed.port is not None else (443 if parsed.scheme == "https" else 80)
+    if not 1 <= port <= 65535:
+        raise ValueError("invalid DLNA port")
     canonical = {
         "description_url": description_url,
         "host": host,

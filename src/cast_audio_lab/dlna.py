@@ -137,9 +137,12 @@ class DlnaAudioBackend(NullAudioBackend):
     async def play(self):
         await (await self._connect()).async_play()
         self._awaiting_play = False
+        self._seen_playing = False
         self._load_started = time.monotonic()
         self._status.state = "BUFFERING"
+        self._status.idle_reason = None
         self._emit_status()
+        self._start_polling()
 
     @upnp_command
     async def pause(self):

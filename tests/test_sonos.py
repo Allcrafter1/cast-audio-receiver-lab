@@ -1,5 +1,7 @@
 # SPDX-License-Identifier: MPL-2.0
 import unittest
+import asyncio
+import threading
 
 from cast_audio_lab.backend import MediaMetadata
 from cast_audio_lab.sonos import SonosAudioBackend, _seconds, _timestamp
@@ -18,6 +20,68 @@ class FakeSonos:
 
 
 class SonosBackendTests(unittest.IsolatedAsyncioTestCase):
+    async def test_cancelled_thread_load_cannot_finish_after_stop(self):
+        device = FakeSonos()
+        backend = SonosAudioBackend("192.0.2.3", device_factory=lambda _: device)
+        entered, release = threading.Event(), threading.Event()
+        def delayed_load(*args, **kwargs):
+            entered.set()
+            release.wait(2)
+            device.calls.append(("load_finished",))
+        device.play_uri = delayed_load
+        task = asyncio.create_task(backend.load("http://media/new", "audio/mpeg", True, 0))
+        stopping = None
+        try:
+            self.assertTrue(await asyncio.to_thread(entered.wait, 1))
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+            stopping = asyncio.create_task(backend.stop())
+            await asyncio.sleep(.05)
+            self.assertNotIn(("stop",), device.calls,
+                             "Stop raced ahead of a still-running remote Load")
+            release.set()
+            await asyncio.wait_for(stopping, 1)
+            self.assertEqual(device.calls, [("load_finished",), ("stop",)])
+        finally:
+            release.set()
+            if stopping:
+                await asyncio.gather(stopping, return_exceptions=True)
+            await backend.shutdown()
+
+    async def test_replacement_cancels_old_feedback_before_remote_load(self):
+        device = FakeSonos()
+        backend = SonosAudioBackend("192.0.2.3", device_factory=lambda _: device)
+        cancelled = asyncio.Event()
+        async def stale_poll():
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+        backend._poll_task = asyncio.create_task(stale_poll())
+        await asyncio.sleep(0)
+        original = device.play_uri
+        def load(*args, **kwargs):
+            self.assertTrue(cancelled.is_set(), "old feedback still active during replacement")
+            original(*args, **kwargs)
+        device.play_uri = load
+        try:
+            await backend.load("http://media/new", "audio/mpeg", True, 0)
+        finally:
+            await backend.shutdown()
+
+    async def test_play_after_terminal_feedback_restarts_monitor(self):
+        device = FakeSonos()
+        backend = SonosAudioBackend("192.0.2.3", device_factory=lambda _: device)
+        backend._status.url = "http://media/song"
+        backend._status.idle_reason = "FINISHED"
+        try:
+            await backend.play()
+            self.assertIsNone(backend.status().idle_reason)
+            self.assertIsNotNone(backend._poll_task)
+            self.assertFalse(backend._poll_task.done())
+        finally:
+            await backend.shutdown()
+
     async def test_load_controls_and_volume_use_soco_device(self):
         device = FakeSonos()
         backend = SonosAudioBackend("192.0.2.3", device_factory=lambda host: device)

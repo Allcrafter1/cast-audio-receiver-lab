@@ -18,6 +18,8 @@ from .output_registry import adapter_arguments
 LOG = logging.getLogger(__name__)
 _DIAGNOSTIC_SOURCE = " cast_audio_lab.airplay: AIRPLAY_DIAGNOSTIC "
 _DIAGNOSTIC_FIELD = re.compile(r"^[a-z_]+=[a-zA-Z0-9_.:-]{1,64}$")
+_HEALTH_SOURCE = " cast_audio_lab.player_health: "
+_HEALTH_MAX_AGE = 15.0
 
 
 class RouteManager:
@@ -95,7 +97,8 @@ class RouteManager:
                 reader, writer = await asyncio.open_connection(parsed.hostname, parsed.port)
             del reader
             writer.close()
-            await writer.wait_closed()
+            async with asyncio.timeout(timeout):
+                await writer.wait_closed()
             return True
         except (OSError, TimeoutError, ValueError):
             return False
@@ -104,7 +107,13 @@ class RouteManager:
         bridge_ready = await self._bridge_reachable()
         enabled = [route for route in self.routes if route.enabled]
         route_states = [self.states.get(route.id, {}).get("state") for route in enabled]
-        routes_ready = all(state == "running" for state in route_states)
+        now = time.monotonic()
+        responsive = sum(
+            self.states.get(route.id, {}).get("state") == "running"
+            and 0 <= now - self.states.get(route.id, {}).get("last_pong", float("-inf")) <= _HEALTH_MAX_AGE
+            for route in enabled
+        )
+        routes_ready = responsive == len(enabled)
         manager_ready = self.started_at is not None and not self.closed
         return {
             "schema": 1,
@@ -113,6 +122,8 @@ class RouteManager:
             "frontend_bridge": "ready" if bridge_ready else "unreachable",
             "enabled_routes": len(enabled),
             "running_routes": sum(state == "running" for state in route_states),
+            "responsive_routes": responsive,
+            "readiness_check": "player_websocket_pong",
         }
 
     def status(self):
@@ -163,9 +174,18 @@ class RouteManager:
             "routes": routes,
         }
 
-    async def _drain(self, stream, handler):
+    async def _drain(self, stream, handler, route_id=None):
         while chunk := await stream.readline():
             message = chunk.decode(errors="replace").rstrip()
+            health_marker = message.find(_HEALTH_SOURCE)
+            if health_marker >= 0 and route_id in self.states:
+                health = message[health_marker + len(_HEALTH_SOURCE):]
+                if health == "responsive":
+                    self.states[route_id]["last_pong"] = time.monotonic()
+                elif health == "disconnected":
+                    self.states[route_id].pop("last_pong", None)
+                # Heartbeats are internal telemetry, not persistent log noise.
+                continue
             record = logging.LogRecord("adapter", logging.INFO, "", 0,
                                        message, (), None)
             handler.emit(record)
@@ -204,10 +224,17 @@ class RouteManager:
             return
         raise RuntimeError("owned adapter did not terminate")
 
+    async def _discard_output(self, stream):
+        # A failed log parser must not leave the subprocess pipe full while we
+        # reap it: asyncio process.wait also waits for pipe transports to close.
+        while await stream.read(8192):
+            pass
+
     async def _run(self, route):
         restarts = 0
         while True:
-            process = pump = handler = None
+            process = pump = waiter = handler = None
+            failure = "adapter_start_failed"
             started = time.monotonic()
             try:
                 handler = RotatingFileHandler(self.store.directory / f"route-{route.id}.log",
@@ -222,15 +249,27 @@ class RouteManager:
                     process = await spawn
                     raise
                 self.states[route.id] = {"state": "running", "pid": process.pid, "restarts": restarts}
-                pump = asyncio.create_task(self._drain(process.stdout, handler))
-                code = await process.wait()
+                pump = asyncio.create_task(self._drain(process.stdout, handler, route.id))
+                waiter = asyncio.create_task(process.wait())
+                failure = "adapter_output_failed"
+                done, _ = await asyncio.wait((pump, waiter), return_when=asyncio.FIRST_COMPLETED)
+                if pump in done:
+                    await pump
+                    if waiter not in done and process.returncode is None:
+                        raise OSError("adapter output closed before process exit")
+                code = await waiter
                 self.states[route.id] = {"state": "backoff", "pid": None, "restarts": restarts, "exit_code": code}
             except (OSError, ValueError):
-                self.states[route.id] = {"state": "backoff", "pid": None, "restarts": restarts, "error": "adapter_start_failed"}
+                self.states[route.id] = {"state": "backoff", "pid": None, "restarts": restarts, "error": failure}
             finally:
                 try:
                     if process:
+                        if pump is not None:
+                            pump.cancel()
+                            await asyncio.gather(pump, return_exceptions=True)
+                        pump = asyncio.create_task(self._discard_output(process.stdout))
                         await self._stop(process)
+                        await asyncio.wait_for(pump, 2)
                 except Exception:
                     self.states[route.id] = {"state": "error", "pid": process.pid if process else None,
                                              "restarts": restarts, "error": "adapter_cleanup_failed"}
@@ -239,6 +278,9 @@ class RouteManager:
                     if pump:
                         pump.cancel()
                         await asyncio.gather(pump, return_exceptions=True)
+                    if waiter:
+                        waiter.cancel()
+                        await asyncio.gather(waiter, return_exceptions=True)
                     if handler:
                         handler.close()
             restarts = 0 if time.monotonic() - started > 60 else restarts + 1

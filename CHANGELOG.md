@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.0.dev27 — video-scoped YouTube credential transfer
+
+- Preserve a sender-provided YouTube `ctt` only for the selected video and the
+  active Lounge session. Forward it to InnerTube as
+  `context.user.credentialTransferTokens` with `VIDEO` scope.
+- Resolve credential-bound playback directly from that InnerTube response
+  instead of waiting for or replacing it with anonymous `yt-dlp` output.
+- Carry the same credential through bounded retry, repeat and signed-URL
+  refresh. Clear it on title navigation, Stop and controller takeover; never
+  persist or log its value.
+- Prevent anonymous prefetch and same-selection coalescing from discarding or
+  reusing the wrong credential context. Add request-shape, redaction, lifecycle,
+  refresh and resolver regressions.
+- Version the complete post-dev26 maintained frontend as a hash-locked snapshot
+  over the published dev26 commit. The matching local Git commit is retained for
+  review; it is not represented as a public upstream commit.
+
 ## 0.6.0.dev26 — exclusive YouTube controllers and checked playback fallback
 
 - Restore exclusive YouTube Music sender takeover. A new active controller

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+from http.client import HTTPException
 import json
 import os
 from pathlib import Path
@@ -85,7 +86,11 @@ def acquire(manifest_path: Path, manifest_sha256: str, destination: Path, *, ope
             try:
                 with fetch(manifest["url"], timeout=30) as response:
                     _https(response.geturl())
-                    while chunk := response.read(64 * 1024):
+                    # read() can refill indefinitely on a slow-drip peer while
+                    # every socket read stays below its timeout. read1() returns
+                    # after one receive so the total budget is checked between
+                    # network reads, even when a chunk is not yet full.
+                    while chunk := response.read1(64 * 1024):
                         if time.monotonic() > deadline:
                             raise ValueError("artifact download exceeded time budget")
                         count += len(chunk)
@@ -93,7 +98,7 @@ def acquire(manifest_path: Path, manifest_sha256: str, destination: Path, *, ope
                             raise ValueError("artifact exceeds pinned size")
                         digest.update(chunk)
                         output.write(chunk)
-            except (OSError, ValueError):
+            except (OSError, ValueError, HTTPException):
                 # Exceptions from HTTP clients can contain signed URLs. Do not
                 # expose them through logs, diagnostics or CLI tracebacks.
                 raise ValueError("artifact unavailable or download rejected; local copy unchanged") from None

@@ -50,6 +50,32 @@ def create_app(manager, *, discover=discover_airplay, discover_renderers=discove
     artwork_temp = tempfile.TemporaryDirectory(prefix='cast-artwork-')
     artwork_cache = ArtworkCache(Path(artwork_temp.name))
 
+    def reset_candidates(backend):
+        now = time.monotonic()
+        for ident, (expires, protocol, _) in list(candidates.items()):
+            if expires <= now or protocol == backend:
+                candidates.pop(ident)
+
+    async def replace_routes(routes, *, deleted_id=None):
+        # Once persistence starts, retain the caller's manager lock until its
+        # process reconciliation and private-file cleanup finish. A disconnected
+        # browser must not leave disk and live configuration on different edits.
+        async def transaction():
+            await manager.replace(routes)
+            if deleted_id is not None:
+                (manager.store.directory / f"target-{deleted_id}.json").unlink(missing_ok=True)
+        task = asyncio.create_task(transaction())
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            while not task.done():
+                try:
+                    await asyncio.shield(task)
+                except asyncio.CancelledError:
+                    continue
+            task.result()
+            raise
+
     @web.middleware
     async def security(request, handler):
         try:
@@ -132,7 +158,7 @@ def create_app(manager, *, discover=discover_airplay, discover_renderers=discove
             routes = validate_routes([
                 (changed if r.id == route.id else r).private() for r in manager.routes
             ])
-            await manager.replace(routes)
+            await replace_routes(routes)
             return web.json_response(changed.public())
 
     async def add_route(request):
@@ -165,7 +191,7 @@ def create_app(manager, *, discover=discover_airplay, discover_renderers=discove
                     text="Diese lokale Ausgabe existiert bereits. Bitte die vorhandene Ausgabe verwenden."
                 )
             routes = validate_routes([r.private() for r in manager.routes]+[route])
-            await manager.replace(routes)
+            await replace_routes(routes)
             return web.json_response(routes[-1].public(), status=201)
 
     async def delete_route(request):
@@ -173,8 +199,7 @@ def create_app(manager, *, discover=discover_airplay, discover_renderers=discove
             route = next((r for r in manager.routes if r.id == request.match_info["id"]), None)
             if route is None:
                 raise web.HTTPNotFound()
-            await manager.replace([r for r in manager.routes if r.id != route.id])
-            (manager.store.directory / f"target-{route.id}.json").unlink(missing_ok=True)
+            await replace_routes([r for r in manager.routes if r.id != route.id], deleted_id=route.id)
             return web.json_response({"deleted": route.id})
 
     async def scan(request):
@@ -188,7 +213,7 @@ def create_app(manager, *, discover=discover_airplay, discover_renderers=discove
                     devices = await discover(timeout=4, include_virtual=False)
             except TimeoutError:
                 raise web.HTTPGatewayTimeout(text="Discovery timed out") from None
-            candidates.clear()
+            reset_candidates("airplay")
             result = []
             async with manager.lock:
                 own = {route.id.replace("-", "").lower() for route in manager.routes}
@@ -228,7 +253,7 @@ def create_app(manager, *, discover=discover_airplay, discover_renderers=discove
                 raise web.HTTPGatewayTimeout(text="DLNA discovery timed out") from None
             except ImportError:
                 raise web.HTTPServiceUnavailable(text="DLNA dependency unavailable") from None
-            candidates.clear()
+            reset_candidates("dlna")
             result = []
             async with manager.lock:
                 for device in devices[:32]:

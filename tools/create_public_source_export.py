@@ -17,6 +17,7 @@ import json
 from pathlib import Path
 import re
 import shutil
+import tempfile
 
 
 ROOT = Path(__file__).parents[1]
@@ -142,7 +143,17 @@ def _validate_text(relative: Path, payload: bytes, *, allow_documentation_identi
 def create(target: Path) -> dict[str, object]:
     if target.exists() and any(target.iterdir()):
         raise ValueError(f"target is not empty: {target}")
-    target.mkdir(parents=True, exist_ok=True)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    # Never expose a partly validated tree or strand an unretryable destination
+    # after a late disk error. A sibling keeps the final rename on one filesystem.
+    with tempfile.TemporaryDirectory(prefix=".source-export-", dir=target.parent) as temporary:
+        staging = Path(temporary)
+        report = _populate(staging)
+        staging.replace(target)
+        return report
+
+
+def _populate(target: Path) -> dict[str, object]:
     manifest: list[dict[str, object]] = []
     seen: set[Path] = set()
     for source, relative in _source_files():

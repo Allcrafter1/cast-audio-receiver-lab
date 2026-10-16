@@ -6,8 +6,8 @@ from __future__ import annotations
 import os
 from pathlib import Path
 import json
-import shutil
 import sys
+import tempfile
 
 from .bundle_artifact import acquire
 
@@ -80,29 +80,33 @@ def import_certificate_bundle(
     if source is None:
         return None
     destination = data_dir / "private" / "certs.json"
-    if source.resolve() == destination.resolve():
-        if not source.is_file() or source.is_symlink():
-            raise ValueError("certificate bundle must be a regular file")
-        os.chmod(destination, 0o600)
-        os.chown(destination, uid, gid, follow_symlinks=False)
-        return destination
     if source.is_symlink() or not source.is_file():
         raise ValueError("certificate bundle must be a regular file")
     size = source.stat().st_size
     if not 0 < size <= MAX_CERTIFICATE_BUNDLE_BYTES:
         raise ValueError("certificate bundle size is invalid")
-    temporary = destination.with_suffix(".json.importing")
+    if source.resolve() == destination.resolve():
+        os.chmod(destination, 0o600)
+        os.chown(destination, uid, gid, follow_symlinks=False)
+        return destination
+    fd, name = tempfile.mkstemp(prefix=".certs-import-", dir=destination.parent)
+    temporary = Path(name)
     try:
-        with source.open("rb") as reader, temporary.open("xb") as writer:
-            os.chmod(temporary, 0o600)
-            shutil.copyfileobj(reader, writer)
+        with os.fdopen(fd, "wb") as writer, source.open("rb") as reader:
+            copied = 0
+            while chunk := reader.read(64 * 1024):
+                copied += len(chunk)
+                if copied > MAX_CERTIFICATE_BUNDLE_BYTES:
+                    raise ValueError("certificate bundle size is invalid")
+                writer.write(chunk)
+            if copied == 0:
+                raise ValueError("certificate bundle size is invalid")
             writer.flush()
             os.fsync(writer.fileno())
         os.chown(temporary, uid, gid, follow_symlinks=False)
         os.replace(temporary, destination)
     finally:
-        if temporary.exists():
-            temporary.unlink()
+        temporary.unlink(missing_ok=True)
     return destination
 
 

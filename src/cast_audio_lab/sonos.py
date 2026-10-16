@@ -36,47 +36,75 @@ class SonosAudioBackend(NullAudioBackend):
         super().__init__()
         self.device = device_factory(host)
         self._poll_task = None
+        self._command_lock = asyncio.Lock()
+        self._pending_command = None
+
+    async def _call(self, function, *args, **kwargs):
+        # Cancelling to_thread only cancels its waiter, not the device request.
+        # Keep ownership and order Stop after that request has actually ended.
+        async with self._command_lock:
+            pending = self._pending_command
+            if pending is not None:
+                try:
+                    await asyncio.shield(pending)
+                except Exception:
+                    pass
+            task = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+            self._pending_command = task
+            try:
+                return await asyncio.shield(task)
+            except Exception as error:
+                raise RuntimeError(f"Sonos command failed ({type(error).__name__})") from None
+            finally:
+                if task.done():
+                    self._pending_command = None
 
     async def load(self, url, content_type, autoplay, start_time):
+        await self._cancel_polling()
         self._status.state = "BUFFERING"
+        self._status.idle_reason = None
         self._emit_status()
-        await asyncio.to_thread(
+        await self._call(
             self.device.play_uri,
             url,
             title=self.metadata.title or "Cast audio",
             start=autoplay,
         )
         if start_time > 0:
-            await asyncio.to_thread(self.device.seek, _timestamp(start_time))
+            await self._call(self.device.seek, _timestamp(start_time))
         await super().load(url, content_type, autoplay, start_time)
         self._start_polling()
 
     async def play(self):
-        await asyncio.to_thread(self.device.play)
+        await self._call(self.device.play)
+        self._status.idle_reason = None
         await super().play()
+        self._start_polling()
 
     async def pause(self):
-        await asyncio.to_thread(self.device.pause)
+        await self._call(self.device.pause)
         await super().pause()
 
     async def seek(self, position):
-        await asyncio.to_thread(self.device.seek, _timestamp(position))
+        await self._call(self.device.seek, _timestamp(position))
         await super().seek(position)
 
     async def set_volume(self, level, muted):
-        await asyncio.to_thread(
+        await self._call(
             setattr,
             self.device,
             "volume",
             round(max(0, min(1, level)) * 100),
         )
-        await asyncio.to_thread(setattr, self.device, "mute", bool(muted))
+        await self._call(setattr, self.device, "mute", bool(muted))
         await super().set_volume(level, muted)
 
     async def stop(self):
         await self._cancel_polling()
-        await asyncio.to_thread(self.device.stop)
-        await super().stop()
+        try:
+            await self._call(self.device.stop)
+        finally:
+            await super().stop()
 
     def _start_polling(self):
         if self._poll_task is None or self._poll_task.done():

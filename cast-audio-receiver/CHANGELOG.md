@@ -1,5 +1,18 @@
 # App changelog
 
+## 0.6.0-dev27 — YouTube account-context forwarding candidate
+
+- Forward the YouTube Music sender's video-scoped credential context to the
+  selected InnerTube player request. This is intended to let YouTube apply the
+  signed-in account's own access decision, including for age-gated titles.
+- Keep the credential only in the active receiver session. It is not logged,
+  written to disk, reused for another queue item or sent to `yt-dlp`.
+- Preserve it for the same title's bounded retry, repeat and signed-URL refresh;
+  discard it on Stop, navigation and controller replacement.
+- Automated tests verify request shape and lifecycle. Availability still
+  depends on the sender actually supplying a valid CTT and on YouTube accepting
+  the associated client/session context.
+
 ## 0.6.0-dev26 — reliable desktop/mobile takeover and playback fallback
 
 - A new YouTube Music controller now takes over exclusively and disconnects the

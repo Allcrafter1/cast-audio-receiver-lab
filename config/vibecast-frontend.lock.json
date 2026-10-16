@@ -3,8 +3,11 @@
   "commit": "83ba470158189de3bc223701decdc4c502d47644",
   "branch_for_review": "cast-audio-receiver",
   "rust_toolchain": "1.98.1",
+  "development_snapshot": "patches/vibecast-0.6.0.dev27-current.patch",
+  "development_snapshot_sha256": "56cbee6d784aa262fd5bd156bd1711fd3fe5feaab696f922551e606ba4c7ede0",
+  "local_version_commit": "c730201523c2a1c1541de4fa7f2662e082e0eb21",
   "reconstruction_base": "f28befe02fe930db300294d6bf49cdf5fec5a747",
   "reconstruction_overlay": "patches/vibecast-dev13-internal-bridge.patch",
   "reconstruction_overlay_sha256": "660e536d026cb57681c3ea0534cb331ec91da8a75df08849d2f62819d74ed7c1",
-  "note": "Direct commit includes bridge isolation, YouTube repeat/recovery and current-title audio cache, correlated desktop MDX, exclusive sender takeover with observer isolation, ordered route replacement, Previous handling and checked mobile-web playback fallback. HLS manifests remain outside the progressive audio cache. Reconstruction base/overlay describe the historical dev13 baseline only. Build the pinned commit directly; do not apply any snapshot again."
+  "note": "The public commit is the dev26 base. Apply the hash-locked dev27 current snapshot exactly once; it includes the later reliability work and sender-provided, video/session-scoped YouTube CTT forwarding. The local_version_commit identifies the matching local versioning clone and is not claimed to be public. Reconstruction base/overlay describe the historical dev13 baseline only."
 }

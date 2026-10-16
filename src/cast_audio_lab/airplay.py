@@ -17,7 +17,7 @@ import re
 import tempfile
 import math
 from urllib.parse import urlsplit
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -29,6 +29,32 @@ LOG = logging.getLogger(__name__)
 _LINE_RE = re.compile(r"^\[(?P<kind>STATUS|EVENT)\]\s+(?P<body>.*)$")
 _SAFE_TOKEN_RE = re.compile(r"^[a-zA-Z0-9_.:-]{1,64}$")
 _DIAGNOSTIC_MARKER = "AIRPLAY_DIAGNOSTIC"
+
+
+async def _bounded_child_lines(reader: asyncio.StreamReader) -> AsyncIterator[bytes]:
+    """Drain even malformed diagnostics without retaining an unbounded line.
+
+    Drop an oversized line in its entirety, never interpret its trailing bytes
+    as a new structured sender event.
+    """
+    pending = bytearray()
+    dropping = False
+    while chunk := await reader.read(8192):
+        pieces = chunk.split(b'\n')
+        for index, piece in enumerate(pieces):
+            if not dropping:
+                if len(pending) + len(piece) > 65536:
+                    pending.clear()
+                    dropping = True
+                else:
+                    pending.extend(piece)
+            if index < len(pieces) - 1:
+                if not dropping:
+                    yield bytes(pending) + b'\n'
+                pending.clear()
+                dropping = False
+    if pending and not dropping:
+        yield bytes(pending)
 
 
 def _safe_token(value: object, default: str = "unknown") -> str:
@@ -270,6 +296,7 @@ class AirPlayAudioBackend(NullAudioBackend):
         self._command_fd: int | None = None
         self._temporary_directory: tempfile.TemporaryDirectory[str] | None = None
         self._lock = asyncio.Lock()
+        self._command_lock = asyncio.Lock()
         self._input_finished = False
         self._autoplay = True
         self._aux_tasks: list[asyncio.Task[None]] = []
@@ -287,11 +314,15 @@ class AirPlayAudioBackend(NullAudioBackend):
         self._track_started = False
         self._start_pending = False
         self._prepared_artwork_url: str | None = None
+        self._track_cleanup_task: asyncio.Task[None] | None = None
+        self._pipeline_cleanup_task: asyncio.Task[None] | None = None
 
     async def load(
         self, url: str, content_type: str, autoplay: bool, start_time: float
     ) -> None:
         async with self._lock:
+            if self._pipeline_cleanup_task is not None and not self._pipeline_cleanup_task.done():
+                await asyncio.shield(self._pipeline_cleanup_task)
             reusable = self.persistent and self._status.idle_reason != "ERROR"
             _diagnostic(
                 logging.DEBUG,
@@ -354,14 +385,18 @@ class AirPlayAudioBackend(NullAudioBackend):
                 raise
 
     async def play(self) -> None:
-        self._autoplay = True
+        if self._status.state == "IDLE":
+            return
         await self._command("ACTION=PLAY")
+        self._autoplay = True
         await super().play()
         await self._send_progress()
 
     async def pause(self) -> None:
-        self._autoplay = False
+        if self._status.state == "IDLE":
+            return
         await self._command("ACTION=PAUSE")
+        self._autoplay = False
         if self._status.state == "BUFFERING":
             self._status.state = "PAUSED"
             self._emit_status()
@@ -370,9 +405,10 @@ class AirPlayAudioBackend(NullAudioBackend):
 
     async def stop(self) -> None:
         async with self._lock:
-            await self._command("ACTION=STOP")
-            await self._stop_pipeline()
-            await super().stop()
+            try:
+                await self._stop_pipeline()
+            finally:
+                await super().stop()
 
     async def seek(self, position: float) -> None:
         status = self.status()
@@ -575,15 +611,43 @@ class AirPlayAudioBackend(NullAudioBackend):
             return
         payload = "".join(f"{line}\n" for line in lines).encode()
         try:
-            os.write(self._command_fd, payload)
-        except (BrokenPipeError, BlockingIOError, OSError) as exc:
-            LOG.warning("Unable to send cliairplay command: %s", exc)
+            async with asyncio.timeout(2):
+                async with self._command_lock:
+                    fd = self._command_fd
+                    if fd is None:
+                        return
+                    position = 0
+                    while position < len(payload):
+                        try:
+                            written = os.write(fd, payload[position:])
+                            if written <= 0:
+                                raise BrokenPipeError("AirPlay command pipe made no progress")
+                            position += written
+                        except BlockingIOError:
+                            await asyncio.sleep(.01)
+        except OSError as exc:
+            LOG.warning("Unable to send cliairplay command: %s", type(exc).__name__)
             _diagnostic(
                 logging.WARNING,
                 "command_pipe_error",
                 phase=self._transport_phase,
                 error=type(exc).__name__,
             )
+            self._transport_failed.set()
+            self._set_position(self._current_position())
+            self._status.state = "IDLE"
+            self._status.idle_reason = "ERROR"
+            self._emit_status()
+            # A broken command channel leaves playback uncontrollable. Retire
+            # its fd before scheduling owned teardown so STOP cannot recurse
+            # through the failing channel, including from a reader callback.
+            fd, self._command_fd = self._command_fd, None
+            if fd is not None:
+                with contextlib.suppress(OSError):
+                    os.close(fd)
+            if self._pipeline_cleanup_task is None or self._pipeline_cleanup_task.done():
+                self._pipeline_cleanup_task = asyncio.create_task(self._stop_pipeline_resources())
+            raise
 
     async def _send_metadata(self) -> None:
         metadata = self.metadata
@@ -607,9 +671,13 @@ class AirPlayAudioBackend(NullAudioBackend):
                             f"PROGRESS={max(0, int(self._current_position()))}")
 
     async def _progress_updates(self) -> None:
-        while True:
-            await asyncio.sleep(2)
-            await self._send_progress()
+        try:
+            while True:
+                await asyncio.sleep(2)
+                await self._send_progress()
+        except OSError:
+            # _command already publishes ERROR; the app owns bounded recovery.
+            return
 
     async def _deliver_artwork(self) -> None:
         # cliairplay supports local images, not HTTPS. The shared converter
@@ -633,7 +701,7 @@ class AirPlayAudioBackend(NullAudioBackend):
             LOG.warning("AirPlay artwork fetch failed (URL omitted)")
 
     async def _read_events(self, reader: asyncio.StreamReader) -> None:
-        while line := await reader.readline():
+        async for line in _bounded_child_lines(reader):
             text = line.decode(errors="replace").rstrip()
             event = parse_cliairplay_line(text)
             if event is None:
@@ -733,7 +801,7 @@ class AirPlayAudioBackend(NullAudioBackend):
         # blocks on a full pipe and starves the AirPlay output.
         warned = False
         categories = set()
-        while line := await reader.readline():
+        async for line in _bounded_child_lines(reader):
             # Fixed labels only; never print signed URLs or raw decoder lines.
             lower = line.lower()
             for needle, category in ((b'403', 'http_403'), (b'404', 'http_404'),
@@ -753,7 +821,8 @@ class AirPlayAudioBackend(NullAudioBackend):
     async def _apply_remote_command(self, command: str) -> None:
         command = command.lower()
         if command == "play":
-            await super().play()
+            if self._status.state != "IDLE":
+                await super().play()
             self._emit_control(ControlRequest("play"))
         elif command == "pause":
             await super().pause()
@@ -763,7 +832,8 @@ class AirPlayAudioBackend(NullAudioBackend):
                 await super().pause()
                 self._emit_control(ControlRequest("pause"))
             else:
-                await super().play()
+                if self._status.state != "IDLE":
+                    await super().play()
                 self._emit_control(ControlRequest("play"))
         elif command == "stop":
             await super().stop()
@@ -822,6 +892,11 @@ class AirPlayAudioBackend(NullAudioBackend):
             self._emit_status()
 
     async def _stop_track(self) -> None:
+        if self._track_cleanup_task is None or self._track_cleanup_task.done():
+            self._track_cleanup_task = asyncio.create_task(self._stop_track_resources())
+        await asyncio.shield(self._track_cleanup_task)
+
+    async def _stop_track_resources(self) -> None:
         self._input_finished = False
         self._audio_ready = False
         for task in self._aux_tasks:
@@ -844,6 +919,11 @@ class AirPlayAudioBackend(NullAudioBackend):
             await _reap_process(decoder)
 
     async def _stop_pipeline(self) -> None:
+        if self._pipeline_cleanup_task is None or self._pipeline_cleanup_task.done():
+            self._pipeline_cleanup_task = asyncio.create_task(self._stop_pipeline_resources())
+        await asyncio.shield(self._pipeline_cleanup_task)
+
+    async def _stop_pipeline_resources(self) -> None:
         _diagnostic(
             logging.DEBUG,
             "pipeline_stop",
@@ -854,7 +934,8 @@ class AirPlayAudioBackend(NullAudioBackend):
         self._track_started = False
         self._start_pending = False
         await self._stop_track()
-        await self._command("ACTION=STOP")
+        with contextlib.suppress(OSError):
+            await self._command("ACTION=STOP")
         cli, self._cli = self._cli, None
         for task in self._reader_tasks:
             task.cancel()
@@ -892,6 +973,7 @@ async def _reap_process(process: asyncio.subprocess.Process) -> None:
             with contextlib.suppress(ProcessLookupError):
                 process.kill()
             await asyncio.wait_for(process.wait(), 2.0)
+        await asyncio.wait_for(asyncio.gather(*drains), 2.0)
     finally:
         for task in drains:
             task.cancel()

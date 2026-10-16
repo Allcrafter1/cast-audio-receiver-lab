@@ -1,5 +1,617 @@
 # Working plan
 
+## 0.6.0.dev27 YouTube CTT forwarding — 2026-10-16
+
+- Implemented sender-provided, video/session-scoped CTT forwarding from Lounge
+  `setPlaylist` into InnerTube `context.user.credentialTransferTokens` with
+  `VIDEO` scope. Token values are neither logged nor persisted.
+- Token-bearing playback uses the credential-bound InnerTube audio response,
+  not anonymous `yt-dlp`. Retry, repeat and exact-object URL refresh retain the
+  same context; navigation, Stop and takeover clear it. Prefetch remains
+  anonymous and cannot satisfy a credential-bearing load.
+- Full Rust verification ran 390 unit/integration tests: 388 passed, two
+  explicit live/hardware probes ignored; SDK doctest passed. Rust 1.98/Zig
+  GLIBC-compatible binary SHA-256:
+  `cc51e5aee11e40b177bffa039845e924e90207ff8c9a6190f41ef6688a43e59c`.
+- Complete maintained frontend is locally versioned at
+  `c730201523c2a1c1541de4fa7f2662e082e0eb21` and preserved as the hash-locked
+  dev27 snapshot over public dev26. This local commit is not a public pin.
+- Deployment to .110 and physical `Fuck My Computer` acceptance remain pending.
+  Store metadata stays dev26 until normal image verification/promotion. See
+  `docs/youtube-ctt-dev27.md`.
+
+## Cross-area reliability review, third round — 2026-10-08 (unreleased)
+
+Continued after the user's request not to stop at the previous review results.
+Adversarial follow-up covered interruption while sockets remain connected,
+delayed cross-title reports, malformed output, disconnected configuration
+requests, out-of-order UI responses, source-export failures, and all Rust
+workspace consumers rather than only the audio crates.
+
+Confirmed fixes and regression evidence:
+
+- The Python player receives commands independently of executing them. Stop
+  and a newer LOAD can cancel a blocked LOAD without closing the connection;
+  owned cleanup completes before a replacement starts. A bounded queue fails
+  closed on saturation. Tests also exercise a third selection arriving during
+  cleanup, queued seek/pause, and Stop for an unrelated session.
+- LOAD, State, Error and output controls carry an additive `mediaSessionId`.
+  The Rust core rejects delayed title-local reports for an older selection;
+  volume remains output-wide. Legacy clients omitting the field remain
+  compatible but cannot gain correlation guarantees without sending it.
+  Reports after Stop cannot resurrect a cleared selection or spend a retry.
+- Invalid replacement loads stop the previous decoder even when validation
+  fails before installing the new session. Five malformed takeover cases,
+  legacy recovery and foreign/current Stop are covered. Numeric inputs reject
+  non-finite values, booleans and overflow; command errors are redacted.
+- mpv IPC rejects non-object events and malformed/non-finite property values.
+  AirPlay drains oversized output lines in bounded chunks, discarding the
+  entire oversized line rather than interpreting its tail as a command.
+- Once a management edit starts persistence, HTTP cancellation cannot release
+  its lock before reconciliation and private-target cleanup finish. Tests
+  disconnect actual HTTP clients during PATCH and DELETE and check failed
+  atomic-save recovery.
+- UI responses are applied monotonically; a delayed older refresh/poll cannot
+  overwrite an already applied newer configuration. Standalone Node tests
+  exercise deferred responses without relying on browser timing.
+- Public source export validates in a sibling staging directory before atomic
+  publication. Failed validation no longer strands a partial output tree.
+- Whole-workspace checking caught missing adaptations in a PrimeVideo test
+  capability literal and the FFI typed-error mapping; both are corrected.
+
+Verification so far: complete Rust workspace tests passed (379 including
+doctests, 2 optional tests ignored). Python ran 356 tests, 345 passed and 11
+optional/environment tests skipped; the two Node UI/helper tests also passed
+explicitly. A separate real-mpv probe on the test laptop performed 30 rapid
+back-to-back replacement cycles without awaiting the first file-loaded event:
+final position/pause state and Stop were correct in all cycles. The probe used
+null audio and did not replace the running service; it is not audible approval.
+Final follow-up also corrected relative CLI `--certs` resolution against the
+documented data directory. Startup rejects invalid/non-finite initial volume
+and non-positive/non-finite volume steps with a typed configuration error;
+valid values are preserved (including steps above one, not newly prohibited).
+The final complete Rust rerun passed 381 tests including doctests, 2 ignored;
+format and whitespace checks passed. The independent closing review of media
+correlation, Stop/LOAD cancellation, failed replacement, configuration and
+volume handling found no further confirmed defect in those reviewed paths.
+
+Final locally cross-built binary SHA-256:
+`40c8796f288715988b56373ff9272445c64fe43d5183557215e91ea7b1ca5619`.
+Deployment uses separate `vibecast-round3-review` and `cast-round3-python`
+staging paths, including the corrected UI file. The previous container is
+retained as `cast-audio-receiver-pre-round3-review`; no active mounted files
+were overwritten during staging.
+
+Activated on the test laptop at 2026-10-08 21:54:24 UTC; container ID
+`5b8aba156592b5e97e503f9c1e3ed90f1a85e5543d6f2c6974cd6f8ef21b4208`.
+The active binary/player/UI hashes match the local artifacts. Both enabled
+routes report fresh WebSocket responsiveness, no container restart. Against
+the actually mounted Python runtime, 85 targeted tests passed, including real
+mpv null-audio rapid replacement/seek/crash recovery, connected LOAD
+interruption, malformed takeover, report identity and controlled output
+process/pipe behavior. User desktop/mobile audible acceptance is still pending.
+
+Known verification boundaries remain: no full Chromium run (missing system
+library), no physical Sonos/DLNA/AirPlay acceptance, no proof against every
+possible scheduling/network failure, and legacy player reports without media
+identity remain ambiguous. No commit, release, or version/source-pin change
+is authorized by this review; desktop/mobile acceptance precedes publication.
+
+## Cross-area reliability review, second round — 2026-10-08 (unreleased)
+
+User requested continued investigation/fixes across all areas, not only playback.
+Reviewed active receiver/bridge/discovery/configuration, YouTube/cache/decoder,
+output backends, management API/UI code, route persistence, certificate/artifact
+startup and publication/export checks. Three independent reviewers split the
+areas and cross-checked cancellation interactions. This is bounded review
+coverage, not a claim that every possible bug or device behavior is eliminated.
+
+New confirmed fixes:
+
+- Player output controls carry a local load generation: stale title-local
+  controls cannot target the next title within the same Cast session. Output
+  volume remains output-wide. A connection supervisor observes socket close,
+  receive, reporting and health tasks together, cancels pending backend work
+  and performs cleanup instead of waiting indefinitely inside a LOAD.
+- Bridge registration reserves lifecycle queue capacity before committing
+  ownership; epoch comparison/claim/enqueue are atomic. Stale registration
+  cannot replace a newer receiver. Manager also rejects stale epochs.
+- Non-finite, non-positive and unrepresentable HTTP/poll durations produce a
+  typed configuration error rather than a panic. Sub-second positive polling
+  retains its existing one-second minimum. Zero is explicitly invalid.
+- mDNS service validation precedes daemon startup; an owned cleanup guard
+  exists before registration. Failed registration no longer leaks a daemon.
+  Tests verify the individual daemon's state rather than global thread counts.
+- AirPlay control FIFO writes handle short writes and bounded backpressure.
+  Fatal control-channel failure retires the fd and stops the uncontrollable
+  sender. No recursive STOP failure or generic stop-on-volume-error policy.
+- AirPlay/Command outputs cannot claim playback after their decoder ended.
+  Their cleanup retains process ownership across cancellation and drains pipes
+  before final reaping. Command seek reloads via the existing {start_time}
+  template preserving pause, or explicitly rejects unsupported seek instead
+  of only moving its reported clock.
+- Sonos replacement stops old status polling before remote LOAD. Cancelled
+  threaded device commands retain ownership, so Stop waits for the outstanding
+  remote operation rather than being overtaken by a late play_uri completion.
+  Sonos errors are normalized without raw upstream details. Sonos/DLNA Play
+  restart ended polling and clear old terminal status; DLNA resets its startup
+  observation window.
+- Scanning one discovery protocol preserves unexpired import choices for the
+  other protocol. DLNA port zero is rejected rather than canonicalized to a
+  different port than the saved URL actually uses.
+- Certificate import uses unique private temporary files, never deletes a
+  pre-existing abandoned import, and checks in-place size and copied bytes.
+- Artifact download checks elapsed budget between network receives rather
+  than buffered 64-KiB fills; HTTP protocol errors are sanitized and preserve
+  the installed artifact. Each individual read retains its socket timeout.
+
+Red/green regressions cover these failure paths. Actual subprocess tests also
+confirmed Python already reaps Command/AirPlay children when cancellation
+occurs inside process creation; no speculative extra spawn shielding added.
+Independent second passes found no further confirmed defect in the reviewed
+paths after the final corrections.
+
+Verification: expanded 13-crate Rust suite, 312 unit/integration tests passed,
+2 optional tests ignored, plus 1 doctest. Python: 341 run, 331 passed, 10 optional
+skips. On the test laptop, 51 targeted player/output tests passed, including
+silent real-mpv replacement/seek/crash recovery, real WebSocket close during
+blocked load, and process/pipe cleanup. No real Sonos/DLNA hardware test was
+performed; AirPlay command/cleanup tests use controlled helpers, not a claim
+of end-to-end audible hardware acceptance. Thread tests require the normal
+execution environment; sandbox-only thread hangs were not product failures.
+
+Browser suite attempted with the CI's Node 22/Playwright versions but could
+not launch because Chromium system libraries (libnspr4.so) are absent. API
+tests passed; do not report the browser suite as passed. Strict Clippy remains
+subject to the previously documented warnings; no lint-policy relaxation.
+Generic command outputs still have no physical volume-control seam. An
+unresponsive third-party Sonos thread cannot be safely force-killed: ordered
+Stop waits for that library request to finish. These are explicit limits,
+not proof of a new incident. No release/push before user listening acceptance.
+
+Activated on the test laptop at 2026-10-08 21:17 UTC. Receiver binary
+`vibecast-round2-review`, SHA256
+`59c171a000a39f428b5869c42602a45e058e2ca3a773118f68e0533bf52a6690`;
+staged Python/test archive `cast-round2-python.tar.gz`, SHA256
+`57bcf03e2a127dcc9670bb25c101e6c664e299d0439fe06f29a1341292f1fa0d`.
+Container `821f44107abbc7d17ee8c244d07fd0ffda832927c069e9de9414488b6adebf4e`,
+rollback `cast-audio-receiver-pre-round2-review` retained. Eleven changed
+runtime modules are read-only mounts from `cast-round2-python/src/cast_audio_lab/`.
+No user data, prior binaries or rollback containers removed. The same 51
+output/player tests passed again using the actual mounted runtime modules,
+including silent mpv. Health after tests: 2/2 running/responsive, zero restarts;
+no startup warning/error. Audible desktop/mobile acceptance requested and
+pending. No commit, GitHub push or release.
+
+## Broad reliability review — 2026-10-08 (unreleased)
+
+Scope: user requested an intensive cross-layer bug review, implementation of
+confirmed fixes, and regression checks for interactions between those fixes.
+Reviewed Cast ownership/control correlation, generic LOAD lifecycle, YouTube
+queue/repeat/cancellation, media cache/recovery, player bridge/proxy teardown,
+mpv IPC, adapter reporting and subprocess supervision. Existing uncommitted
+recovery changes were preserved. Builds run on the development machine.
+
+Confirmed fixes with behavioral regression coverage:
+
+- Reject stale Cast mediaSessionId on Play/Pause/Seek/Stop/media-volume, so
+  delayed commands for a previous selection cannot control its replacement.
+- Failed replacement resolution stops the previous decoder before clearing
+  ownership. Otherwise old audio could continue behind an error/empty status.
+- Preserve Play/Pause/Seek accepted during generic resolution and apply them
+  to the resulting LOAD, not the old decoder. Independent rereview caught two
+  interactions: app-owned Play must first honor pending generic controls, and
+  old decoder EOF/error reports must not update the pending selection. Global
+  volume reports remain accepted. Stop/new LOAD still invalidate old results.
+- Reanchor current YouTube queue index when updatePlaylist reorders/removes
+  earlier items; preserve an unchanged duplicate slot. Do not invent a new
+  selection if the active video was removed entirely. Covers pending resolve
+  as well as playing media. Reject invalid/non-finite sender positions.
+- Do not send a delayed MDX identity after session cancellation/channel close.
+- Fence mpv end-file by playlist entry identity, reject late file-loaded after
+  Stop and old playback-restart during loading, and clear stale error state
+  on the accepted file-loaded event.
+- Suppress old backend reports while metadata/decoder load is being prepared;
+  initial BUFFERING retains the requested resume position. Failed setup stops
+  previous audio. Queued physical controls cannot cross WebSocket/session
+  replacement.
+- Supervise failed/closed adapter log readers rather than waiting forever for
+  a child blocked on stdout. During cleanup discard/drain stdout independently
+  of the failed parser, including pipe EOF, before releasing the process.
+- Bound initial player registration to 10 seconds; serialize bridge starts and
+  stops. Shutdown/drop cancels accepted sockets and pending HTTP handlers,
+  including non-reading clients and full lifecycle event queues.
+- Bound buffered upstream manifest/license documents to 16 MiB, including
+  chunked/decoded bodies; progressive audio cache remains a separate path.
+  Remove raw signed URLs and arbitrary upstream errors from those logs.
+
+Tests reproduced stale control, failed-replacement audio and stale EOF bugs
+before correction. Reviewers cross-checked changes across layers. Nine-crate
+suite: 264 unit tests passed, 2 optional tests ignored, plus 1 passing doctest.
+Python: 314 tests run, 304 passed, 10 optional tests skipped. Final run contains
+no unhandled-task/subprocess destructor warnings. Public export test also
+passes after replacing private operator paths in historical deployment notes
+with staging-relative names; artifact hashes/rollback records are retained.
+
+The final pending-load control regression passed 20 consecutive runs. Silent
+real-mpv integration on the test laptop covers missing-source recovery,
+offset/pause/seek/EOF/Stop, 12 alternating playing/paused replacements, decoder
+kill/reload and volume/mute restoration. This is not audible Cast acceptance.
+Clippy completed with warnings; strict warnings-as-errors is not clean due to
+existing unused audio-fork resolver/video code, API/macro/style lints and newer
+toolchain deprecations. No unrelated lint refactor or lint policy change made.
+
+Five additional consecutive silent real-mpv integration runs passed on the
+test laptop (60 replacement transitions, plus crash/reload in each run).
+All 24 cache tests, including the optional real-mpv cache test, passed there.
+
+Activated on the test laptop at 2026-10-08 20:56 UTC, locally built binary
+`cast-broad-review-bin/vibecast`, SHA256
+`ae2ca6d1ef863f91a2f0b57d86fd17d7173fbc991a4599f76e48d6711d18a65b`.
+Container `08998d66a519f7eba325016aa66354b287f60e1dccbf0317ed33dfdc44348004`;
+rollback retained as `cast-audio-receiver-pre-broad-review`. Three Python
+runtime modules are read-only mounts from the staged
+`cast-broad-review-python/src/cast_audio_lab/` directory. Verified mounted
+hashes: mpv_backend `8e7ce88d78d73db1665f0463d3f23bf6380d83136abb1f1487aa0eb8daa2954f`,
+vibecast_player `43ee9c9328710a3cb53e33de0673e13b3d5bc807850f1cdc3d57f53deebae5d2`,
+route_manager `8f8a7f6e5cf39c725b33b924eb3d8628f7c98c89947faa52c63f81c2ec1880bc`.
+Startup health: 2/2 running and responsive, both receivers advertised, no
+startup warning/error observed. This health check does not prove audibility.
+After activation, the silent mpv test passed using the actual mounted modules
+(no alternate PYTHONPATH), and all 80 core tests passed inside the new runtime,
+including the optional decoder/cache integration. Rechecked health afterward.
+No GitHub push/release; desktop/mobile listening acceptance remains required
+and was requested for start, title change, pause, seek, repeat and takeover.
+
+## Forrest Gump recovery regression — 2026-10-08 (unreleased)
+
+Incident: 20:10:15 UTC, cache body read transport error while playing
+`dGuuX3vN4E4`. Early refresh ran twice and resolution completed both times,
+but no replacement was accepted. Cache failed at20:10:22; decoder exhausted
+its buffer at20:10:49 /157.191228s. Explicit sender PLAY at20:11:49 recovered
+the same title/position. No PAUSE or HTTP429 explains this incident.
+
+Confirmed implementation mistake: two fresh same-title yt-dlp resolutions on
+.110 returned different CDN query `id` values with identical itag251, lmt,
+and clen4,060,695. The previous check incorrectly treated that volatile ID as
+immutable audio identity. Historical URLs were not retained, so the exact
+past mismatch field cannot be reconstructed. The rejection mechanism is
+reproducible and must not be attributed to an external rate limit.
+
+Fix: ignore volatile CDN id; retain same-video binding and strict format,
+revision, length and MIME checks. Reject malformed required numeric fields,
+and log mismatch booleans only (no URLs/identifiers/tokens). Allow one early
+cache refresh and reserve the second shared-budget attempt for a clean
+same-title, position/pause-preserving decoder reload. An incompatible cache
+representation must not consume both rounds without trying a clean load.
+No third retry or implicit playlist skip is introduced.
+
+Transport investigation reproduced a pacing-sensitive failure on .110 using
+the same freshly extracted affected-title URL and reqwest HTTP/1: eager read
+returned all4,060,695 bytes with206 in under1s; paced128KiB/7s read reset at133s
+after2,539,504 bytes (`decode=true`, `ConnectionReset`, OS104; no429/403).
+Historical trace also contains a seek to0 at20:08:12 after105s playback,
+allowing a long interval of cached rereading before further upstream demand.
+The experiment does not identify which network/origin component sent RST or
+prove the historical error's unrecorded IOcause, but demonstrates that our
+artificially prolonged responses can fail while a normal read succeeds.
+
+Correction to source pacing: promptly drain an open bounded10MiB response into
+the current-title cache; wait for player demand only between responses. Never
+wait for an entire title before starting the decoder. Short songs will now
+finish downloading in the background quickly, rather than deliberately keeping
+one HTTPbody open for their playback duration. This deliberately supersedes
+the Oct7 per128KiB demand pause. It avoids returning to many tiny originrequests
+and preserves the32MiB current-title cap, repeat, seek and cancellation.
+The user was informed of this tradeoff during implementation.
+
+A second bounded probe reproduced the cache-rewind idle pattern: read1MiB,
+hold without polling for110s, then drain; ConnectionReset104 after2,637,808
+bytes at110s (decode=true, noHTTPerror). This reinforces response lifecycle
+as a reproducible trigger, not a claim that every possible network reset is
+preventable. Probes ran on .110 with locally compiled reqwest binaries; signed
+URLs stayed in memory and temporary diagnostic source files were removed.
+
+When draining a new range across sparse cached blocks, consume and compare
+already-present bytes before appending missing suffixes. Reject changed bytes;
+do not mark cache complete until the active response tail is validated. This
+prevents seek/overlap misalignment while preserving bounded incremental reads.
+
+Safe diagnostics now include response age, range, receivedbytes, decode flag
+and underlying IOkind/OSerror without signed URLs or formatted errorchains.
+Reference checked for the user's request to follow established downloader
+practice: https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/downloader/http.py
+reads open responses continuously, validates ranges and resumes on transport
+failure. Our bounded current-title cache is not a copy of that downloader.
+
+Final local verification: nine-crate suite248 unit tests passed /2 optional
+tests ignored, plus1 passing doctest. Overlap tests exposed an additional
+invalid-completion path; integrity failures now prohibit in-place refresh,
+and fully filled but unvalidated cache bytes cannot take a completion shortcut.
+Formatting/diff checks passed. All24 cache tests passed on .110, including real
+mpv paused playback; current small object downloads in the background without
+holding the origin response open for the pause duration.
+
+Built locally and deployed `vibecast-native-recovery` in the operator's staging directory, SHA256
+`59445cb9c8c11221cc683be7e4c56bd239efaec9b1b4276f63e530c6880bbe9f`.
+Container `a17955ecc975acf7e524b72e2a50ae9b536e1f617b7cbbfdf6d6ffbea8e59f25`;
+rollback `cast-audio-receiver-pre-native-recovery` retained. Python mounts
+unchanged, health2/2 running and responsive. User asked to reconnect and test
+Forrest Gump, seek-to-start and repeat-one; audible acceptance pending.
+No GitHub push/release. Earlier `vibecast-identity-recovery` staging binary was
+never activated; the active binary includes the response-lifecycle correction.
+
+## Early recovery while decoder buffer plays — 2026-10-07 (unreleased)
+
+Follow-up incident: "Gute Dinge" cache fetch failed at 06:10:48 UTC, but mpv
+only reached false EOF at 06:11:18 at position 119.840972. The first fresh
+resolution reloaded the same title/position; file-loaded at 06:11:20.483.
+The ~2.1 s audible gap was consistent with waiting for decoder EOF to recover.
+The original fetch error had no detailed cause logged; a separate next-title
+request returned 403 at 06:12:15. Neither incident proves HTTP 429/rate limiting.
+
+Requested change: begin bounded source recovery immediately on a fetch failure,
+retain buffered/cache bytes and the current decoder load, and resume the missing
+byte range. Fresh source resolution must verify the same immutable media
+representation before splicing bytes. Cache recovery and decoder fallback must
+share the existing two-attempt budget; successful Playing must not replenish it.
+Stop, takeover and title changes must cancel the recovery. Preserve progressive
+loading and repeat/seek behavior. Build locally; test on .110 before any release.
+
+Implemented: a generic SDK source-refresh hook on the cache hint; YouTube
+freshly resolves the same title and requires matching object id, itag, lmt,
+clen and MIME before returning a replacement URL. Missing/duplicate identity
+fields fail closed. The cache resumes at the exact retained byte offset, keeps
+the pending local HTTP response open, and validates upstream range/total length.
+Each fresh resolution is bounded to 30 seconds. Without a verifiable identity,
+the existing decoder-level recovery remains the safe fallback instead of
+splicing potentially different audio. No eager whole-song download introduced.
+
+The hint's atomic retry count is propagated through app playback state and
+replacement loads; the hub retains it after cache eviction. Both early repair
+and later decoder recovery share two rounds per selection; manual Play can
+start a fresh budget. Stop cancels pending resolution, and source recovery
+does not issue Player Load/seek or alter pause/volume state. Added redacted
+failure-stage diagnostics (headers, body, timeout, truncation, range mismatch)
+without printing signed URLs. Follow-up review also caught and fixed redirect
+to the old URL when a freshly resolved origin ignores Range before any bytes
+have been cached. No claim that external 403/429 refusals are eliminated.
+
+Verification: final nine-crate run 242 unit tests passed / 2 optional tests
+ignored, plus one passing doctest. All 20 cache tests passed inside the .110
+runtime, including six new recovery regressions and the silent real-mpv test
+(paused decoder retained 786,432 / 2,880,044 bytes). Formatting and diff checks
+passed. Independent read-only review found no further concrete blocker.
+
+Built locally and deployed `vibecast-early-recovery` in the operator's staging directory, SHA256
+`d412d6cc3b4e36cdfd0a9d74e01dc34a16a150e6fc7620890925d0b844b8caff`.
+New container `16ff65fbf44103696d7eeacebba810786421e94b43793641947857bf68d9f905`;
+rollback retained as `cast-audio-receiver-pre-early-recovery`. Existing Python
+mounts unchanged; health confirms two running/responsive outputs. User listening
+acceptance requested and still pending; deterministic local fault tests do not
+prove every upstream failure will recover inaudibly. No GitHub push/release.
+
+## Progressive source-request alignment — 2026-10-07 (unreleased)
+
+User prefers progressive/native-style loading, not many artificial small
+origin requests or eagerly downloading the whole song before playback.
+Investigation of the prior 403 did NOT reproduce the denial: fresh same-title
+URL allowed21 range requests; a separate locally compiled reqwest probe waited
+180s after extraction and then consumed all21 ranges (2,622,747 bytes) with
+HTTP206 over HTTP/1.1. URL lifetime was approximately six hours. These are
+bounded diagnostic samples, not proof intermittent upstream errors are solved.
+The exact earlier signed URL was not retained; no tokens/URLs were printed.
+
+Verified installed yt-dlp2026.08.19 source on .110: YouTube downloader_options
+uses10MiB HTTP chunks. Upstream reference also sets this policy:
+https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/youtube/_video.py
+The current upstream HTTP downloader uses standard Range headers, so rewriting
+signed URL query parameters is not justified:
+https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/downloader/http.py
+
+Implemented larger bounded origin ranges consumed incrementally only on player
+demand, reusing the active response across adjacent128KiB cache blocks. Seeks
+may start another range; current-title sparse cache/repeat behavior remains.
+Dedicated media HTTP client must have no total response lifetime deadline:
+pausing demand is not a network stall. Preserve independent header/connect and
+actual-read deadlines, cancellation, size cap, failed-cache EOF classification
+and the two automatic fresh-resolution retries.
+
+Separate audit observation: extracted http_headers are currently discarded.
+No A/B failure was available to establish that this caused the incident; do
+not label missing headers or request size as the proven historical403 cause.
+
+Implementation: at most 10 MiB per upstream response, consumed one demanded
+128 KiB retained block at a time. Adjacent blocks reuse the response; sparse
+seek drops it and opens a new range. One transport chunk may be buffered in
+addition to the 32 MiB retained cache cap; this is bounded by the 10 MiB response
+range, not an unbounded speculative download queue. Native socket buffering
+can also run ahead; no claim of byte-exact network pacing to playback.
+The metadata and media clients share cookie/header policy but have separate
+pools. Metadata retains its configured total timeout; media uses connect,
+header and demanded-read deadlines only. HTTP/2 was not newly enabled.
+
+Verification: nine Rust crate suites 233 passed / 2 ignored; all 14 cache tests
+passed on .110 including silent real-mpv buffering. Paused mpv retained
+786,432 of 2,880,044 test bytes. Regression coverage includes 10 MiB boundary,
+sequential reuse, sparse backwards seek, demand pauses, cancellation, truncated
+bodies, downstream false EOF and later upstream 403. Formatting/diff checks
+passed. No source URL query rewriting or unproven header-based fix introduced.
+
+Deployed to .110 as locally compiled `vibecast-progressive-ranges`, SHA256
+`30aad90d2072756531753f8774d5c13f7b2e1845b13901d5ca525d7e5b0f694e`.
+Python mounts unchanged. Retained rollback container:
+`cast-audio-receiver-pre-progressive`. New container:
+`70e5fae2da9a8cbacf5273abc1e96b0f90813466f57052d2f52233968a83db72`.
+The historical 403 remains unproven beyond the recorded upstream refusal;
+no claim that every external refusal is fixed. User audible desktop/mobile
+acceptance remains pending. No GitHub push/release was performed.
+
+## Premature EOF after HTTP 403 — 2026-10-07 (unreleased)
+
+Incident on .110: at 05:41:02 UTC "Beste Zeit" loaded; at 05:41:29 the
+next demanded audio-cache range failed with HTTP 403. After draining buffered
+audio, mpv reported EOF at position 55.201934 at 05:41:58 and Lounge advanced
+to "Ein gutes Ende". This is not a 429 incident. Cache readers already emit
+a body error on failed download, but the decoder can still report normal EOF.
+
+Fix: the hub checks authoritative cache failure before broadcasting or passing
+EOF to the app, converts it to ERROR, and evicts the failed cache. This failure
+classification remains sticky until a new load, so repeated old EOF reports
+cannot advance after eviction. No duration heuristic or speculative skipping.
+
+Per explicit user request, Lounge now allows TWO automatic fresh-resolution/
+reload rounds per selection, including mid-song failures, at the reported
+position and preserving pause intent. Resumed playback does not replenish the
+budget. After both retries fail, the title remains in error; explicit Play can
+start a new bounded attempt. Stop/takeover/new selections retain existing
+cancellation behavior. Each fresh resolution retains the worker's pre-existing
+bounded extractor retry; two reload rounds is not a global limit of two HTTP
+requests. No external rate-limit bypass or guarantee against upstream 403.
+
+Regressions cover a successful first audio block followed by HTTP 403, body
+error rather than clean EOF, Cast ERROR for repeated false EOF, same-title
+position-preserving retries, exhaustion after retry two, paused recovery,
+resolver failures and manual recovery. Physical listening acceptance remains
+pending; no new release or GitHub push during this fix.
+
+Verification: combined YouTube/core tests 141 passed, 2 optional tests ignored;
+formatting and diff checks passed. Built locally and deployed on .110 using
+`vibecast-two-retry-eof` in the operator's staging directory, SHA256
+`694e085db8c21decee04c3f053f9e5c7390d0b88c7f7ae58be81e969fba35565`.
+Python mounts are unchanged from the expanded-review deployment. Previous
+container is retained as `cast-audio-receiver-pre-two-retry` for rollback.
+
+## Expanded review implementation — 2026-10-04 (unreleased)
+
+User authorized fixing the review findings and widening the review. The prior
+section below is the historical finding list, not the current open-bug status.
+Changes remain uncommitted in the maintained frontend and product checkouts;
+the published dev26 source pin is intentionally unchanged until acceptance.
+
+Implemented with behavioral regressions:
+
+- Lounge EOF/repeat and complete incoming batches reach local playback before
+  fallible HTTP feedback. Tail Next waits for queue extension without cancelling
+  the current resolver or inventing a decoder-load acknowledgement. Stop clears
+  pending advancement and rejects late EOF. Session cancellation interrupts
+  blocked Lounge feedback/rebind requests.
+- Player command/report queues and WebSocket writes have deadlines and explicit
+  connection teardown. Bridge stop closes registered and pre-registration
+  sockets. Receiver shutdown owns and cancels/aborts its tasks; Cast listener
+  shutdown closes accepted sockets and TLS handshakes have a deadline.
+- Core callback queue saturation terminates the affected session instead of
+  deadlocking the hub against callbacks. Session destruction cancels app and
+  resolver tasks, cache work and proxy registrations. LOAD results carry an
+  internal generation, so an obsolete result cannot replace a newer selection
+  or restart after Stop, even when sender request IDs are reused.
+- mpv IPC loss fails pending commands, clears dead handles, reaps the decoder
+  and allows restart, retaining volume/mute. Failed seek releases its feedback
+  gate. Bridge reconnect survives failed backend cleanup. Startup cleanup must
+  finish before installing the new selection's state.
+- Health now requires fresh per-route WebSocket pong evidence, not merely a
+  running process and open TCP listener. Exposes responsive_routes separately
+  from running_routes. This is transport readiness, not proof of audible sound
+  or every application handler's progress; no automatic playback restart added.
+- CI frontend tests include Cast and receiver lifecycle crates. Raw LOAD
+  content IDs and free-form player error messages no longer enter Rust logs
+  because those fields can contain signed media URLs.
+
+Review included cross-checking fixes between reviewers, resolver/cache failure
+paths, generic LOAD correlation, owner/observer controls, teardown and decoder
+restart. Tests use deliberately full queues, failed HTTP feedback, blocked TLS,
+decoder EOF/crash and failed IPC. No external throttling bypass was introduced.
+No release or GitHub push is authorized by this review iteration; physical
+desktop/mobile acceptance remains required before publication.
+
+Final verification: nine Rust library crates, 225 passed / 2 ignored; Python
+suite, 305 run / 10 skipped / no failures. The silent real-mpv integration
+passed on .110 with the final Python sources, including decoder kill/reload,
+offset, pause, seek, EOF, stop and restored volume/mute. Formatting and diff
+checks passed. Targeted transport/lifecycle Clippy passed with existing
+double_must_use and large_enum_variant lints allowed; strict lint is not clean
+because of those pre-existing dependency-crate findings.
+
+Activated on .110 at 2026-10-04 21:59 UTC using locally built
+`vibecast-reviewed-recovery` in the operator's staging directory, SHA256
+`5755d8c9553f3c8c77049d7644e1d49c9ad2f6a8dd950db7b5546ed165676ea9`.
+Python mpv_backend.py, vibecast_player.py and route_manager.py are read-only
+bind mounts from the staged `cast-review-python-final/src/cast_audio_lab/` directory
+into the existing diagnostic image's site-packages. This is a test deployment,
+not a new published image. Rollback is preserved as container
+`cast-audio-receiver-pre-review`; stop/rename the test container and restart
+that retained container if needed. No user data or rollback binaries removed.
+Startup health: both routes running and responsive (fresh WebSocket pongs),
+no startup errors observed. User desktop/mobile sound, switching, seek and
+single-title-repeat acceptance requested and still pending for this new build.
+
+## Post-dev26 transport hotfix and review — 2026-10-04
+
+Implemented locally in the maintained frontend checkout, not yet committed,
+pinned or released. A non-reading Cast peer filled the outbound socket/queue
+and blocked hub progress; no new HTTP-429 was observed in the incident window.
+Bound Cast enqueue to one second and socket writes to five seconds, close the
+failed connection, and release its socket even if lifecycle delivery is blocked.
+This is not an idle-client timeout and does not change owner-stop semantics.
+
+Built locally and deployed to laptop .110 as `vibecast-bounded-cast`, SHA256
+`5a0fa2abd84dfe32c393397fd8396e52e901df3cae4bd169d3d81e3e1c02ae81`.
+Keep rollback container `cast-audio-receiver-pre-bounded-cast`.
+User confirmed sound and title switching. A bounded non-reading GET_STATUS
+client was disconnected while twelve healthy probes continued responding
+(first 502 ms, subsequent 4–9 ms); both outputs remained ready.
+
+Regression coverage: stalled enqueue, stalled socket write without subsequent
+messages, full lifecycle queue, and healthy owner/player reports beside a slow
+observer. Cast: 9 passed; core: 54 passed, 1 ignored. The broader eight-crate
+library test command passed (cast, default-media, youtube, bridge, platform,
+core, player-api, sdk). Formatting and diff whitespace checks passed.
+
+Open review findings below are separate from the accepted transport fix.
+Rust paths refer to the maintained frontend fork; Python paths to this repo.
+They establish possible failure paths, not proof of every earlier incident.
+
+- P1: `crates/vibecast-apps-youtube/src/lounge.rs`, EOF handling: Finished is
+  stored before a fallible feedback POST, but repeat/advance is queued after
+  it. Failed feedback loses advancement even after rebind. Queue the local
+  transition before feedback; regression must fail the EOF POST.
+- P1: same file, poll batch handling: the whole batch AID is acknowledged
+  before per-message feedback POSTs. A failed POST drops remaining commands,
+  including SetPlaylist following SetLoopMode. Dispatch the complete local
+  batch before feedback or retain unprocessed entries; test partial failure.
+- P1: `crates/vibecast-bridge/src/bridge.rs`: command enqueue, socket writes
+  and report delivery still have unbounded waits and can stall the hub.
+  Separate writing from receiving and bound delivery with explicit teardown;
+  test a non-reading player and saturated report/command queues.
+- P1: `crates/vibecast-receiver/src/lib.rs`: shutdown timeouts do not abort
+  tracked tasks; forwarding awaits cannot observe cancellation while blocked.
+  Ensure cancellation covers forwarding and force teardown after grace.
+- P1: `src/cast_audio_lab/mpv_backend.py`: IPC EOF retains the writer and
+  PLAYING state, preventing lazy restart; failing stop can also escape the
+  reconnect cleanup in `vibecast_player.py`. Mock reproduction confirmed EOF
+  retains the writer and the next start launches nothing. Centralize failure
+  cleanup, fail pending requests, report error and allow a fresh decoder.
+- P2: Lounge Next at queue tail enters awaiting_load/Buffering despite no
+  replacement load; dispatch can cancel the current resolver too. Separate
+  waiting for queue extension from decoder-load acknowledgement.
+- P2: mpv seek TimeoutError/OSError retains `_seeking`, suppressing position
+  feedback. Mock reproduction confirmed later time-pos is ignored. Clear the
+  gate on failed commands and cover all transport exceptions.
+- P2: `crates/vibecast-cast/src/server.rs`: accepted connection tasks are
+  detached with no TLS handshake deadline or server-lifetime cancellation.
+  Track/close connections on shutdown and bound handshake time.
+- P2: `src/cast_audio_lab/route_manager.py`: readiness checks process/TCP
+  reachability, not protocol responsiveness; it stayed ready in this incident.
+  Expose protocol liveness separately without blindly restarting playback.
+
+Review validation: 13 existing mpv tests passed; the reviewer could not run
+the Python bridge tests with system Python (missing websockets). Review was
+read-only apart from this record; the listed remaining defects are not fixed.
+Before a future release: implement prioritized fixes with regressions, include
+vibecast-cast in CI's frontend test list, commit/pin the maintained fork, and
+repeat desktop/mobile playback, takeover, repeat and recovery acceptance.
+No new release was made during this hotfix/review.
+
 ## dev26 acceptance — 2026-10-04
 
 - Desktop/mobile playback and exclusive takeover in both directions passed

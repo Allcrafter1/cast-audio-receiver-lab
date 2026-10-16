@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: MPL-2.0
 import asyncio
+import os
+import sys
+import subprocess
 import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
@@ -9,6 +12,158 @@ from cast_audio_lab.backend import MediaMetadata
 
 
 class PersistentAirPlayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_oversized_child_lines_are_discarded_without_losing_following_events(self):
+        b = self.backend()
+        for method, suffix in ((b._read_events, b'[STATUS] flushed\n'),
+                               (b._read_ffmpeg_log, b'normal diagnostic\n')):
+            reader = asyncio.StreamReader(limit=64)
+            reader.feed_data(b'x' * 100000 + b'\n' + suffix)
+            reader.feed_eof()
+            await method(reader)
+            self.assertTrue(reader.at_eof())
+        self.assertTrue(b._flushed.is_set())
+        await b.shutdown()
+
+    async def test_cancellation_during_sender_or_decoder_spawn_reaps_unassigned_child(self):
+        for phase in ('sender', 'decoder'):
+            with self.subTest(phase=phase):
+                b = self.backend()
+                if phase == 'decoder':
+                    b._cli = Mock(returncode=None, stdin=Mock(), stdout=None, stderr=None,
+                                  wait=AsyncMock(return_value=0))
+                    b._prepare_transport = AsyncMock()
+                spawn, children = subprocess.Popen, []
+                def cancelling_spawn(*args, **kwargs):
+                    process = spawn(*args, **kwargs)
+                    children.append(process)
+                    asyncio.current_task().cancel()
+                    return process
+                argv = [sys.executable, '-c', 'import time; time.sleep(60)']
+                function = 'cliairplay_argv' if phase == 'sender' else 'ffmpeg_pcm_argv'
+                with patch('cast_audio_lab.airplay.' + function, return_value=argv), \
+                        patch('asyncio.base_subprocess.subprocess.Popen', side_effect=cancelling_spawn):
+                    task = asyncio.create_task(b.load('test', 'audio/webm', True, 0))
+                    with self.assertRaises(asyncio.CancelledError):
+                        await asyncio.wait_for(task, 3)
+                self.assertEqual(len(children), 1)
+                self.assertIsNotNone(children[0].poll())
+                self.assertIsNone(b._cli)
+                self.assertIsNone(b._decoder)
+                self.assertIsNone(b._temporary_directory)
+                await b.shutdown()
+
+    async def test_cancelled_track_teardown_still_reaps_before_pipeline_closes(self):
+        b = self.backend()
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def wait():
+            entered.set()
+            await release.wait()
+            return 0
+        decoder = Mock(returncode=None, stdin=None, stdout=None, stderr=None,
+                       wait=AsyncMock(side_effect=wait))
+        b._decoder = decoder
+        task = asyncio.create_task(b._stop_track())
+        await entered.wait()
+        task.cancel()
+        with self.assertRaises(asyncio.CancelledError):
+            await task
+        pipeline = asyncio.create_task(b._stop_pipeline())
+        await asyncio.sleep(0)
+        await asyncio.sleep(0)
+        self.assertFalse(pipeline.done(), 'detached decoder must remain owned during cancellation')
+        release.set()
+        await pipeline
+        decoder.wait.assert_awaited_once()
+
+    async def test_play_after_terminal_failure_keeps_idle_until_fresh_load(self):
+        b = self.backend()
+        b._status.url = 'old'
+        b._status.idle_reason = 'ERROR'
+        with patch.object(b, '_command', new_callable=AsyncMock) as command:
+            await b.play()
+            await b.pause()
+            command.assert_not_awaited()
+        self.assertEqual(b.status().state, 'IDLE')
+        self.assertEqual(b.status().idle_reason, 'ERROR')
+
+    async def test_command_partial_write_and_backpressure_do_not_drop_suffix(self):
+        b = self.backend()
+        b._command_fd = 123
+        written = bytearray()
+        calls = 0
+        def write(fd, payload):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise BlockingIOError()
+            count = min(4, len(payload))
+            written.extend(payload[:count])
+            return count
+        with patch('cast_audio_lab.airplay.os.write', side_effect=write):
+            await b._command('ACTION=PAUSE', 'PROGRESS=17')
+        self.assertEqual(written, b'ACTION=PAUSE\nPROGRESS=17\n')
+
+    async def test_broken_command_pipe_reports_error_instead_of_fake_pause(self):
+        b = self.backend()
+        b._command_fd = 123
+        b._status.state = 'PLAYING'
+        with patch('cast_audio_lab.airplay.os.write', side_effect=BrokenPipeError()), \
+                patch('cast_audio_lab.airplay.os.close'):
+            with self.assertRaises(OSError):
+                await b.pause()
+        self.assertEqual(b.status().state, 'IDLE')
+        self.assertEqual(b.status().idle_reason, 'ERROR')
+        self.assertTrue(b._transport_failed.is_set())
+        await b._stop_pipeline()
+
+    async def test_broken_control_channel_retires_running_sender(self):
+        b = self.backend()
+        sender = await asyncio.create_subprocess_exec(sys.executable, '-c',
+            'import time; time.sleep(60)', stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        reader, writer = os.pipe()
+        os.close(reader)
+        b._cli = sender
+        b._command_fd = writer
+        b._status.state = 'PLAYING'
+        try:
+            with self.assertRaises(OSError):
+                await b.pause()
+            await asyncio.wait_for(b._stop_pipeline(), 3)
+            self.assertIsNotNone(sender.returncode)
+            self.assertIsNone(b._cli)
+            self.assertIsNone(b._command_fd)
+            self.assertEqual(b.status().idle_reason, 'ERROR')
+        finally:
+            await b.shutdown()
+
+    async def test_broken_stop_pipe_still_reaps_sender_and_closes_descriptor(self):
+        b = self.backend()
+        reader, writer = os.pipe()
+        os.close(reader)
+        b._command_fd = writer
+        sender = Mock(returncode=None, stdin=None, stdout=None, stderr=None,
+                      wait=AsyncMock(return_value=0))
+        b._cli = sender
+        await b.stop()
+        sender.wait.assert_awaited_once()
+        self.assertIsNone(b._cli)
+        self.assertIsNone(b._command_fd)
+        with self.assertRaises(OSError):
+            os.fstat(writer)
+        self.assertEqual(b.status().idle_reason, 'CANCELLED')
+
+    async def test_remote_play_requests_recovery_without_fake_playing_state(self):
+        b = self.backend()
+        b._status.url = 'old'
+        b._status.idle_reason = 'ERROR'
+        controls = []
+        b.add_control_listener(controls.append)
+        await b._apply_remote_command('play')
+        self.assertEqual([control.command for control in controls], ['play'])
+        self.assertEqual(b.status().state, 'IDLE')
+        self.assertEqual(b.status().idle_reason, 'ERROR')
+
     def backend(self):
         return AirPlayAudioBackend(AirPlayTarget('192.0.2.1'))
 

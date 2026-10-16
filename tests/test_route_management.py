@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 from unittest.mock import AsyncMock
@@ -160,6 +161,50 @@ class ProcessTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.manager.routes[0].id, first.id)
         self.assertNotEqual(self.manager.states[first.id]["pid"], old.pid)
 
+    async def test_failed_log_pump_reaps_and_restarts_owned_adapter(self):
+        first = route(enabled=True)
+        with patch.object(self.manager, "_drain", AsyncMock(side_effect=ValueError("line too long"))):
+            await self.manager.replace([first])
+            async with asyncio.timeout(5):
+                while len(self.children) < 2:
+                    await asyncio.sleep(.02)
+            self.assertIsNotNone(self.children[0].returncode)
+            self.assertEqual(self.manager.routes[0].id, first.id)
+
+    async def test_failed_log_pump_does_not_deadlock_reaping_full_stdout(self):
+        async def noisy_spawn(*args, **kwargs):
+            child = await asyncio.create_subprocess_exec(sys.executable, "-c",
+                "import os,time; os.write(1, b'x' * 1048576); time.sleep(60)", **kwargs)
+            self.children.append(child)
+            return child
+        async def broken_parser(*_):
+            await asyncio.sleep(.1)
+            raise ValueError("line too long")
+        self.manager.spawn = noisy_spawn
+        first = route(enabled=True)
+        with patch.object(self.manager, "_drain", broken_parser):
+            await self.manager.replace([first])
+            async with asyncio.timeout(5):
+                while len(self.children) < 2:
+                    await asyncio.sleep(.02)
+            self.assertIsNotNone(self.children[0].returncode)
+
+    async def test_close_drains_stdout_even_if_log_parser_is_still_pending(self):
+        async def noisy_spawn(*args, **kwargs):
+            child = await asyncio.create_subprocess_exec(sys.executable, "-c",
+                "import os,time; os.write(1, b'x' * 1048576); time.sleep(60)", **kwargs)
+            self.children.append(child)
+            return child
+        self.manager.spawn = noisy_spawn
+        async def blocked_parser(*_):
+            await asyncio.Event().wait()
+        with patch.object(self.manager, "_drain", blocked_parser):
+            await self.manager.replace([route(enabled=True)])
+            await self.wait_running(1)
+            await asyncio.sleep(.1)
+            await asyncio.wait_for(self.manager.close(), 3)
+        self.assertTrue(self.children[0].stdout.at_eof())
+
     async def test_failed_cleanup_does_not_start_replacement(self):
         first = route(enabled=True)
         await self.manager.replace([first])
@@ -178,6 +223,7 @@ class ProcessTests(unittest.IsolatedAsyncioTestCase):
         first = route(enabled=True)
         await self.manager.replace([first])
         await self.wait_running(1)
+        self.manager.states[first.id]["last_pong"] = time.monotonic()
         with patch.object(self.manager, "_bridge_reachable", AsyncMock(return_value=True)):
             health = await self.manager.health()
         self.assertTrue(health["ready"])
@@ -188,6 +234,28 @@ class ProcessTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(first.name, serialized)
         self.assertNotIn("pid", serialized.lower())
         self.assertEqual(support["routes"][0]["backend"], "mpv")
+
+    async def test_listening_bridge_is_not_ready_without_fresh_player_pong(self):
+        first = route(enabled=True)
+        await self.manager.replace([first])
+        await self.wait_running(1)
+        with patch.object(self.manager, "_bridge_reachable", AsyncMock(return_value=True)):
+            self.assertFalse((await self.manager.health())["ready"])
+            reader = asyncio.StreamReader()
+            reader.feed_data(b"INFO cast_audio_lab.player_health: responsive\n")
+            reader.feed_eof()
+            await self.manager._drain(reader, logging.NullHandler(), first.id)
+            health = await self.manager.health()
+            self.assertTrue(health["ready"])
+            self.assertEqual(health["responsive_routes"], 1)
+            self.manager.states[first.id]["last_pong"] -= 16
+            self.assertFalse((await self.manager.health())["ready"])
+            self.manager.states[first.id]["last_pong"] = time.monotonic()
+            reader = asyncio.StreamReader()
+            reader.feed_data(b"INFO cast_audio_lab.player_health: disconnected\n")
+            reader.feed_eof()
+            await self.manager._drain(reader, logging.NullHandler(), first.id)
+            self.assertFalse((await self.manager.health())["ready"])
 
 
 @unittest.skipUnless(TestClient, "management extra not installed")

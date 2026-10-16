@@ -7,6 +7,7 @@ import argparse
 import asyncio
 import json
 import logging
+import math
 import platform
 import uuid
 from pathlib import Path
@@ -23,6 +24,8 @@ from .backend import (
 from .output_registry import create_output_backend, output_names
 
 LOGGER = logging.getLogger(__name__)
+HEALTH_LOGGER = logging.getLogger("cast_audio_lab.player_health")
+HEALTH_LOGGER.setLevel(logging.INFO)
 
 
 class VibecastAudioPlayer:
@@ -40,6 +43,10 @@ class VibecastAudioPlayer:
         self.artwork_endpoint = artwork_endpoint
         self.artwork_public_url = artwork_public_url
         self._artwork_task = None
+        self._preparing_load = False
+        self._load_generation = 0
+        self._media_session_id = None
+        self._media_session_owner = None
         backend.add_status_listener(self._backend_status_changed)
         backend.add_control_listener(self._backend_control_requested)
 
@@ -79,20 +86,103 @@ class VibecastAudioPlayer:
             LOGGER.info("connected to Vibecast player bridge at %s", self.url)
             try:
                 await websocket.send(json.dumps(self.registration(), separators=(",", ":")))
-                reporter = asyncio.create_task(self._periodic_reports())
-                try:
-                    async for raw_message in websocket:
-                        await self.handle_message(json.loads(raw_message))
-                finally:
-                    reporter.cancel()
-                    await asyncio.gather(reporter, return_exceptions=True)
-            except (ConnectionClosed, OSError, ValueError, json.JSONDecodeError) as exc:
-                LOGGER.warning("Vibecast player connection interrupted: %s", exc)
+                await self._serve_connection(websocket)
+            except (ConnectionClosed, OSError, ValueError, RuntimeError) as exc:
+                LOGGER.warning("Vibecast player connection interrupted: %s", type(exc).__name__)
             finally:
+                HEALTH_LOGGER.info("disconnected")
                 await self._cancel_artwork()
                 self._websocket = None
                 self.session_id = None
-                await self.backend.stop()
+                try:
+                    await self.backend.stop()
+                except (OSError, ValueError, RuntimeError):
+                    LOGGER.warning("Output cleanup failed; reconnecting player bridge")
+
+    async def _serve_connection(self, websocket) -> None:
+        commands = asyncio.Queue(maxsize=32)
+        active = None
+        active_message = None
+
+        async def receive():
+            async for raw_message in websocket:
+                message = json.loads(raw_message)
+                if not isinstance(message, dict):
+                    raise ValueError("player command must be an object")
+                kind = message.get("type")
+                session = message.get("sessionId")
+                if kind in {"load", "stop"} and isinstance(session, str):
+                    # A new selection supersedes queued title controls; Stop
+                    # invalidates only commands for its own session. Preserve
+                    # output-wide volume and unrelated session traffic.
+                    retained = []
+                    while not commands.empty():
+                        previous = commands.get_nowait()
+                        if (previous.get("type") == "volume"
+                                or (kind == "stop" and previous.get("sessionId") != session)):
+                            retained.append(previous)
+                    for previous in retained:
+                        commands.put_nowait(previous)
+                    if (active is not None and not active.done()
+                            and active_message.get("type") == "load"
+                            and (kind == "load" or active_message.get("sessionId") == session)):
+                        active.cancel()
+                try:
+                    commands.put_nowait(message)
+                except asyncio.QueueFull:
+                    # Fail closed rather than block receiving a future Stop
+                    # indefinitely behind an unresponsive output.
+                    raise ValueError("player command queue saturated") from None
+
+        async def execute():
+            nonlocal active, active_message
+            while True:
+                active_message = await commands.get()
+                active = asyncio.create_task(self.handle_message(active_message))
+                try:
+                    await active
+                except asyncio.CancelledError:
+                    if asyncio.current_task().cancelling():
+                        raise
+                    # The reader superseded this LOAD. Finish owned cleanup
+                    # before another command can start a replacement decoder.
+                    self._load_generation += 1
+                    self.session_id = None
+                    self._preparing_load = True
+                    try:
+                        await self._cancel_artwork()
+                        await self.backend.stop()
+                    finally:
+                        self._preparing_load = False
+                finally:
+                    active = None
+                    active_message = None
+
+        # A backend command can be waiting on a decoder/transport when the
+        # socket closes. Observe closure independently of command processing.
+        tasks = [asyncio.create_task(coroutine) for coroutine in (
+            receive(), execute(), self._periodic_reports(), self._health_reports(websocket),
+            websocket.wait_closed(),
+        )]
+        try:
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+            for task in done:
+                task.result()
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def _health_reports(self, websocket) -> None:
+        try:
+            while True:
+                async with asyncio.timeout(5):
+                    pong = await websocket.ping()
+                    await pong
+                HEALTH_LOGGER.info("responsive")
+                await asyncio.sleep(5)
+        except (OSError, RuntimeError, ConnectionClosed):
+            HEALTH_LOGGER.info("disconnected")
 
     async def handle_message(self, message: dict[str, Any]) -> None:
         command = message.get("type")
@@ -101,6 +191,11 @@ class VibecastAudioPlayer:
         session_id = message.get("sessionId")
         if not isinstance(session_id, str):
             return
+        media_id = (message.get("media") or {}).get("mediaSessionId") if (
+            command == "load" and isinstance(message.get("media"), dict)
+        ) else self._media_session_id if session_id == self._media_session_owner else None
+        if not _valid_media_id(media_id):
+            media_id = None
 
         try:
             LOGGER.info("player command=%s session=%s", command, session_id)
@@ -111,7 +206,7 @@ class VibecastAudioPlayer:
             # establishes a playback session. It is output-wide, not track-local.
             if command == "volume":
                 await self.backend.set_volume(
-                    float(message.get("level", 1.0)), bool(message.get("muted", False))
+                    _finite_number(message.get("level", 1.0)), bool(message.get("muted", False))
                 )
                 await self._send_backend_state(session_id)
                 return
@@ -122,24 +217,55 @@ class VibecastAudioPlayer:
             elif command == "pause":
                 await self.backend.pause()
             elif command == "seek":
-                await self.backend.seek(float(message.get("position", 0.0)))
+                await self.backend.seek(_finite_number(message.get("position", 0.0)))
             elif command == "stop":
+                self._load_generation += 1
                 await self._cancel_artwork()
                 await self.backend.stop()
                 self.session_id = None
             await self._send_backend_state(session_id)
         except (OSError, TypeError, ValueError, RuntimeError) as exc:
-            LOGGER.exception("player command %s failed", command)
+            LOGGER.error("player command %s failed category=%s", command, type(exc).__name__)
             await self._send(
                 {
                     "type": "error",
                     "sessionId": session_id,
                     "code": "PLAYBACK_COMMAND_FAILED",
-                    "message": str(exc),
+                    "message": "Output command failed",
+                    **({"mediaSessionId": media_id} if media_id is not None else {}),
                 }
             )
 
     async def _load(self, session_id: str, media: Any) -> None:
+        self._load_generation += 1
+        self._media_session_id = media.get("mediaSessionId") if isinstance(media, dict) else None
+        self._media_session_owner = session_id
+        # Until backend.load installs the new decoder state, callbacks and the
+        # periodic reporter still see the previous item's EOF/position.
+        self._preparing_load = True
+        try:
+            if not _valid_media_id(self._media_session_id):
+                self._media_session_id = None
+                raise ValueError("invalid media session identity")
+            await self._load_media(session_id, media)
+        except (OSError, TypeError, ValueError, RuntimeError):
+            # A replacement owns the output even if its initial validation
+            # fails before _load_media installs the new session. Retire the
+            # previous decoder/artwork rather than leaving unowned playback.
+            self.session_id = None
+            try:
+                await self._cancel_artwork()
+            finally:
+                try:
+                    await self.backend.stop()
+                except (OSError, TypeError, ValueError, RuntimeError):
+                    LOGGER.warning("Output cleanup after failed load was unsuccessful")
+            raise
+        finally:
+            self._preparing_load = False
+        await self._send_backend_state(session_id)
+
+    async def _load_media(self, session_id: str, media: Any) -> None:
         if not isinstance(media, dict):
             raise ValueError("load command has no media object")
         streams = media.get("streams")
@@ -149,17 +275,20 @@ class VibecastAudioPlayer:
         url = stream.get("url")
         if not isinstance(url, str) or not url:
             raise ValueError("stream has no URL")
+        start_time = max(0.0, _finite_number(media.get("startTime", 0.0)))
 
         await self._cancel_artwork()
         self.session_id = session_id
         LOGGER.info("load session=%s title=%r start=%s", session_id,
                     media.get("title"), media.get("startTime", 0.0))
-        await self._send_state(session_id, "BUFFERING")
+        await self._send_state(session_id, "BUFFERING", current_time=start_time)
         images = media.get("images") or []
         metadata = media.get("metadata")
         if not isinstance(metadata, dict):
             metadata = {}
         images = metadata.get("images") or images
+        if not isinstance(images, list):
+            raise ValueError("media images must be a list")
         artwork = images[0].get("url", "") if images and isinstance(images[0], dict) else ""
         await self.backend.set_metadata(
             MediaMetadata(
@@ -175,9 +304,8 @@ class VibecastAudioPlayer:
             url,
             str(stream.get("contentType") or "application/octet-stream"),
             bool(media.get("autoplay", True)),
-            float(media.get("startTime", 0.0)),
+            start_time,
         )
-        await self._send_backend_state(session_id)
 
         if self.artwork_endpoint and self.artwork_public_url and artwork:
             self._artwork_task = asyncio.create_task(self._prepare_artwork(
@@ -243,13 +371,26 @@ class VibecastAudioPlayer:
             control["level"] = request.level
         if request.muted is not None:
             control["muted"] = request.muted
-        asyncio.create_task(self._send({
+        asyncio.create_task(self._report_control(self.session_id, self._websocket, self._load_generation, {
             "type": "controlRequest",
             "sessionId": self.session_id,
+            **({"mediaSessionId": self._media_session_id} if self._media_session_id is not None else {}),
             "control": control,
         }))
 
+    async def _report_control(self, session_id: str, websocket: Any, generation: int, message: dict) -> None:
+        if (self.session_id != session_id or self._websocket is not websocket
+                or (self._load_generation != generation
+                    and message["control"]["command"] != "volume")):
+            return
+        try:
+            await self._send(message)
+        except (OSError, RuntimeError, ConnectionClosed):
+            LOGGER.debug("Output control interrupted; connection loop handles recovery")
+
     async def _send_backend_state(self, session_id: str) -> None:
+        if self._preparing_load:
+            return
         await self._send_status(session_id, self.backend.status())
 
     async def _send_status(self, session_id: str, status: PlaybackStatus) -> None:
@@ -277,6 +418,8 @@ class VibecastAudioPlayer:
             "playerState": state,
             "currentTime": max(0.0, current_time),
         }
+        if self._media_session_owner == session_id and self._media_session_id is not None:
+            message["mediaSessionId"] = self._media_session_id
         if idle_reason:
             message["idleReason"] = idle_reason
         if volume is not None:
@@ -292,9 +435,25 @@ class VibecastAudioPlayer:
 
 def _optional_float(value: object) -> float | None:
     try:
-        return None if value is None else float(value)
+        return None if value is None else _finite_number(value)
     except (TypeError, ValueError):
         return None
+
+
+def _valid_media_id(value: object) -> bool:
+    return value is None or (type(value) is int and -(1 << 63) <= value < (1 << 63))
+
+
+def _finite_number(value: object) -> float:
+    if isinstance(value, bool):
+        raise ValueError("numeric value must not be boolean")
+    try:
+        result = float(value)
+    except (TypeError, ValueError, OverflowError):
+        raise ValueError("invalid numeric value") from None
+    if not math.isfinite(result):
+        raise ValueError("numeric value must be finite")
+    return result
 
 
 def build_parser() -> argparse.ArgumentParser:

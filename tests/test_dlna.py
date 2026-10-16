@@ -35,6 +35,24 @@ class FakeDmr:
 
 
 class DlnaBackendTests(unittest.IsolatedAsyncioTestCase):
+    async def test_play_after_terminal_feedback_restarts_monitor(self):
+        profile = FakeDmr()
+        backend = DlnaAudioBackend("http://192.0.2.2/device.xml", profile_factory=AsyncMock(return_value=profile))
+        backend._status.url = "http://source/"
+        backend._status.idle_reason = "ERROR"
+        backend._seen_playing = True
+        try:
+            await backend.play()
+            self.assertIsNone(backend.status().idle_reason)
+            self.assertFalse(backend._seen_playing)
+            self.assertIsNotNone(backend._poll_task)
+            self.assertFalse(backend._poll_task.done())
+            profile.transport_state = SimpleNamespace(name="PLAYING")
+            await asyncio.sleep(1.1)
+            self.assertEqual(backend.status().state, "PLAYING")
+        finally:
+            await backend.shutdown()
+
     async def test_stopped_preload_survives_until_explicit_play(self):
         profile = FakeDmr()
         profile.transport_state = SimpleNamespace(name="STOPPED")

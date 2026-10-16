@@ -70,6 +70,7 @@ function setLanguage(value) {
   applyLanguage();
 }
 let renderedConfig = "";
+let routesRequestSequence = 0, appliedRoutesSequence = 0;
 const configKey = routes => JSON.stringify(routes.map(({process, ...route}) => route));
 async function api(path, method = "GET", body) {
   // HA Ingress needs its same-origin session cookie. Direct LAN access still
@@ -131,7 +132,19 @@ function renderRoutes(data) {
     $("routes").append(card);
   }
 }
-async function refresh() { renderRoutes(await api("/api/routes")); }
+async function refresh(poll = false) {
+  const sequence = ++routesRequestSequence;
+  let data;
+  try { data = await api("/api/routes"); }
+  catch (error) { if (sequence >= appliedRoutesSequence) throw error; return; }
+  if (sequence < appliedRoutesSequence) return;
+  appliedRoutesSequence = sequence;
+  if (!poll || (configKey(data.routes) !== renderedConfig && !$("routes").contains(document.activeElement))) renderRoutes(data);
+  if (poll) for (const route of data.routes) {
+    const state = document.querySelector(`[data-state="${route.id}"]`);
+    if (state) updateState(state, route.process);
+  }
+}
 document.querySelectorAll("[data-language]").forEach(button => { button.onclick = () => setLanguage(button.dataset.language); });
 applyLanguage();
 refresh().catch(showError);
@@ -162,9 +175,4 @@ async function scanTargets(buttonId, containerId, endpoint, protocol) {
 }
 $("scan").onclick = () => scanTargets("scan", "candidates", "/api/scan", "AirPlay");
 $("scan-dlna").onclick = () => scanTargets("scan-dlna", "dlna-candidates", "/api/scan/dlna", "DLNA");
-setInterval(async () => {
-  try { const data = await api("/api/routes");
-    if (configKey(data.routes) !== renderedConfig && !$("routes").contains(document.activeElement)) renderRoutes(data);
-    for (const route of data.routes) { const state = document.querySelector(`[data-state="${route.id}"]`); if (state) updateState(state, route.process); } }
-  catch (e) { showError(e); }
-}, 5000);
+setInterval(() => refresh(true).catch(showError), 5000);

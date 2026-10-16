@@ -1,20 +1,18 @@
 # Reconstructing the Rust frontend
 
-## Current dev23 maintained source
+## Current dev27 maintained source
 
-Build commit `83ba470158189de3bc223701decdc4c502d47644` from
-`https://github.com/Allcrafter1/vibecast.git` directly. Exact input and fallback
-records are in `config/vibecast-frontend.lock.json`. Container and CI select this
-commit. The maintained/default branch is `cast-audio-receiver`; upstream `main`
-is retained for provenance, not the product build.
+Check out public dev26 base `83ba470158189de3bc223701decdc4c502d47644`
+from `https://github.com/Allcrafter1/vibecast.git`, then apply
+`patches/vibecast-0.6.0.dev27-current.patch` exactly once. Its SHA-256 and base
+are recorded in `config/vibecast-frontend.lock.json`; Container and source-review
+CI follow the same recipe. The matching local versioning commit is recorded for
+review but is not claimed to exist on the public remote.
 
-The commit includes the former dev12/dev13 integration, repeat support, bounded
-load recovery, current-title audio caching, sender-reconnect grace and directly
-addressed Cast command responses required by Chromium desktop senders. The exact
-diff from the previous dev21 pin is retained in
-`patches/vibecast-load-recovery-20261002.patch`. Do **not** apply that snapshot or
-an older overlay on top of this commit. The previous reconstruction instructions
-below are historical fallback recipes.
+The cumulative snapshot includes post-dev26 reliability fixes plus the
+video/session-scoped YouTube credential-transfer implementation. Do **not** stack
+`vibecast-load-recovery-20261002.patch`, dev13 or another historical snapshot on
+top. The previous reconstruction instructions below are historical fallbacks.
 
 ## Historical dev13 private review overlay
 

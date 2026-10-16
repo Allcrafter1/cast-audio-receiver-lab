@@ -4,11 +4,50 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from tools.create_public_source_export import _validate_text, create
 
 
 class PublicSourceExportTests(unittest.TestCase):
+    def test_failed_write_does_not_publish_partial_export(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "source.txt"
+            source.write_bytes(b"reviewed source")
+            target = root / "export"
+            write = Path.write_bytes
+            def fail_second_file(path, payload):
+                if path.name == "second.txt":
+                    raise OSError("disk full")
+                return write(path, payload)
+            with patch("tools.create_public_source_export._source_files", return_value=[
+                    (source, Path("first.txt")), (source, Path("second.txt"))]), \
+                    patch.object(Path, "write_bytes", fail_second_file):
+                with self.assertRaisesRegex(OSError, "disk full"):
+                    create(target)
+            self.assertFalse(target.exists())
+            self.assertEqual(list(root.glob(".source-export-*")), [])
+
+    def test_failed_validation_keeps_final_export_empty_and_allows_retry(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            good, bad = root / "good.txt", root / "bad.txt"
+            good.write_bytes(b"reviewed source")
+            bad.write_bytes(b"invalid\0source")
+            target = root / "export"
+            target.mkdir()
+            selected = [(good, Path("good.txt")), (bad, Path("bad.txt"))]
+            with patch("tools.create_public_source_export._source_files", return_value=selected):
+                with self.assertRaisesRegex(ValueError, "binary"):
+                    create(target)
+                self.assertEqual(list(target.iterdir()), [], "failed export became partially visible")
+                bad.write_bytes(b"corrected source")
+                report = create(target)
+            self.assertEqual(len(report["files"]), 2)
+            self.assertEqual((target / "good.txt").read_bytes(), b"reviewed source")
+            self.assertEqual(list(root.glob(".source-export-*")), [])
+
     def test_documentation_device_identifiers_require_placeholders(self):
         path = Path("docs/device.md")
         _validate_text(path, b"Device 02:00:00:00:00:01")

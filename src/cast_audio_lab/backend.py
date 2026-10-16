@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import shlex
 import signal
@@ -199,6 +200,7 @@ class CommandAudioBackend(NullAudioBackend):
             raise ValueError("player command must contain a {url} placeholder")
         self._process: asyncio.subprocess.Process | None = None
         self._watch_task: asyncio.Task[None] | None = None
+        self._cleanup_task: asyncio.Task[None] | None = None
 
     async def load(
         self, url: str, content_type: str, autoplay: bool, start_time: float
@@ -220,12 +222,16 @@ class CommandAudioBackend(NullAudioBackend):
             await self.pause()
 
     async def play(self) -> None:
-        if self._process and self._process.returncode is None and os.name == "posix":
+        if self._process is None or self._process.returncode is not None:
+            return
+        if os.name == "posix":
             self._process.send_signal(signal.SIGCONT)
         await super().play()
 
     async def pause(self) -> None:
-        if self._process and self._process.returncode is None and os.name == "posix":
+        if self._process is None or self._process.returncode is not None:
+            return
+        if os.name == "posix":
             self._process.send_signal(signal.SIGSTOP)
         await super().pause()
 
@@ -233,10 +239,23 @@ class CommandAudioBackend(NullAudioBackend):
         await self._terminate()
         await super().stop()
 
+    async def seek(self, position: float) -> None:
+        if not any("{start_time}" in argument for argument in self._template):
+            raise ValueError("command backend requires {start_time} for seeking")
+        if self._status.url is None:
+            return
+        await self.load(self._status.url, self._status.content_type,
+                        self._status.state == "PLAYING", max(0.0, position))
+
     async def shutdown(self) -> None:
         await self.stop()
 
     async def _terminate(self) -> None:
+        if self._cleanup_task is None or self._cleanup_task.done():
+            self._cleanup_task = asyncio.create_task(self._terminate_resources())
+        await asyncio.shield(self._cleanup_task)
+
+    async def _terminate_resources(self) -> None:
         watch_task, self._watch_task = self._watch_task, None
         if watch_task is not None and watch_task is not asyncio.current_task():
             watch_task.cancel()
@@ -244,11 +263,15 @@ class CommandAudioBackend(NullAudioBackend):
         process, self._process = self._process, None
         if not process or process.returncode is not None:
             return
-        process.terminate()
+        with contextlib.suppress(ProcessLookupError):
+            if os.name == "posix":
+                process.send_signal(signal.SIGCONT)
+            process.terminate()
         try:
             await asyncio.wait_for(process.wait(), timeout=2)
         except TimeoutError:
-            process.kill()
+            with contextlib.suppress(ProcessLookupError):
+                process.kill()
             await process.wait()
 
     async def _watch_process(self, process: asyncio.subprocess.Process) -> None:

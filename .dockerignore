@@ -8,4 +8,5 @@ dist
 **/target
 third_party
 research
-patches
+patches/*
+!patches/vibecast-0.6.0.dev27-current.patch

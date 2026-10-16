@@ -28,10 +28,14 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          readarray -t pins < <(python3 -c 'import json; p=json.load(open("config/vibecast-frontend.lock.json")); print(p["repository"]); print(p["commit"])')
+          readarray -t pins < <(python3 -c 'import json; p=json.load(open("config/vibecast-frontend.lock.json")); print(p["repository"]); print(p["commit"]); print(p["development_snapshot"]); print(p["development_snapshot_sha256"])')
           git clone --filter=blob:none "${pins[0]}" "$RUNNER_TEMP/frontend-git"
           mkdir "$RUNNER_TEMP/vibecast-sources"
           git -C "$RUNNER_TEMP/frontend-git" archive "${pins[1]}" | tar -x -C "$RUNNER_TEMP/vibecast-sources"
+          test "$(sha256sum "${pins[2]}" | cut -d' ' -f1)" = "${pins[3]}"
+          git -C "$RUNNER_TEMP/vibecast-sources" apply --check "$GITHUB_WORKSPACE/${pins[2]}"
+          git -C "$RUNNER_TEMP/vibecast-sources" apply "$GITHUB_WORKSPACE/${pins[2]}"
+          cp "${pins[2]}" "$RUNNER_TEMP/vibecast-sources/SOURCE-PATCH.patch"
           cp config/vibecast-frontend.lock.json "$RUNNER_TEMP/vibecast-sources/SOURCE-PIN.json"
           cp licenses/Chromium-BSD.txt "$RUNNER_TEMP/vibecast-sources/crates/vibecast-proto/proto/LICENSE"
           cp docs/build-vendored-vibecast.md "$RUNNER_TEMP/vibecast-sources/BUILD-SOURCE.md"
