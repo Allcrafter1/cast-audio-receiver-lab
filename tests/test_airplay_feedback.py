@@ -21,6 +21,20 @@ async def events(backend, text):
 
 
 class DacpTests(unittest.IsolatedAsyncioTestCase):
+    async def test_close_waits_for_goodbye_before_closing_mdns_socket(self):
+        server = DacpServer('AABB', AsyncMock(), AsyncMock())
+        goodbye = asyncio.get_running_loop().create_future()
+        zc = Mock(async_unregister_service=AsyncMock(return_value=goodbye), async_close=AsyncMock())
+        server.zeroconf, server.service = zc, object()
+        closing = asyncio.create_task(server.close())
+        try:
+            await asyncio.sleep(0)
+            zc.async_close.assert_not_awaited()
+        finally:
+            goodbye.set_result(None)
+            await closing
+        zc.async_close.assert_awaited_once()
+
     def test_legacy_dacp_identity_is_full_width_without_changing_hap_pairing_identity(self):
         for protocol, expected in [('raop', '0000AABBCCDDEEFF'), ('auto', 'AABBCCDDEEFF'),
                                    ('airplay2', 'AABBCCDDEEFF')]:

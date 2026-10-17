@@ -19,6 +19,10 @@
   mocking advertisement. An optional test runs the pinned v0.5.4 native binary
   against an RTSP test peer and checks the actual headers against the callback
   server identity/token. Both wire tests passed locally.
+- Fixed a confirmed lifecycle bug: zeroconf register/unregister return a second
+  awaitable for the actual announcement/goodbye packets. Wait for it before
+  reporting readiness or closing the multicast socket, avoiding stale cached
+  callback endpoints after disconnect/reconnect. Regression checks close order.
 - This fixes demonstrable compatibility gaps and diagnostic blind spots;
   confirmation of the exact Yamaha failure mechanism and hardware acceptance
   remains pending. Do not report the user's feedback issue as proven resolved.

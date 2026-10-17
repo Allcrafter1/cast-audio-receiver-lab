@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hmac
 import ipaddress
+import inspect
 import math
 import secrets
 import socket
@@ -79,7 +80,9 @@ class DacpServer:
                 properties={'txtvers': '1', 'Ver': '131075', 'DbId': self.dacp_id,
                             'OSsi': '0x1F5'},
                 server=f'cast-dacp-{self.dacp_id.lower()}.local.')
-            await self.zeroconf.async_register_service(self.service)
+            announcements = await self.zeroconf.async_register_service(self.service)
+            if inspect.isawaitable(announcements):
+                await announcements
         except NonUniqueNameException as exc:
             # This name belongs to another live advertiser. Never send a
             # goodbye for its identity while abandoning our failed attempt.
@@ -129,7 +132,9 @@ class DacpServer:
             if zc is not None:
                 try:
                     if self.service is not None:
-                        await zc.async_unregister_service(self.service)
+                        goodbyes = await zc.async_unregister_service(self.service)
+                        if inspect.isawaitable(goodbyes):
+                            await goodbyes
                 finally:
                     await zc.async_close()
         finally:

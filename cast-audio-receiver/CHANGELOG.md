@@ -4,6 +4,8 @@
 
 - Align the legacy AirPlay callback service identity and discovery metadata
   with DACP conventions, addressing compatibility gaps in dev28's return path.
+- Complete discovery announcements and goodbye packets before continuing or
+  closing the service, preventing stale callback endpoints after reconnects.
 - Show whether the callback service starts, rejects a request or receives
   receiver volume/track controls in the Home Assistant app log, without
   exposing session tokens.
