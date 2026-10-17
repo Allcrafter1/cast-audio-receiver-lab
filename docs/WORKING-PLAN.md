@@ -2,6 +2,15 @@
 
 ## dev29 DACP follow-up — 2026-10-17
 
+- Published as a suspected fix, NOT hardware-confirmed. Paused at the user's
+  request after publication; resume only for their next test cycle.
+- Source: `db68ba72bcad58bd12e1d484a0bb024d22135782`. CI run 39043097031
+  and release run 39043113736 succeeded, including both image architectures
+  and offline source rebuild. Image manifest independently verified:
+  `sha256:1af75a1841cc8334fcc2e89c6f767ad46340fc4e69afbb07e5b803fce076e43b`.
+- Local final checks: 68 AirPlay tests and both real wire tests passed.
+- Next acceptance: receiver-to-YTM volume, Next/Previous and Play/Pause on
+  RX-V673, with new DACP diagnostics. No direct HA changes or hardware tests.
 - User confirms dev28 fixes the inaudible track onset on RX-V673. Receiver
   volume and skip feedback still fail. Supplied logs confirm a legacy RAOP
   route and working YTM-origin selection, but dev28 does not expose DACP

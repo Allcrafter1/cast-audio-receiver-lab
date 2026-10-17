@@ -2,6 +2,8 @@
 
 ## 0.6.0.dev29 — legacy AirPlay return-channel compatibility
 
+- Suspected Yamaha feedback fix, not yet hardware-confirmed. Investigation is
+  paused at the user's request pending their next receiver test.
 - Use a full-width 64-bit DACP identity consistently in legacy RAOP RTSP and
   DNS-SD advertisements; retain existing AirPlay 2 pairing identities.
 - Complete legacy DACP TXT metadata and add shared, redacted diagnostics for

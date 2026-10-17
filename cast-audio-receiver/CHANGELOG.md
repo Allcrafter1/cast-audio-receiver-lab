@@ -1,6 +1,9 @@
 # App changelog
 
-## 0.6.0-dev29 — legacy AirPlay feedback compatibility and diagnostics
+## 0.6.0-dev29 — suspected Yamaha feedback fix
+
+- Suspected fix, not yet confirmed on Yamaha RX-V673: receiver-to-YTM volume
+  feedback and track controls still require a hardware test.
 
 - Align the legacy AirPlay callback service identity and discovery metadata
   with DACP conventions, addressing compatibility gaps in dev28's return path.
