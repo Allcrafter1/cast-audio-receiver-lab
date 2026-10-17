@@ -1,5 +1,28 @@
 # Working plan
 
+## dev29 DACP follow-up — 2026-10-17
+
+- User confirms dev28 fixes the inaudible track onset on RX-V673. Receiver
+  volume and skip feedback still fail. Supplied logs confirm a legacy RAOP
+  route and working YTM-origin selection, but dev28 does not expose DACP
+  startup/rejection diagnostics in the shared HA log. Do not infer receipt or
+  non-receipt of Yamaha callbacks from those logs.
+- Correct the legacy RAOP DACP representation: use the same full-width,
+  uppercase 64-bit hex identifier in RTSP headers and DNS-SD. dev28 used the
+  receiver's 12-character MAC representation. Preserve literal identities on
+  auto/AirPlay 2 routes because existing HAP pairing credentials depend on them.
+  Match the legacy DACP TXT version and OSsi fields used by SpotConnect.
+- Added safe shared diagnostics for DACP readiness/failure, rejected peer/token
+  (once per reason per session), received volume and playback controls. Never
+  expose the authentication token or raw HTTP request.
+- Real loopback tests now exercise mDNS discovery and HTTP callbacks without
+  mocking advertisement. An optional test runs the pinned v0.5.4 native binary
+  against an RTSP test peer and checks the actual headers against the callback
+  server identity/token. Both wire tests passed locally.
+- This fixes demonstrable compatibility gaps and diagnostic blind spots;
+  confirmation of the exact Yamaha failure mechanism and hardware acceptance
+  remains pending. Do not report the user's feedback issue as proven resolved.
+
 ## 0.6.0.dev28 AirPlay return channel and startup — 2026-10-17
 
 - User authorized fixes and publication including the unreleased dev27 work,
@@ -31,6 +54,18 @@
   documented YouTube acceptance limitation remains. SpotConnect is unchanged.
 - Final review also guards duplicate DACP identities: a failed registration
   must not send an mDNS goodbye for the already active sender. Regression added.
+
+## Future feature: Home Assistant music controls — 2026-10-17
+
+- This is independent of the dev28 AirPlay fixes and was not implemented or
+  tested as part of that release.
+- Expose the active music session as a Home Assistant media-player control so
+  HA can issue Play, Pause, Stop, volume, mute, Next and Previous.
+- Commands must act end to end on the real playback session. In particular,
+  Next and Previous must navigate the YouTube Music queue rather than only
+  changing local AirPlay transport state.
+- Define the HA entity/control path and its state synchronization before
+  implementation; keep this separate from receiver-origin DACP controls.
 
 ## 0.6.0.dev27 YouTube CTT forwarding — 2026-10-16
 

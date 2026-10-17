@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.6.0.dev29 — legacy AirPlay return-channel compatibility
+
+- Use a full-width 64-bit DACP identity consistently in legacy RAOP RTSP and
+  DNS-SD advertisements; retain existing AirPlay 2 pairing identities.
+- Complete legacy DACP TXT metadata and add shared, redacted diagnostics for
+  callback readiness, registration failure, rejected requests and received
+  volume/playback controls.
+- Exercise real mDNS discovery and callback HTTP traffic; add an optional
+  wire test using the pinned native sender's actual RTSP headers.
+- User confirmed the dev28 onset fix on Yamaha RX-V673. This follow-up addresses
+  return-channel compatibility; Yamaha callback acceptance still needs testing.
+
 ## 0.6.0.dev28 — DACP feedback and buffered AirPlay startup
 
 - Add a session-scoped DACP HTTP listener and matching mDNS advertisement,

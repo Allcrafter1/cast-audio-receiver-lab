@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 from aiohttp import ClientSession, ClientTimeout
 from zeroconf import NonUniqueNameException
 
-from cast_audio_lab.airplay import AirPlayAudioBackend, AirPlayTarget, cliairplay_argv
+from cast_audio_lab.airplay import AirPlayAudioBackend, AirPlayTarget, cliairplay_argv, dacp_identity
 from cast_audio_lab.dacp import DacpServer, volume_feedback
 from cast_audio_lab.vibecast_player import VibecastAudioPlayer
 
@@ -21,6 +21,17 @@ async def events(backend, text):
 
 
 class DacpTests(unittest.IsolatedAsyncioTestCase):
+    def test_legacy_dacp_identity_is_full_width_without_changing_hap_pairing_identity(self):
+        for protocol, expected in [('raop', '0000AABBCCDDEEFF'), ('auto', 'AABBCCDDEEFF'),
+                                   ('airplay2', 'AABBCCDDEEFF')]:
+            target = AirPlayTarget('127.0.0.1', protocol=protocol, device_id='AA:BB:CC:DD:EE:FF')
+            identity = dacp_identity(target)
+            argv = cliairplay_argv('cliairplay', target, Path('/tmp/test'), volume=.5, latency_ms=2000)
+            self.assertEqual(identity, expected)
+            self.assertEqual(argv[argv.index('--dacp') + 1], identity)
+            if protocol == 'raop':
+                self.assertEqual(identity, f'{int(identity, 16):016X}')
+
     def test_volume_formats_and_invalid_values(self):
         for query, expected in [({'dmcp.volume': '42'}, (.42, False)),
                                 ({'dmcp.device-volume': '-15'}, (.5, False)),
@@ -39,7 +50,9 @@ class DacpTests(unittest.IsolatedAsyncioTestCase):
         statuses, controls = [], []
         backend.add_status_listener(statuses.append)
         backend.add_control_listener(controls.append)
-        server = DacpServer('AABBCCDDEEFF', backend._receiver_volume, backend._receiver_control)
+        diagnostics = Mock()
+        server = DacpServer('AABBCCDDEEFF', backend._receiver_volume, backend._receiver_control,
+                            diagnostic=diagnostics)
         zc = Mock(async_register_service=AsyncMock(), async_unregister_service=AsyncMock(),
                   async_close=AsyncMock())
         with patch('cast_audio_lab.dacp.AsyncZeroconf', return_value=zc):
@@ -49,6 +62,8 @@ class DacpTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(service.name, 'iTunes_Ctrl_AABBCCDDEEFF._dacp._tcp.local.')
         self.assertEqual(service.port, server.runner.addresses[0][1])
         self.assertEqual(service.parsed_addresses(), ['127.0.0.1'])
+        self.assertEqual(service.properties[b'OSsi'], b'0x1F5')
+        self.assertEqual(service.properties[b'Ver'], b'131075')
         base = f'http://127.0.0.1:{service.port}/ctrl-int/1/'
         headers = {'Active-Remote': server.active_remote}
         async with ClientSession(timeout=ClientTimeout(total=5)) as client:
@@ -60,6 +75,9 @@ class DacpTests(unittest.IsolatedAsyncioTestCase):
             async with client.get(base + 'pause', headers=headers) as response:
                 self.assertEqual(response.status, 403)
             server.peer = '127.0.0.1'
+            self.assertEqual([c.args[0] for c in diagnostics.call_args_list],
+                             ['dacp_rejected_token', 'dacp_rejected_peer'])
+            self.assertNotIn(server.active_remote, str(diagnostics.call_args_list))
             for _ in range(2):
                 async with client.get(base + 'setproperty?dmcp.device-volume=-15', headers=headers) as response:
                     self.assertEqual(response.status, 204)

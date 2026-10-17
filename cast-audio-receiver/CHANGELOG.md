@@ -1,5 +1,16 @@
 # App changelog
 
+## 0.6.0-dev29 — legacy AirPlay feedback compatibility and diagnostics
+
+- Align the legacy AirPlay callback service identity and discovery metadata
+  with DACP conventions, addressing compatibility gaps in dev28's return path.
+- Show whether the callback service starts, rejects a request or receives
+  receiver volume/track controls in the Home Assistant app log, without
+  exposing session tokens.
+- Add real network discovery and callback tests plus native RTSP-header
+  verification. Yamaha RX-V673 feedback remains subject to hardware acceptance.
+- Retain the dev28 track-onset fix, now confirmed by the user on RX-V673.
+
 ## 0.6.0-dev28 — AirPlay receiver controls and buffered track starts
 
 - Add the missing legacy AirPlay DACP return channel: volume changes made on

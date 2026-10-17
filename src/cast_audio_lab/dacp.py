@@ -37,11 +37,14 @@ def volume_feedback(query) -> tuple[float, bool] | None:
 
 class DacpServer:
     def __init__(self, dacp_id: str, callback: Callable[[float, bool], Awaitable[None]],
-                 control: Callable[[str], Awaitable[None]]):
+                 control: Callable[[str], Awaitable[None]],
+                 diagnostic: Callable[[str], None] | None = None):
         self.dacp_id = dacp_id
         self.active_remote = str(secrets.randbelow(2**32 - 1) + 1)
         self.callback = callback
         self.control = control
+        self.diagnostic = diagnostic
+        self._reported_rejections: set[str] = set()
         self.peer = ''
         self.runner = None
         self.zeroconf = None
@@ -73,7 +76,8 @@ class DacpServer:
                 f'iTunes_Ctrl_{self.dacp_id}._dacp._tcp.local.',
                 addresses=[ipaddress.ip_address(local.split('%')[0]).packed],
                 port=bound_port,
-                properties={'txtvers': '1', 'Ver': '131077', 'DbId': self.dacp_id},
+                properties={'txtvers': '1', 'Ver': '131075', 'DbId': self.dacp_id,
+                            'OSsi': '0x1F5'},
                 server=f'cast-dacp-{self.dacp_id.lower()}.local.')
             await self.zeroconf.async_register_service(self.service)
         except NonUniqueNameException as exc:
@@ -91,8 +95,14 @@ class DacpServer:
 
     async def handle(self, request: web.Request) -> web.Response:
         # Only the current receiver/session can change this output's state.
-        if request.remote != self.peer or not hmac.compare_digest(
-                request.headers.get('Active-Remote', '').encode('utf-8'), self.active_remote.encode('ascii')):
+        peer_matches = request.remote == self.peer
+        token_matches = hmac.compare_digest(
+                request.headers.get('Active-Remote', '').encode('utf-8'), self.active_remote.encode('ascii'))
+        if not peer_matches or not token_matches:
+            event = 'dacp_rejected_peer' if not peer_matches else 'dacp_rejected_token'
+            if self.diagnostic and event not in self._reported_rejections:
+                self._reported_rejections.add(event)
+                self.diagnostic(event)
             raise web.HTTPForbidden()
         command = request.match_info['command']
         controls = {'play': 'play', 'pause': 'pause', 'playpause': 'toggle_play_pause',

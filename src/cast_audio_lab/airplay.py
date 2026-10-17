@@ -165,6 +165,17 @@ def parse_cliairplay_line(line: str) -> CliAirPlayEvent | None:
     )
 
 
+def dacp_identity(target: AirPlayTarget) -> str:
+    identity = (target.device_id.replace(':', '').replace('-', '')[-16:]
+                if target.device_id else '1A2B3D4EA1B2C3D4')
+    # Legacy receivers can resolve DACP as a numeric 64-bit identifier. Use
+    # the full wire representation for both RTSP and DNS-SD. Existing HAP
+    # pairings use the literal identity, so preserve that on AirPlay 2 routes.
+    if target.protocol == 'raop' and re.fullmatch(r'[0-9a-fA-F]{1,16}', identity):
+        return f'{int(identity, 16):016X}'
+    return identity
+
+
 def cliairplay_argv(
     executable: str,
     target: AirPlayTarget,
@@ -201,7 +212,7 @@ def cliairplay_argv(
     ]
     if target.device_id:
         # The pairing identity must remain stable across restarts.
-        dacp_id = target.device_id.replace(":", "").replace("-", "")[-16:]
+        dacp_id = dacp_identity(target)
         argv.extend(("--dacp", dacp_id))
     if active_remote is not None:
         argv.extend(("--activeremote", active_remote))
@@ -447,11 +458,13 @@ class AirPlayAudioBackend(NullAudioBackend):
         # Absolute feedback is already applied by the receiver. Update Cast/YT
         # state without SET_PARAMETER echo, repeated rounding or feedback loops.
         if (self._status.volume, self._status.muted) != (level, muted):
+            _diagnostic(logging.INFO, 'receiver_volume', percent=round(level * 100), muted=int(muted))
             await super().set_volume(level, muted)
 
     async def _receiver_control(self, command: str) -> None:
         # DACP requests have NOT been applied by cliairplay. Route them through
         # the controller so queue navigation and the actual backend agree.
+        _diagnostic(logging.INFO, 'receiver_control', command=command)
         if command in {'mutetoggle', 'volumeup', 'volumedown'}:
             level, muted = self._status.volume, self._status.muted
             if command == 'mutetoggle':
@@ -595,15 +608,17 @@ class AirPlayAudioBackend(NullAudioBackend):
         self._structured_error.clear()
         self._route_protocol = self.target.protocol
         self._start_lead_ms = 2250
-        dacp_id = (self.target.device_id.replace(':', '').replace('-', '')[-16:]
-                   if self.target.device_id else '1A2B3D4EA1B2C3D4')
-        self._dacp = DacpServer(dacp_id, self._receiver_volume, self._receiver_control)
+        dacp_id = dacp_identity(self.target)
+        self._dacp = DacpServer(dacp_id, self._receiver_volume, self._receiver_control,
+                               diagnostic=lambda event: _diagnostic(logging.INFO, event))
         try:
             await asyncio.wait_for(self._dacp.start(self.target.host, self.target.port), 5)
-        except (OSError, RuntimeError):
+            _diagnostic(logging.INFO, 'dacp_ready')
+        except (OSError, RuntimeError) as exc:
             # Playback remains available if multicast/interface setup fails.
             # Report the missing feedback rather than silently advertising it.
             LOG.warning('AirPlay receiver feedback/control unavailable')
+            _diagnostic(logging.WARNING, 'dacp_unavailable', error=type(exc).__name__)
             await self._dacp.close()
             self._dacp = None
         _diagnostic(logging.DEBUG, "sender_start", protocol=self.target.protocol)
