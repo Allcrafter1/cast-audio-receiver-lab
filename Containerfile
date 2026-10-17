@@ -81,7 +81,7 @@ RUN groupadd --gid 1000 cast-audio \
     && mkdir -p /data/private && chown -R 1000:1000 /data
 ENV HOME=/home/cast-audio
 # Release metadata must not invalidate dependency installation/build layers.
-ARG BUILD_VERSION=0.6.0-dev27
+ARG BUILD_VERSION=0.6.0-dev28
 ARG BUILD_ARCH=${TARGETARCH}
 LABEL org.opencontainers.image.title="Cast Audio Receiver Lab"
 LABEL org.opencontainers.image.description="Experimental Cast audio receiver with modular local and AirPlay outputs"

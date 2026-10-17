@@ -1,5 +1,35 @@
 # Working plan
 
+## 0.6.0.dev28 AirPlay return channel and startup — 2026-10-17
+
+- User authorized fixes and publication including the unreleased dev27 work,
+  and explicitly requested checking receiver Play/Pause and related controls.
+- Confirmed the adapter/native legacy RAOP path lacked a DACP listener and
+  advertisement. Added session-scoped HTTP/mDNS with receiver-IP/token checks,
+  absolute-volume feedback without echo, and playback/queue control forwarding.
+  Play, Pause, toggle, Stop, Next, Previous, mute and relative volume are covered;
+  no claim is made for unsupported fast-forward/rewind DACP commands.
+- Confirmed the adapter sent START immediately after launching the decoder,
+  contrary to the pinned native sender's documented audio-ready contract.
+  Native RAOP's 200 ms ASAP floor is also shorter than its normal 2250 ms
+  receiver latency. Added per-track readiness/failure gating and future RAOP
+  starts with latency lead; do not discard PCM or insert leading silence.
+  Actual PLAYING/position start follows the native audible-time acknowledgement.
+- New tests exercise real HTTP requests, rejected tokens/peers, advertisement
+  cleanup, Cast bridge feedback/controls, warm-cycle readiness reset, delayed
+  startup, cancellation, decoder/transport failure and auto/AP2 route handling.
+  Existing lifecycle-only fixtures explicitly stub the new readiness contract.
+- Local isolated publication-export run: 367 Python tests, 356 passed and
+  11 explicitly skipped. Public-history audit passed across 57 commits before
+  this release commit. Native multi-architecture builds and release promotion
+  are gated by the GitHub workflows; this entry does not imply hardware success.
+- No Yamaha hardware acceptance has been performed here. After updating check
+  receiver-to-YTM volume, Play/Pause and queue navigation, first-track onset,
+  next/repeat/seek and cold/warm starts. Timing is a code-level correction, not
+  proof that every device-specific onset symptom has been eliminated.
+- dev27 account-context forwarding is included as requested; the previously
+  documented YouTube acceptance limitation remains. SpotConnect is unchanged.
+
 ## 0.6.0.dev27 YouTube CTT forwarding — 2026-10-16
 
 - Implemented sender-provided, video/session-scoped CTT forwarding from Lounge

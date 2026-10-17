@@ -12,6 +12,14 @@ from cast_audio_lab.backend import MediaMetadata
 
 
 class PersistentAirPlayTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # These lifecycle tests stub the PCM pipeline. Real buffering and DACP
+        # are exercised separately in test_airplay_feedback.py.
+        for name in ('AirPlayAudioBackend._wait_for_audio', 'DacpServer.start'):
+            stub = patch('cast_audio_lab.airplay.' + name, new_callable=AsyncMock)
+            stub.start()
+            self.addCleanup(stub.stop)
+
     async def test_oversized_child_lines_are_discarded_without_losing_following_events(self):
         b = self.backend()
         for method, suffix in ((b._read_events, b'[STATUS] flushed\n'),

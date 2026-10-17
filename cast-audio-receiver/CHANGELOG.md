@@ -1,5 +1,22 @@
 # App changelog
 
+## 0.6.0-dev28 — AirPlay receiver controls and buffered track starts
+
+- Add the missing legacy AirPlay DACP return channel: volume changes made on
+  the receiver now reach Cast and YouTube Music without echoing them back.
+- Forward receiver Play, Pause, Play/Pause, Stop, Next and Previous through the
+  existing playback/queue controller. Handle mute toggle and volume buttons.
+  Support depends on the receiver sending the corresponding DACP command.
+- Wait for native audio-buffer readiness before starting a track or seek.
+  Schedule legacy RAOP starts with receiver-latency lead rather than an
+  immediate start, avoiding late initial packets. Keep playback position at
+  the requested start until the native sender's acknowledged audible time.
+- Include the previously unpublished dev27 YouTube account-context forwarding
+  and matching playback acknowledgement fields. Age-gated playback acceptance
+  is still dependent on YouTube and has not been confirmed on the test device.
+- Covered by automated HTTP, player-bridge and lifecycle regressions. The
+  reported Yamaha RX-V673 symptoms still require verification after updating.
+
 ## 0.6.0-dev27 — YouTube account-context forwarding candidate
 
 - Forward the YouTube Music sender's video-scoped credential context to the

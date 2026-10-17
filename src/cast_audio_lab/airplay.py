@@ -16,6 +16,7 @@ import os
 import re
 import tempfile
 import math
+import time
 from urllib.parse import urlsplit
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from dataclasses import dataclass, field
@@ -23,6 +24,7 @@ from pathlib import Path
 
 from .backend import ControlRequest, MediaMetadata, NullAudioBackend
 from .artwork import prepare_square_artwork
+from .dacp import DacpServer
 
 
 LOG = logging.getLogger(__name__)
@@ -172,6 +174,7 @@ def cliairplay_argv(
     latency_ms: int,
     sample_rate: int = 44_100,
     channels: int = 2,
+    active_remote: str | None = None,
 ) -> list[str]:
     """Build an argument vector without invoking a shell."""
 
@@ -200,6 +203,8 @@ def cliairplay_argv(
         # The pairing identity must remain stable across restarts.
         dacp_id = target.device_id.replace(":", "").replace("-", "")[-16:]
         argv.extend(("--dacp", dacp_id))
+    if active_remote is not None:
+        argv.extend(("--activeremote", active_remote))
     if target.credentials:
         argv.extend(("--auth", target.credentials))
     if target.legacy_secret:
@@ -316,6 +321,11 @@ class AirPlayAudioBackend(NullAudioBackend):
         self._prepared_artwork_url: str | None = None
         self._track_cleanup_task: asyncio.Task[None] | None = None
         self._pipeline_cleanup_task: asyncio.Task[None] | None = None
+        self._dacp: DacpServer | None = None
+        self._pcm_ready = asyncio.Event()
+        self._decode_failed = asyncio.Event()
+        self._start_lead_ms = 2250  # RAOP 2000ms + libraop minimum; replaced by reported latency
+        self._route_protocol = target.protocol
 
     async def load(
         self, url: str, content_type: str, autoplay: bool, start_time: float
@@ -347,6 +357,8 @@ class AirPlayAudioBackend(NullAudioBackend):
                 self._status.idle_reason = None
                 self._input_finished = False
                 self._audio_ready = False
+                self._pcm_ready.clear()
+                self._decode_failed.clear()
                 self._decoded_bytes = 0
                 self._track_start = max(0.0, start_time)
                 self._autoplay = autoplay
@@ -356,8 +368,14 @@ class AirPlayAudioBackend(NullAudioBackend):
                 self._status.url = url
                 self._status.content_type = content_type
                 await self._send_metadata()
+                await self._wait_for_audio()
                 self._start_pending = True
-                await self._command("START_UNIX_MS=0", "ACTION=START")
+                # RAOP's ASAP floor is only 200ms, not its receiver latency.
+                # Schedule after the input is buffered, with the negotiated
+                # receiver lead, so initial packets are not timestamped late.
+                start_at = (int(time.time() * 1000) + self._start_lead_ms + 100
+                            if self._route_protocol == 'raop' else 0)
+                await self._command(f"START_UNIX_MS={start_at}", "ACTION=START")
                 self._aux_tasks.append(asyncio.create_task(self._progress_updates()))
                 if self.metadata.artwork_url:
                     self._aux_tasks.append(asyncio.create_task(self._deliver_artwork()))
@@ -424,6 +442,46 @@ class AirPlayAudioBackend(NullAudioBackend):
         effective = 0.0 if muted else max(0.0, min(1.0, level))
         await self._command(f"VOLUME={round(effective * 100)}")
         await super().set_volume(level, muted)
+
+    async def _receiver_volume(self, level: float, muted: bool) -> None:
+        # Absolute feedback is already applied by the receiver. Update Cast/YT
+        # state without SET_PARAMETER echo, repeated rounding or feedback loops.
+        if (self._status.volume, self._status.muted) != (level, muted):
+            await super().set_volume(level, muted)
+
+    async def _receiver_control(self, command: str) -> None:
+        # DACP requests have NOT been applied by cliairplay. Route them through
+        # the controller so queue navigation and the actual backend agree.
+        if command in {'mutetoggle', 'volumeup', 'volumedown'}:
+            level, muted = self._status.volume, self._status.muted
+            if command == 'mutetoggle':
+                muted = not muted
+            else:
+                level = max(0.0, min(1.0, level + (0.05 if command == 'volumeup' else -0.05)))
+                muted = False
+            await self.set_volume(level, muted)
+            return
+        if command == 'toggle_play_pause':
+            playing = self._status.state == 'PLAYING' or (
+                self._status.state == 'BUFFERING' and self._autoplay)
+            command = 'pause' if playing else 'play'
+        self._emit_control(ControlRequest(command))
+
+    async def _wait_for_audio(self) -> None:
+        ready = asyncio.create_task(self._pcm_ready.wait())
+        failed = asyncio.create_task(self._transport_failed.wait())
+        decoder = asyncio.create_task(self._decode_failed.wait())
+        try:
+            done, _ = await asyncio.wait({ready, failed, decoder}, timeout=30,
+                                        return_when=asyncio.FIRST_COMPLETED)
+            if failed in done or decoder in done:
+                raise RuntimeError('AirPlay failed before buffered audio was ready')
+            if ready not in done:
+                raise TimeoutError('AirPlay did not buffer initial audio')
+        finally:
+            for task in (ready, failed, decoder):
+                task.cancel()
+            await asyncio.gather(ready, failed, decoder, return_exceptions=True)
 
     async def set_metadata(self, metadata: MediaMetadata) -> None:
         await super().set_metadata(metadata)
@@ -535,6 +593,19 @@ class AirPlayAudioBackend(NullAudioBackend):
         self._transport_error_http = "none"
         self._transport_failed.clear()
         self._structured_error.clear()
+        self._route_protocol = self.target.protocol
+        self._start_lead_ms = 2250
+        dacp_id = (self.target.device_id.replace(':', '').replace('-', '')[-16:]
+                   if self.target.device_id else '1A2B3D4EA1B2C3D4')
+        self._dacp = DacpServer(dacp_id, self._receiver_volume, self._receiver_control)
+        try:
+            await asyncio.wait_for(self._dacp.start(self.target.host, self.target.port), 5)
+        except (OSError, RuntimeError):
+            # Playback remains available if multicast/interface setup fails.
+            # Report the missing feedback rather than silently advertising it.
+            LOG.warning('AirPlay receiver feedback/control unavailable')
+            await self._dacp.close()
+            self._dacp = None
         _diagnostic(logging.DEBUG, "sender_start", protocol=self.target.protocol)
         temporary_directory = tempfile.TemporaryDirectory(prefix="cast-airplay-")
         self._temporary_directory = temporary_directory
@@ -547,6 +618,7 @@ class AirPlayAudioBackend(NullAudioBackend):
                 command_pipe,
                 volume=0.0 if self._status.muted else self._status.volume,
                 latency_ms=self.latency_ms,
+                active_remote=self._dacp.active_remote if self._dacp else None,
             ),
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
@@ -705,6 +777,11 @@ class AirPlayAudioBackend(NullAudioBackend):
             text = line.decode(errors="replace").rstrip()
             event = parse_cliairplay_line(text)
             if event is None:
+                # v0.5.4 reports legacy RAOP latency only on this diagnostic
+                # line. Extract the bounded number, never log host/raw text.
+                latency = re.search(r'player latency is (\d{1,5}) ms', text)
+                if latency and 100 <= int(latency[1]) <= 10000:
+                    self._start_lead_ms = int(latency[1])
                 LOG.debug("cliairplay diagnostic received (content omitted)")
                 _diagnostic(logging.DEBUG, "sender_unstructured_output")
                 continue
@@ -746,19 +823,25 @@ class AirPlayAudioBackend(NullAudioBackend):
                 )
             if event.kind == "event" and event.name == "remote":
                 await self._apply_remote_command(event.values.get("command", ""))
+            if event.kind == 'status' and event.name == 'route':
+                self._route_protocol = event.values.get('protocol', self.target.protocol)
             if event.kind == "status" and event.name == "flushed":
                 self._flushed.set()
             if event.kind == "status" and event.name == "started" and self._start_pending:
                 self._transport_phase = "playing"
                 self._start_pending = False
                 self._track_started = True
-                if self._status.state == "BUFFERING" and self._autoplay:
-                    self._set_position(self._position_at_change)
-                    self._status.state = "PLAYING"
-                    self._emit_status()
-                await self._command(f"PROGRESS={max(0, int(self._current_position()))}")
+                try:
+                    delay = max(0.0, min(15.0, int(event.values.get('at_unix_ms', '0')) / 1000 - time.time()))
+                except ValueError:
+                    delay = 0.0
+                if delay:
+                    self._aux_tasks.append(asyncio.create_task(self._mark_audible(delay)))
+                else:
+                    await self._mark_audible(0)
             if event.kind == "status" and event.name == "audio":
                 self._audio_ready = True
+                self._pcm_ready.set()
                 await self._send_progress()
             if event.kind == "status" and event.name == "playing" and self.persistent:
                 try:
@@ -795,6 +878,15 @@ class AirPlayAudioBackend(NullAudioBackend):
                 result = self.event_handler(event)
                 if result is not None:
                     await result
+
+    async def _mark_audible(self, delay: float) -> None:
+        if delay:
+            await asyncio.sleep(delay)
+        if self._status.state == 'BUFFERING' and self._autoplay:
+            self._set_position(self._position_at_change)
+            self._status.state = 'PLAYING'
+            self._emit_status()
+        await self._send_progress()
 
     async def _read_ffmpeg_log(self, reader: asyncio.StreamReader) -> None:
         # Draining stderr is required: an FFmpeg process otherwise eventually
@@ -869,6 +961,7 @@ class AirPlayAudioBackend(NullAudioBackend):
                     start_ms=_milliseconds(self._track_start),
                 )
                 if returncode != 0 or truncated or not self._decoded_bytes:
+                    self._decode_failed.set()
                     self._status.state = "IDLE"
                     self._status.idle_reason = "ERROR"
                     self._emit_status()
@@ -885,6 +978,7 @@ class AirPlayAudioBackend(NullAudioBackend):
             else:
                 destination.close()
         except (BrokenPipeError, ConnectionResetError):
+            self._decode_failed.set()
             LOG.warning("AirPlay PCM transport closed unexpectedly")
             _diagnostic(logging.WARNING, "pcm_transport_closed", phase=self._transport_phase)
             self._status.state = "IDLE"
@@ -952,6 +1046,9 @@ class AirPlayAudioBackend(NullAudioBackend):
             self._temporary_directory = None
         self._prepared_artwork_url = None
         self._transport_phase = "idle"
+        dacp, self._dacp = self._dacp, None
+        if dacp is not None:
+            await dacp.close()
 
 
 async def _reap_process(process: asyncio.subprocess.Process) -> None:

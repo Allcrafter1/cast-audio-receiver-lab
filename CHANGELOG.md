@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.6.0.dev28 — DACP feedback and buffered AirPlay startup
+
+- Add a session-scoped DACP HTTP listener and matching mDNS advertisement,
+  bound to the receiver-facing interface. Validate receiver address and the
+  per-transport Active-Remote token; remove the service on teardown.
+- Propagate absolute receiver volume as state without a SET_PARAMETER echo.
+  Route receiver transport/queue controls through the Cast player bridge;
+  handle relative volume and mute requests locally with state feedback.
+- Gate native START on new-track PCM readiness, abort on decoder/transport
+  failure, and supply legacy RAOP with a future audible time incorporating its
+  reported latency. Retain AirPlay 2's own scheduler. Delay PLAYING/position
+  advancement until the acknowledged audible time; cancel on teardown.
+- Include all unreleased dev27 frontend work without changing its hash-locked
+  source snapshot. No new runtime dependencies or SpotConnect modifications.
+
 ## 0.6.0.dev27 — video-scoped YouTube credential transfer
 
 - Preserve a sender-provided YouTube `ctt` only for the selected video and the

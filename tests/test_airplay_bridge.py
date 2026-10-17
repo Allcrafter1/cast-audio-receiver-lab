@@ -43,6 +43,14 @@ class AirPlayConfigurationTests(unittest.TestCase):
 
 
 class AirPlayLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # Pipeline stubs cannot emit native readiness; covered by the dedicated
+        # start-gate tests rather than by these lifecycle-only fixtures.
+        for name in ('AirPlayAudioBackend._wait_for_audio', 'DacpServer.start'):
+            stub = patch('cast_audio_lab.airplay.' + name, new_callable=AsyncMock)
+            stub.start()
+            self.addCleanup(stub.stop)
+
     async def test_same_artwork_reuses_file_but_new_url_is_converted(self):
         backend = AirPlayAudioBackend(AirPlayTarget('192.0.2.1'))
         backend._temporary_directory = tempfile.TemporaryDirectory()
