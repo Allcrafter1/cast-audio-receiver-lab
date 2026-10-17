@@ -11,7 +11,7 @@ import socket
 from collections.abc import Awaitable, Callable
 
 from aiohttp import web
-from zeroconf import Error as ZeroconfError, IPVersion, ServiceInfo
+from zeroconf import Error as ZeroconfError, IPVersion, NonUniqueNameException, ServiceInfo
 from zeroconf.asyncio import AsyncZeroconf
 
 
@@ -76,6 +76,12 @@ class DacpServer:
                 properties={'txtvers': '1', 'Ver': '131077', 'DbId': self.dacp_id},
                 server=f'cast-dacp-{self.dacp_id.lower()}.local.')
             await self.zeroconf.async_register_service(self.service)
+        except NonUniqueNameException as exc:
+            # This name belongs to another live advertiser. Never send a
+            # goodbye for its identity while abandoning our failed attempt.
+            self.service = None
+            await self.close()
+            raise RuntimeError('DACP identity already advertised') from exc
         except ZeroconfError as exc:
             await self.close()
             raise RuntimeError('DACP advertisement failed') from exc

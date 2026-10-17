@@ -29,6 +29,8 @@
   proof that every device-specific onset symptom has been eliminated.
 - dev27 account-context forwarding is included as requested; the previously
   documented YouTube acceptance limitation remains. SpotConnect is unchanged.
+- Final review also guards duplicate DACP identities: a failed registration
+  must not send an mDNS goodbye for the already active sender. Regression added.
 
 ## 0.6.0.dev27 YouTube CTT forwarding — 2026-10-16
 

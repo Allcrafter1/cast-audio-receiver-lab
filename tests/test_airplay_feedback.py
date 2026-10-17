@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, Mock, patch
 
 from aiohttp import ClientSession, ClientTimeout
+from zeroconf import NonUniqueNameException
 
 from cast_audio_lab.airplay import AirPlayAudioBackend, AirPlayTarget, cliairplay_argv
 from cast_audio_lab.dacp import DacpServer, volume_feedback
@@ -94,6 +95,17 @@ class DacpTests(unittest.IsolatedAsyncioTestCase):
                 await server.start('127.0.0.1', 5000)
         self.assertIsNone(server.runner)
         self.assertIsNone(server.zeroconf)
+        zc.async_close.assert_awaited_once()
+
+    async def test_duplicate_advertisement_never_withdraws_other_session(self):
+        server = DacpServer('AABB', AsyncMock(), AsyncMock())
+        zc = Mock(async_register_service=AsyncMock(side_effect=NonUniqueNameException()),
+                  async_unregister_service=AsyncMock(), async_close=AsyncMock())
+        with patch('cast_audio_lab.dacp.AsyncZeroconf', return_value=zc):
+            with self.assertRaises(RuntimeError):
+                await server.start('127.0.0.1', 5000)
+        self.assertIsNone(server.runner)
+        zc.async_unregister_service.assert_not_awaited()
         zc.async_close.assert_awaited_once()
 
     def test_native_receives_matching_identity_and_token(self):
