@@ -3,8 +3,19 @@
 ## 0.7.0.dev1 YouTube/session/HA-controls release — 2026-10-27
 
 - User completed live acceptance on the `.110` laptop receiver and explicitly
-  authorized publication with a larger version bump. Target version is
-  `0.7.0.dev1` / image and App `0.7.0-dev1`.
+  authorized publication with a larger version bump. Published as GitHub
+  prerelease `v0.7.0-dev1` on 2026-10-27; Python version is `0.7.0.dev1` and
+  image/App version is `0.7.0-dev1`.
+- Verified source commit is `e38925d425c504322e4778224d6d961f53342b43`.
+  CI run `40553631443` and release run `40554760222` both succeeded. The
+  release/tag and promoted `main` point to metadata-only child commit
+  `548016f78c620f381e6f8dd426606b81a29154b2`.
+- Public image `ghcr.io/allcrafter1/cast-audio-receiver:0.7.0-dev1` was
+  anonymously verified for `linux/amd64` and `linux/arm64`; multi-architecture
+  digest is
+  `sha256:365fd9021c09c7f28c7aaa4d1e933befd3bf8e737c700704b22e880e94bcddb0`.
+  The release also contains the image manifest/digest and an offline-buildable
+  vendored Rust source archive with a passing published checksum.
 - Accepted coverage includes desktop, phone and iPad playback; age-restricted
   titles; seek; Previous/Next; Repeat One; mobile/desktop/iPad takeover; a
   60-second network-reconnect grace; and Home Assistant Play, Pause, Stop, Seek,
@@ -28,8 +39,8 @@
   no playlist archive or persistent YouTube cookie store is introduced.
 - Release gates: exact source reconstruction, Rust 1.98.1 workspace tests/build,
   complete Python/browser/container CI, both native image architectures,
-  anonymous GHCR readback and offline vendored-source rebuild. Promotion must
-  leave the running `.110` test deployment untouched.
+  anonymous GHCR readback and offline vendored-source rebuild all passed. The
+  release workflow left the running `.110` test deployment untouched.
 - Product code remains MPL-2.0; Vibecast stays MIT, Chromium BSD-3-Clause and
   airplay-cli GPLv3 notices remain separate. The final reference audit found
   no imported source from ffindog's unmerged reconnect PR, ffindog's MIT
@@ -104,17 +115,15 @@
 - Final review also guards duplicate DACP identities: a failed registration
   must not send an mDNS goodbye for the already active sender. Regression added.
 
-## Future feature: Home Assistant music controls — 2026-10-17
+## Home Assistant music controls — implemented in 0.7.0.dev1
 
-- This is independent of the dev28 AirPlay fixes and was not implemented or
-  tested as part of that release.
-- Expose the active music session as a Home Assistant media-player control so
-  HA can issue Play, Pause, Stop, volume, mute, Next and Previous.
-- Commands must act end to end on the real playback session. In particular,
-  Next and Previous must navigate the YouTube Music queue rather than only
-  changing local AirPlay transport state.
-- Define the HA entity/control path and its state synchronization before
-  implementation; keep this separate from receiver-origin DACP controls.
+- The feature recorded here on 2026-10-17 is implemented, live-accepted and
+  published in `v0.7.0-dev1`.
+- Home Assistant can issue Play, Pause, Stop, Seek, volume, mute, Next and
+  Previous against the active Cast media session.
+- Next and Previous navigate the real YouTube Music Lounge queue. Passive Home
+  Assistant/status observers remain separate from sender ownership and cannot
+  seize or keep a superseded controller session alive.
 
 ## 0.6.0.dev27 YouTube CTT forwarding — 2026-10-16
 
