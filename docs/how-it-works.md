@@ -153,6 +153,14 @@ and disconnect all have to update that same canonical session. Merely starting
 an external player would leave the phone stuck in “connecting”, display stale
 positions or allow an abandoned session to block the next sender.
 
+Home Assistant's Google Cast integration can control that active session through
+the receiver media channel. Play, Pause, Stop, Seek, volume and mute use the
+same canonical control path. Next/Previous are translated into Lounge queue
+commands, so they navigate YouTube Music's real queue rather than only replacing
+the local decoder. Home Assistant remains a passive controller: it does not
+take sender ownership, rotate the Lounge session or prevent a phone, tablet or
+desktop from taking over.
+
 ### Default Media Receiver
 
 The public Default Media Receiver application ID accepts ordinary Cast media

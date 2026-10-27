@@ -42,6 +42,9 @@ build/runtime checks; physical ARM speaker acceptance remains untested.
 - Create a stable, audio-only Cast speaker for every configured output.
 - Receive YouTube Music with play/pause, seek, skip, volume, queue progression,
   metadata and artwork feedback.
+- Control the active YouTube Music session from Home Assistant with Play,
+  Pause, Stop, Seek, volume, mute and real-queue Next/Previous without taking
+  ownership away from the connected desktop, phone or tablet.
 - Receive direct HTTP(S) media, radio and local/TTS URLs through the Cast
   Default Media Receiver path used by Home Assistant.
 - Play locally with mpv, forward to AirPlay with Music Assistant's

@@ -1,5 +1,39 @@
 # Changelog
 
+## 0.7.0.dev1 — resilient YouTube sessions and Home Assistant controls
+
+- Preserve an active YouTube Music session for up to 60 seconds after an
+  unexpected Cast network loss. Mobile/iPad multi-socket reconnects retain
+  playback and queue state; explicit Stop/Close and a genuine controller
+  replacement remain immediate.
+- Make sender ownership deterministic across desktop, phone and iPad. A real
+  takeover removes the displaced controller, while passive Home Assistant and
+  status observers cannot seize ownership or keep controlling the session.
+- Add complete Cast controls from Home Assistant: Play, Pause, Stop, Seek,
+  volume, mute, Next and Previous. Track navigation uses the real YouTube Music
+  Lounge queue, including while feedback is reconnecting or temporarily stalled.
+- Resolve exact neighbouring queue items with video-scoped CTT and opaque
+  InnerTube context. Reuse a valid prepared item, but never let a failed
+  anonymous prefetch poison a later credential-backed selection.
+- Carry yt-dlp media URLs together with required allowlisted request headers
+  through the local cache, proxy and refresh paths. CTTs, cookies and signed
+  URLs remain session-only, redacted and are never persisted.
+- Keep progressive loading demand-driven and recovery bounded to two fresh-media
+  rounds. Preserve position/pause state and isolate terminal failures to the
+  affected title instead of skipping or poisoning following songs.
+- Freeze the accepted frontend as
+  `patches/vibecast-0.7.0.dev1-current.patch` over public base `83ba470`, with
+  an exact SHA-256 lock and offline vendored-source build in the release gate.
+- Laptop-receiver acceptance passed with YouTube Music Desktop, mobile and iPad,
+  including age-restricted titles, seek, Repeat One, queue navigation,
+  controller handover, reconnect and Home Assistant controls. AirPlay, DLNA and
+  Sonos output implementations are otherwise unchanged.
+- The product remains MPL-2.0. Vibecast remains MIT and all existing third-party
+  licences and notices remain attached to their respective components.
+- Credit ffindog for the iOS reconnect reproduction and narrower PR proposal,
+  and ffindog/patrickkfkan's MIT projects as behavioural protocol references.
+  The released implementation is independent; no source was imported from them.
+
 ## 0.6.0.dev29 — legacy AirPlay return-channel compatibility
 
 - Suspected Yamaha feedback fix, not yet hardware-confirmed. Investigation is

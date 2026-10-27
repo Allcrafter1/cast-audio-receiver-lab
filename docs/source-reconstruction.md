@@ -1,18 +1,26 @@
 # Reconstructing the Rust frontend
 
-## Current dev27 maintained source
+## Current 0.7.0.dev1 maintained source
 
 Check out public dev26 base `83ba470158189de3bc223701decdc4c502d47644`
 from `https://github.com/Allcrafter1/vibecast.git`, then apply
-`patches/vibecast-0.6.0.dev27-current.patch` exactly once. Its SHA-256 and base
+`patches/vibecast-0.7.0.dev1-current.patch` exactly once. Its SHA-256 and base
 are recorded in `config/vibecast-frontend.lock.json`; Container and source-review
-CI follow the same recipe. The matching local versioning commit is recorded for
-review but is not claimed to exist on the public remote.
+CI follow the same recipe. The matching maintained-fork commit is recorded for
+review.
 
-The cumulative snapshot includes post-dev26 reliability fixes plus the
-video/session-scoped YouTube credential-transfer implementation. Do **not** stack
+The cumulative snapshot includes the post-dev26 reliability and credential
+work, CTT-aware InnerTube prefetch, complete request-recipe forwarding, bounded
+audio recovery, iPad/mobile session reconnection and Home Assistant controls for
+the real YouTube Music queue. Do **not** stack the old dev27 snapshot,
 `vibecast-load-recovery-20261002.patch`, dev13 or another historical snapshot on
 top. The previous reconstruction instructions below are historical fallbacks.
+
+## Historical dev27 snapshot
+
+The earlier `patches/vibecast-0.6.0.dev27-current.patch` reconstructs the
+credential-transfer candidate documented in `youtube-ctt-dev27.md`. It remains
+historical evidence and must not be applied with the current snapshot.
 
 ## Historical dev13 private review overlay
 

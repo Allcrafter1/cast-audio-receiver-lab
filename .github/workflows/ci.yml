@@ -60,8 +60,8 @@ jobs:
         run: |
           git clone https://github.com/Allcrafter1/vibecast.git /tmp/vibecast
           git -C /tmp/vibecast checkout --detach 83ba470158189de3bc223701decdc4c502d47644
-          git -C /tmp/vibecast apply --check "$GITHUB_WORKSPACE/patches/vibecast-0.6.0.dev27-current.patch"
-          git -C /tmp/vibecast apply "$GITHUB_WORKSPACE/patches/vibecast-0.6.0.dev27-current.patch"
+          git -C /tmp/vibecast apply --check "$GITHUB_WORKSPACE/patches/vibecast-0.7.0.dev1-current.patch"
+          git -C /tmp/vibecast apply "$GITHUB_WORKSPACE/patches/vibecast-0.7.0.dev1-current.patch"
       - name: Test changed frontend crates
         working-directory: /tmp/vibecast
         run: >-
@@ -69,8 +69,11 @@ jobs:
           -p vibecast-cast
           -p vibecast-receiver
           -p vibecast-apps-default-media
+          -p vibecast-apps-tv4play
+          -p vibecast-apps-viaplay
           -p vibecast-apps-youtube
           -p vibecast-bridge
+          -p vibecast-messages
           -p vibecast-platform
           -p vibecast-core
           -p vibecast-player-api

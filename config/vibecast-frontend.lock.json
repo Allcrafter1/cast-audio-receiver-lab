@@ -3,11 +3,11 @@
   "commit": "83ba470158189de3bc223701decdc4c502d47644",
   "branch_for_review": "cast-audio-receiver",
   "rust_toolchain": "1.98.1",
-  "development_snapshot": "patches/vibecast-0.6.0.dev27-current.patch",
-  "development_snapshot_sha256": "02ed71eec0bf69304436f7d7b21da12640b0d4b9efba93d9b92bafe9cb9a8397",
-  "local_version_commit": "2975e7b7d997bb896951656a004c5e94a7b8633f",
+  "development_snapshot": "patches/vibecast-0.7.0.dev1-current.patch",
+  "development_snapshot_sha256": "3d4119abefbeff18a0f86b90a4252cafa7a3341ce136c8fd4c6103a6a5e62204",
+  "local_version_commit": "85918111ac68cbf837bf58835b5fd066615963ad",
   "reconstruction_base": "f28befe02fe930db300294d6bf49cdf5fec5a747",
   "reconstruction_overlay": "patches/vibecast-dev13-internal-bridge.patch",
   "reconstruction_overlay_sha256": "660e536d026cb57681c3ea0534cb331ec91da8a75df08849d2f62819d74ed7c1",
-  "note": "The public commit is the dev26 base. Apply the hash-locked dev27 current snapshot exactly once; it includes the later reliability work and sender-provided, video/session-scoped YouTube CTT forwarding. The local_version_commit identifies the matching local versioning clone and is not claimed to be public. Reconstruction base/overlay describe the historical dev13 baseline only."
+  "note": "The public commit is the dev26 base. Apply the hash-locked 0.7.0.dev1 current snapshot exactly once; it includes the accepted CTT-aware resolver and prefetch path, download-recipe forwarding, bounded recovery, iPad/mobile reconnect and takeover handling, and Home Assistant queue controls. The local_version_commit identifies the matching maintained-fork source commit. Reconstruction base/overlay describe the historical dev13 baseline only."
 }

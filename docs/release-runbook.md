@@ -2,15 +2,16 @@
 
 ## Normal path
 
-The 2026-10-02 YouTube recovery/cache work is committed in the maintained fork
-and pinned in `config/vibecast-frontend.lock.json`; see
-[YouTube load recovery](youtube-load-recovery.md). Do not apply its snapshot on
-top of the pinned commit.
+The accepted CTT-aware resolver, prefetch, session-reconnect and Home Assistant
+control source is pinned as one cumulative snapshot in
+`config/vibecast-frontend.lock.json`; see
+[source reconstruction](source-reconstruction.md). Do not stack historical
+recovery, dev27 or bridge snapshots on top of it.
 
 1. Prepare a new source version locally (does not advertise an App update):
 
    ```sh
-   python3 tools/release.py prepare --version 0.6.0.dev25 --execute
+   python3 tools/release.py prepare --version 0.7.0.dev1 --execute
    ```
 
 2. Implement/test the change, add reviewed entries to the project and App
@@ -19,7 +20,7 @@ top of the pinned commit.
 3. Run the **Release App** workflow once with the exact candidate version:
 
    ```sh
-   gh workflow run release.yml -f version=0.6.0-dev25 -F publish=true
+   gh workflow run release.yml -f version=0.7.0-dev1 -F publish=true
    ```
 
 The workflow checks the version and notes, refuses existing image/release tags,
@@ -33,8 +34,8 @@ The default `publish=false` is a **read-only plan**, not a release. It checks
 version/notes and validates workflow wiring without publishing or promoting:
 
 ```sh
-gh workflow run release.yml -f version=0.6.0-dev25
-python3 tools/release.py plan --expected-tag 0.6.0-dev25
+gh workflow run release.yml -f version=0.7.0-dev1
+python3 tools/release.py plan --expected-tag 0.7.0-dev1
 ```
 
 The release uses the repository's short-lived Actions token, no personal token

@@ -9,4 +9,4 @@ dist
 third_party
 research
 patches/*
-!patches/vibecast-0.6.0.dev27-current.patch
+!patches/vibecast-0.7.0.dev1-current.patch

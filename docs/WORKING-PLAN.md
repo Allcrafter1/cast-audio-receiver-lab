@@ -1,5 +1,41 @@
 # Working plan
 
+## 0.7.0.dev1 YouTube/session/HA-controls release — 2026-10-27
+
+- User completed live acceptance on the `.110` laptop receiver and explicitly
+  authorized publication with a larger version bump. Target version is
+  `0.7.0.dev1` / image and App `0.7.0-dev1`.
+- Accepted coverage includes desktop, phone and iPad playback; age-restricted
+  titles; seek; Previous/Next; Repeat One; mobile/desktop/iPad takeover; a
+  60-second network-reconnect grace; and Home Assistant Play, Pause, Stop, Seek,
+  volume, mute and real YouTube Music queue navigation.
+- Current frontend source is maintained commit
+  `85918111ac68cbf837bf58835b5fd066615963ad`, reconstructed for the
+  product from public base `83ba470158189de3bc223701decdc4c502d47644` plus
+  `patches/vibecast-0.7.0.dev1-current.patch` (SHA-256
+  `3d4119abefbeff18a0f86b90a4252cafa7a3341ce136c8fd4c6103a6a5e62204`).
+- Retain CTT and opaque InnerTube context per exact video/queue slot; contextual
+  prefetch cannot be poisoned by an earlier anonymous failure. Download recipes
+  carry allowlisted request headers through proxy/cache/refresh without logging
+  or persisting tokens, cookies or signed URLs.
+- Unexpected control-socket loss permits bounded reconnection without weakening
+  explicit Stop/Close or genuine sender replacement. Passive HA/status observers
+  do not acquire sender ownership; displaced senders cannot control media or
+  output volume. Local output controls remain serviced during Lounge rebind,
+  feedback stalls and reconnect backoff.
+- Automatic playback recovery remains limited to two fresh-media rounds and is
+  isolated to the affected selection. The progressive cache stays demand-driven;
+  no playlist archive or persistent YouTube cookie store is introduced.
+- Release gates: exact source reconstruction, Rust 1.98.1 workspace tests/build,
+  complete Python/browser/container CI, both native image architectures,
+  anonymous GHCR readback and offline vendored-source rebuild. Promotion must
+  leave the running `.110` test deployment untouched.
+- Product code remains MPL-2.0; Vibecast stays MIT, Chromium BSD-3-Clause and
+  airplay-cli GPLv3 notices remain separate. The final reference audit found
+  no imported source from ffindog's unmerged reconnect PR, ffindog's MIT
+  receiver or patrickkfkan's MIT `/next` implementation; credit them as
+  behavioural/reproduction references without adding dependency licence files.
+
 ## dev29 DACP follow-up — 2026-10-17
 
 - Published as a suspected fix, NOT hardware-confirmed. Paused at the user's

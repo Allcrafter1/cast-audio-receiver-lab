@@ -1,5 +1,33 @@
 # App changelog
 
+## 0.7.0-dev1 — resilient YouTube sessions and full Home Assistant controls
+
+- Keep an active YouTube Music session alive for up to 60 seconds after an
+  unexpected Cast network loss. iPad/mobile multi-socket reconnects preserve
+  playback and queue state, while explicit Stop/Close and a genuine new-controller
+  takeover remain immediate.
+- Make sender ownership deterministic across desktop, phone and iPad. A real
+  takeover closes and removes the displaced controller; passive Home Assistant
+  and status observers cannot seize the session or keep controlling it afterward.
+- Add full Google Cast control from Home Assistant: Play, Pause, Stop, Seek,
+  volume and mute. Next/Previous now operate on the real YouTube Music Lounge
+  queue instead of skipping only the local decoder.
+- Resolve exact Next/Previous items through InnerTube with video-scoped CTT and
+  opaque queue context. Context-aware prefetch is reusable, but a failed
+  anonymous prefetch can no longer poison a later explicit CTT-backed start.
+- Carry yt-dlp media URLs together with required allowlisted request headers
+  through cache, proxy and refresh. Sensitive cookies, CTT values and signed
+  URLs remain session-only, redacted and are never persisted.
+- Improve startup, seek, repeat and recovery by reusing the exact prepared item
+  and preserving valid download recipes. Recovery remains bounded to two
+  fresh-media rounds and a terminal failure is isolated to its own title.
+- Accepted on the laptop receiver with YouTube Music Desktop, mobile and iPad,
+  including age-restricted titles, seek, Repeat One, Next/Previous, controller
+  handover, reconnect and Home Assistant queue controls. AirPlay, DLNA and Sonos
+  behavior is otherwise unchanged.
+- The product remains MPL-2.0; the bundled Vibecast fork remains MIT and all
+  existing third-party notices and licences are preserved.
+
 ## 0.6.0-dev29 — suspected Yamaha feedback fix
 
 - Suspected fix, not yet confirmed on Yamaha RX-V673: receiver-to-YTM volume

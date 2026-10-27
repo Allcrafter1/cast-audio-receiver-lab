@@ -4,6 +4,8 @@ An experimental audio-only Cast receiver for YouTube Music and supported direct
 media. Create named speakers that play locally or forward to AirPlay, DLNA or
 Sonos. Manage them through **Open Web UI** in Home Assistant or the local network.
 
+- Home Assistant can Play, Pause, Stop, Seek, change volume/mute and navigate
+  the real YouTube Music queue with Next/Previous.
 - Linux amd64 and 64-bit ARM (aarch64); ARM64 passes native build/runtime checks,
   while physical ARM speaker acceptance remains open.
 - Valid, separately supplied Cast authentication material is required.

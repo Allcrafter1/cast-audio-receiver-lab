@@ -4,6 +4,12 @@ This is the thin Home Assistant packaging layer for the same OCI image and
 `cast-audio-receiver` supervisor used by normal Linux/container installs. It is
 not a separate implementation.
 
+The discovered Cast speaker can be controlled from Home Assistant with Play,
+Pause, Stop, Seek, volume, mute and Next/Previous. For YouTube Music,
+Next/Previous operate on the sender's real Lounge queue. These controls observe
+the existing sender session and do not claim ownership from a connected phone,
+tablet or desktop.
+
 The app is an **experimental public pre-release**. A real HAOS/Supervisor build,
 install, ingress/LAN, local-audio restart and persistent-route test has passed.
 On a clean first start it verifies and privately stores the separately released,
