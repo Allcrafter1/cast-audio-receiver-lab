@@ -8,6 +8,7 @@ import asyncio
 import json
 import logging
 import math
+import os
 import platform
 import uuid
 from pathlib import Path
@@ -24,6 +25,18 @@ from .backend import (
 from .output_registry import create_output_backend, output_names
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _launch_volume_cap() -> float:
+    try:
+        value = float(os.environ.get("CAST_AUDIO_MAX_LAUNCH_VOLUME", "0.25"))
+    except ValueError:
+        return 0.25
+    return max(0.0, min(1.0, value)) if math.isfinite(value) else 0.25
+
+
+# Highest level accepted before the first playback session (see handle_message).
+MAX_LAUNCH_VOLUME = _launch_volume_cap()
 HEALTH_LOGGER = logging.getLogger("cast_audio_lab.player_health")
 HEALTH_LOGGER.setLevel(logging.INFO)
 
@@ -205,9 +218,15 @@ class VibecastAudioPlayer:
             # Receiver volume is restored at app launch, before the first load
             # establishes a playback session. It is output-wide, not track-local.
             if command == "volume":
-                await self.backend.set_volume(
-                    _finite_number(message.get("level", 1.0)), bool(message.get("muted", False))
-                )
+                level = _finite_number(message.get("level", 1.0))
+                if self.session_id is None and level > MAX_LAUNCH_VOLUME:
+                    # Before any playback session this is the launch-time
+                    # restore (default 1.0 when nothing is persisted). Network
+                    # outputs such as AirPlay/Sonos apply it as the real
+                    # speaker level, so never start louder than the cap.
+                    LOGGER.info("capping pre-session volume %.2f to %.2f", level, MAX_LAUNCH_VOLUME)
+                    level = MAX_LAUNCH_VOLUME
+                await self.backend.set_volume(level, bool(message.get("muted", False)))
                 await self._send_backend_state(session_id)
                 return
             if session_id != self.session_id:

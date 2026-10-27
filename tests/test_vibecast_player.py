@@ -326,6 +326,21 @@ class VibecastAudioPlayerTests(unittest.IsolatedAsyncioTestCase):
         await self.player.handle_message({"type": "pause", "sessionId": "s1"})
         self.assertEqual(self.backend.status().state, "PAUSED")
 
+    async def test_launch_volume_restore_is_capped_before_first_session(self):
+        from cast_audio_lab.vibecast_player import MAX_LAUNCH_VOLUME
+        self.assertLessEqual(MAX_LAUNCH_VOLUME, 0.25)
+        await self.player.handle_message({"type": "volume", "sessionId": "app", "level": 1.0})
+        self.assertAlmostEqual(self.backend.status().volume, MAX_LAUNCH_VOLUME)
+        self.assertAlmostEqual(self.sent[-1]["volume"], MAX_LAUNCH_VOLUME,
+                               "sender must see the capped level, not 100 %")
+        await self.player.handle_message({"type": "volume", "sessionId": "app", "level": 0.1})
+        self.assertAlmostEqual(self.backend.status().volume, 0.1, msg="quiet restores stay untouched")
+        await self.player.handle_message({"type": "load", "sessionId": "s1", "media": {
+            "streams": [{"url": "https://example.test/audio", "contentType": "audio/mpeg"}]}})
+        await self.player.handle_message({"type": "volume", "sessionId": "s1", "level": 0.9})
+        self.assertAlmostEqual(self.backend.status().volume, 0.9,
+                               msg="explicit changes during playback are not capped")
+
     async def test_actual_volume_is_in_status(self):
         await self.backend.set_volume(0.5, True)
         await self.player._send_backend_state("s1")
@@ -359,10 +374,10 @@ class VibecastAudioPlayerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_volume_can_be_restored_before_first_load(self):
         await self.player.handle_message(
-            {"type": "volume", "sessionId": "new-session", "level": 0.26, "muted": False}
+            {"type": "volume", "sessionId": "new-session", "level": 0.2, "muted": False}
         )
-        self.assertEqual(self.backend.status().volume, 0.26)
-        self.assertEqual(self.sent[-1]["volume"], 0.26)
+        self.assertEqual(self.backend.status().volume, 0.2)
+        self.assertEqual(self.sent[-1]["volume"], 0.2)
         self.assertIsNone(self.player.session_id)
 
     async def test_slow_artwork_does_not_block_load_or_survive_new_track_and_stop(self):
