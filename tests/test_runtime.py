@@ -68,6 +68,21 @@ class RuntimeCommandTests(unittest.TestCase):
         self.assertIn("http://192.0.2.2:8788", manager)
         self.assertIn("43124", manager)
         self.assertEqual(manager[manager.index("--log-level") + 1], "INFO")
+        self.assertNotIn("--advertise-video-output", frontend)
+
+    def test_video_output_flag_reaches_only_the_frontend(self):
+        with tempfile.TemporaryDirectory() as directory:
+            args = argparse.Namespace(
+                data_dir=Path(directory), certs=None, frontend="/opt/vibecast",
+                model="Audio Speaker", bridge_port=8010, web_host="0.0.0.0",
+                web_port=8788, cliairplay="/opt/cliairplay",
+                artwork_public_url=None, log_level="INFO",
+                ha_ingress=False, ingress_port=None, advertise_video_output=True,
+            )
+            with patch("cast_audio_lab.runtime.frontend_bind_host", return_value="::"):
+                frontend, manager = runtime_commands(args)
+        self.assertIn("--advertise-video-output", frontend)
+        self.assertNotIn("--advertise-video-output", manager)
 
 
 class RuntimeSupervisorTests(unittest.IsolatedAsyncioTestCase):

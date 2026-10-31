@@ -34,6 +34,50 @@ class ContainerEntrypointTests(unittest.TestCase):
             argv[argv.index("--certs") + 1], "/data/private/certs.json"
         )
         self.assertNotIn("--artwork-public-url", argv)
+        self.assertNotIn("--advertise-video-output", argv)
+
+    def test_video_output_advertisement_is_opt_in(self):
+        def argv_for(options, environ=None):
+            return runtime_argv(
+                environ={"SUPERVISOR_TOKEN": "private", **(environ or {})},
+                supervisor_info_resolver=lambda env: {
+                    "options": options,
+                    "ingress_port": 18081,
+                },
+            )
+
+        self.assertNotIn("--advertise-video-output", argv_for({}))
+        self.assertNotIn(
+            "--advertise-video-output", argv_for({"advertise_video_output": False})
+        )
+        self.assertIn(
+            "--advertise-video-output", argv_for({"advertise_video_output": True})
+        )
+        self.assertNotIn(
+            "--advertise-video-output",
+            argv_for(
+                {"advertise_video_output": True},
+                {"CAST_AUDIO_ADVERTISE_VIDEO_OUTPUT": "false"},
+            ),
+        )
+        self.assertIn(
+            "--advertise-video-output",
+            argv_for({}, {"CAST_AUDIO_ADVERTISE_VIDEO_OUTPUT": "1"}),
+        )
+
+    def test_invalid_video_output_value_fails_closed(self):
+        for options, environ in (
+            ({"advertise_video_output": "yes"}, {}),
+            ({}, {"CAST_AUDIO_ADVERTISE_VIDEO_OUTPUT": "maybe"}),
+        ):
+            with self.assertRaises(ValueError):
+                runtime_argv(
+                    environ={"SUPERVISOR_TOKEN": "private", **environ},
+                    supervisor_info_resolver=lambda env, options=options: {
+                        "options": options,
+                        "ingress_port": 18081,
+                    },
+                )
 
     def test_ha_options_and_environment_override_are_allowlisted(self):
         with tempfile.TemporaryDirectory() as directory:

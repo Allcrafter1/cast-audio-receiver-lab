@@ -4,7 +4,7 @@
   "branch_for_review": "cast-audio-receiver",
   "rust_toolchain": "1.98.1",
   "development_snapshot": "patches/vibecast-0.7.0.dev1-current.patch",
-  "development_snapshot_sha256": "3d4119abefbeff18a0f86b90a4252cafa7a3341ce136c8fd4c6103a6a5e62204",
+  "development_snapshot_sha256": "d314ac7c3317b40d9a2925140690e6016f232ddebf4905c242b2c2107277b0d8",
   "local_version_commit": "85918111ac68cbf837bf58835b5fd066615963ad",
   "reconstruction_base": "f28befe02fe930db300294d6bf49cdf5fec5a747",
   "reconstruction_overlay": "patches/vibecast-dev13-internal-bridge.patch",

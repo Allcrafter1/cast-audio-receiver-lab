@@ -145,6 +145,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ingress-port", type=int, help=argparse.SUPPRESS)
     parser.add_argument("--cliairplay", default="cliairplay", help=argparse.SUPPRESS)
     parser.add_argument("--log-level", default="INFO")
+    parser.add_argument(
+        "--advertise-video-output",
+        action="store_true",
+        help="list speakers in display-only senders such as the regular YouTube app",
+    )
     parser.add_argument("--startup-timeout", type=float, default=30.0, help=argparse.SUPPRESS)
     return parser
 
@@ -185,6 +190,8 @@ def runtime_commands(args: argparse.Namespace) -> tuple[list[str], list[str]]:
         "--log-level",
         args.log_level.lower(),
     ]
+    if getattr(args, "advertise_video_output", False):
+        frontend.append("--advertise-video-output")
     manager = [
         sys.executable,
         "-m",

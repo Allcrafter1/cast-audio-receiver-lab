@@ -7941,10 +7941,33 @@ index 1ef9cfd..a51f46c 100644
      let key = rcgen::KeyPair::generate().unwrap();
      let mut params = rcgen::CertificateParams::new(vec!["localhost".to_string()]).unwrap();
 diff --git a/crates/vibecast-cli/src/main.rs b/crates/vibecast-cli/src/main.rs
-index 70a6d0b..af9d240 100644
+index 70a6d0b..796b611 100644
 --- a/crates/vibecast-cli/src/main.rs
 +++ b/crates/vibecast-cli/src/main.rs
-@@ -103,10 +103,10 @@ async fn run(args: Args) -> anyhow::Result<()> {
+@@ -44,6 +44,12 @@ struct Args {
+     /// Log level (`trace|debug|info|warn|error`); overrides `RUST_LOG`.
+     #[arg(long, global = true)]
+     log_level: Option<String>,
++
++    /// Advertise video output (mDNS `VIDEO_OUT`, `display_supported`) so
++    /// display-only senders such as the regular YouTube app list receivers.
++    /// Playback stays audio-only. Overrides `[device].advertise_video_output`.
++    #[arg(long, global = true)]
++    advertise_video_output: bool,
+ }
+ 
+ #[tokio::main]
+@@ -72,6 +78,9 @@ async fn run(args: Args) -> anyhow::Result<()> {
+     if let Some(player_port) = args.player_port {
+         config.network.player_port = player_port;
+     }
++    if args.advertise_video_output {
++        config.enable_video_output();
++    }
+ 
+     let certs_path = resolve_certs_path(&args, &config, &data_dir);
+ 
+@@ -103,10 +112,10 @@ async fn run(args: Args) -> anyhow::Result<()> {
  }
  
  fn resolve_certs_path(args: &Args, config: &Config, data_dir: &std::path::Path) -> PathBuf {
@@ -7959,7 +7982,7 @@ index 70a6d0b..af9d240 100644
      if configured.is_absolute() {
          configured
      } else {
-@@ -156,4 +156,18 @@ mod tests {
+@@ -156,4 +165,18 @@ mod tests {
          let path = resolve_certs_path(&args, &config, std::path::Path::new("/data"));
          assert_eq!(path, PathBuf::from("/data/certs.json"));
      }
@@ -9562,7 +9585,7 @@ index a88b43e..fe7f61c 100644
 +    }
  }
 diff --git a/crates/vibecast-core/src/hub.rs b/crates/vibecast-core/src/hub.rs
-index 0246d9d..da4d375 100644
+index 0246d9d..f545d22 100644
 --- a/crates/vibecast-core/src/hub.rs
 +++ b/crates/vibecast-core/src/hub.rs
 @@ -20,18 +20,19 @@ use uuid::Uuid;
@@ -9773,7 +9796,16 @@ index 0246d9d..da4d375 100644
      /// Base data directory.
      pub data_dir: PathBuf,
      /// Initial receiver volume.
-@@ -324,6 +447,7 @@ pub struct DeviceHub {
+@@ -315,6 +438,8 @@ pub struct HubConfig {
+     pub capabilities: PlayerCapabilities,
+     /// Live settings scoped to the player bound to this receiver.
+     pub player_settings: PlayerSettings,
++    /// `DEVICE_INFO` capability bitfield; must match the mDNS `ca` value.
++    pub device_capabilities: i64,
+ }
+ 
+ /// The device hub actor.
+@@ -324,6 +449,7 @@ pub struct DeviceHub {
      player: Arc<dyn Player>,
      proxy: Arc<dyn ProxyRegistrar>,
      http: reqwest::Client,
@@ -9781,7 +9813,7 @@ index 0246d9d..da4d375 100644
      data_dir: PathBuf,
      volume: Volume,
      user_agent: String,
-@@ -335,9 +459,10 @@ pub struct DeviceHub {
+@@ -335,12 +461,14 @@ pub struct DeviceHub {
      subscriptions: HashMap<(u64, String), String>,
      // Platform and app channels coexist for the same Cast sender ID.
      platform_subscriptions: HashSet<(u64, String)>,
@@ -9793,7 +9825,11 @@ index 0246d9d..da4d375 100644
      sender_disconnect_deadlines: HashMap<String, tokio::time::Instant>,
      self_tx: mpsc::Sender<HubEvent>,
      events: Option<mpsc::Receiver<HubEvent>>,
-@@ -372,6 +497,7 @@ impl DeviceHub {
++    device_capabilities: i64,
+ }
+ 
+ fn volume_path(base: &std::path::Path, device_id: &str) -> PathBuf {
+@@ -372,17 +500,19 @@ impl DeviceHub {
              player: config.player,
              proxy: config.proxy,
              http: config.http,
@@ -9801,7 +9837,10 @@ index 0246d9d..da4d375 100644
              data_dir: config.data_dir,
              volume,
              user_agent: config.user_agent,
-@@ -381,8 +507,8 @@ impl DeviceHub {
+             cast_device_capabilities: config.cast_device_capabilities,
+             capabilities: config.capabilities,
+             player_settings: config.player_settings,
++            device_capabilities: config.device_capabilities,
              connections: HashMap::new(),
              subscriptions: HashMap::new(),
              platform_subscriptions: HashSet::new(),
@@ -9811,7 +9850,7 @@ index 0246d9d..da4d375 100644
              sender_disconnect_deadlines: HashMap::new(),
              self_tx: tx,
              events: Some(rx),
-@@ -444,28 +570,26 @@ impl DeviceHub {
+@@ -444,28 +574,26 @@ impl DeviceHub {
              }
              HubEvent::Server(ServerEvent::Disconnected { id, .. }) => {
                  let owned: HashSet<String> = self
@@ -9854,7 +9893,7 @@ index 0246d9d..da4d375 100644
                          continue;
                      }
                      if self
-@@ -474,13 +598,18 @@ impl DeviceHub {
+@@ -474,13 +602,18 @@ impl DeviceHub {
                          .is_some_and(|s| s.app.allows_sender_reconnect_grace())
                      {
                          // Additional disappearing sockets must not extend an
@@ -9875,7 +9914,7 @@ index 0246d9d..da4d375 100644
                          continue;
                      }
                      tracing::info!(%session_id, "stopping app after sender transport disconnect");
-@@ -525,7 +654,8 @@ impl DeviceHub {
+@@ -525,7 +658,8 @@ impl DeviceHub {
          let source = message.source_id.clone();
          match message.namespace.as_str() {
              ns::CONNECTION => match serde_json::from_value::<ConnectionMessage>(payload) {
@@ -9885,7 +9924,17 @@ index 0246d9d..da4d375 100644
                      self.platform_subscriptions.insert((conn_id, source));
                  }
                  _ => {
-@@ -606,6 +736,13 @@ impl DeviceHub {
+@@ -540,7 +674,8 @@ impl DeviceHub {
+                         self.identity.device_id.clone(),
+                         self.identity.device_model.clone(),
+                         self.identity.friendly_name.clone(),
+-                    );
++                    )
++                    .with_capabilities(self.device_capabilities);
+                     self.send_to(conn_id, RECEIVER_0, &source, ns::DISCOVERY, &response)
+                         .await;
+                 }
+@@ -606,6 +741,13 @@ impl DeviceHub {
                      .await;
              }
              ReceiverRequest::SetVolume(r) => {
@@ -9899,7 +9948,7 @@ index 0246d9d..da4d375 100644
                  self.volume.apply_update(&r.volume);
                  for (id, session) in &mut self.sessions {
                      session.coordinator.volume = self.volume.clone();
-@@ -671,7 +808,6 @@ impl DeviceHub {
+@@ -671,7 +813,6 @@ impl DeviceHub {
          }
  
          let session_id = Uuid::new_v4().to_string();
@@ -9907,7 +9956,7 @@ index 0246d9d..da4d375 100644
          let (credentials, credentials_type) = request.resolved_credentials();
          let app_key = manifest.app_key;
          let data_dir = self.data_dir.join("apps").join(app_key);
-@@ -754,9 +890,27 @@ impl DeviceHub {
+@@ -754,9 +895,27 @@ impl DeviceHub {
          // Per-session callback task: app callbacks run here, in order, so a slow
          // app never blocks the hub mailbox.
          let (jobs_tx, jobs_rx) = mpsc::channel(32);
@@ -9936,7 +9985,7 @@ index 0246d9d..da4d375 100644
              audio_cache: None,
              app_id: request.app_id.clone(),
              app_key: app_key.to_string(),
-@@ -766,7 +920,7 @@ impl DeviceHub {
+@@ -766,7 +925,7 @@ impl DeviceHub {
              namespaces,
              app,
              ctx,
@@ -9945,7 +9994,7 @@ index 0246d9d..da4d375 100644
              jobs: jobs_tx,
          };
          self.sessions.insert(session_id, session);
-@@ -778,10 +932,10 @@ impl DeviceHub {
+@@ -778,10 +937,10 @@ impl DeviceHub {
  
      async fn stop_session(&mut self, session_id: &str) {
          self.sender_disconnect_deadlines.remove(session_id);
@@ -9957,7 +10006,7 @@ index 0246d9d..da4d375 100644
          if let Some(cache) = session.audio_cache.take() {
              cache.cancel();
          }
-@@ -805,7 +959,13 @@ impl DeviceHub {
+@@ -805,7 +964,13 @@ impl DeviceHub {
          // session's final job; dropping `session` then closes its task once the
          // job has drained.
          let ctx = self.callback_context(&session, None);
@@ -9972,7 +10021,7 @@ index 0246d9d..da4d375 100644
          self.subscriptions
              .retain(|_, transport| transport != session_id);
      }
-@@ -877,22 +1037,47 @@ impl DeviceHub {
+@@ -877,22 +1042,47 @@ impl DeviceHub {
  
          match message.namespace.as_str() {
              ns::CONNECTION => match serde_json::from_value::<ConnectionMessage>(payload) {
@@ -10028,7 +10077,7 @@ index 0246d9d..da4d375 100644
                      let (ctx, response, jobs) = match self.sessions.get(&transport) {
                          Some(session) => (
                              self.callback_context(session, Some((conn_id, source.clone()))),
-@@ -903,15 +1088,19 @@ impl DeviceHub {
+@@ -903,15 +1093,19 @@ impl DeviceHub {
                      };
                      self.send_to(conn_id, &transport, &source, ns::MEDIA, &response)
                          .await;
@@ -10054,7 +10103,7 @@ index 0246d9d..da4d375 100644
                  }
                  Ok(ConnectionMessage::Close(_)) => {
                      self.subscriptions.remove(&(conn_id, source));
-@@ -922,7 +1111,10 @@ impl DeviceHub {
+@@ -922,7 +1116,10 @@ impl DeviceHub {
                          .subscriptions
                          .values()
                          .any(|target| target == &transport);
@@ -10066,7 +10115,7 @@ index 0246d9d..da4d375 100644
                          && self
                              .sessions
                              .get(&transport)
-@@ -941,7 +1133,27 @@ impl DeviceHub {
+@@ -941,7 +1138,27 @@ impl DeviceHub {
                  }
              },
              ns::MEDIA => {
@@ -10095,7 +10144,7 @@ index 0246d9d..da4d375 100644
                  {
                      tracing::debug!(session_id = %transport, conn_id,
                          "ignoring media command from superseded sender");
-@@ -970,13 +1182,16 @@ impl DeviceHub {
+@@ -970,13 +1187,16 @@ impl DeviceHub {
                      ),
                      None => return,
                  };
@@ -10116,7 +10165,7 @@ index 0246d9d..da4d375 100644
              }
          }
      }
-@@ -1001,6 +1216,33 @@ impl DeviceHub {
+@@ -1001,6 +1221,33 @@ impl DeviceHub {
              }
          };
  
@@ -10150,7 +10199,7 @@ index 0246d9d..da4d375 100644
          match request {
              MediaRequest::Load(load) => {
                  let metadata = load.media.metadata.as_ref();
-@@ -1022,7 +1264,7 @@ impl DeviceHub {
+@@ -1022,7 +1269,7 @@ impl DeviceHub {
              }
              MediaRequest::Pause(r) => {
                  tracing::debug!(session_id = %transport, request_id = r.request_id, "PAUSE");
@@ -10159,7 +10208,7 @@ index 0246d9d..da4d375 100644
              }
              MediaRequest::Seek(r) => {
                  let position = r.current_time;
-@@ -1043,11 +1285,11 @@ impl DeviceHub {
+@@ -1043,11 +1290,11 @@ impl DeviceHub {
                      return;
                  }
                  tracing::debug!(session_id = %transport, request_id = r.request_id, position, "SEEK");
@@ -10173,7 +10222,7 @@ index 0246d9d..da4d375 100644
              }
              MediaRequest::SetVolume(r) => {
                  let (level, muted) = match self.sessions.get_mut(transport) {
-@@ -1101,6 +1343,36 @@ impl DeviceHub {
+@@ -1101,6 +1348,36 @@ impl DeviceHub {
                  self.send_to(conn_id, transport, source, ns::MEDIA, &response)
                      .await;
              }
@@ -10210,7 +10259,7 @@ index 0246d9d..da4d375 100644
              MediaRequest::QueueLoad(r) => {
                  if self
                      .sessions
-@@ -1142,32 +1414,111 @@ impl DeviceHub {
+@@ -1142,32 +1419,111 @@ impl DeviceHub {
      }
  
      async fn request_play(&mut self, session_id: &str, request_id: i64) {
@@ -10338,7 +10387,7 @@ index 0246d9d..da4d375 100644
          self.player
              .send(PlayerCommand::Play {
                  session_id: session_id.to_string(),
-@@ -1177,11 +1528,22 @@ impl DeviceHub {
+@@ -1177,11 +1533,22 @@ impl DeviceHub {
      }
  
      async fn pause(&mut self, session_id: &str, request_id: i64) {
@@ -10361,7 +10410,7 @@ index 0246d9d..da4d375 100644
          self.player
              .send(PlayerCommand::Pause {
                  session_id: session_id.to_string(),
-@@ -1191,11 +1553,22 @@ impl DeviceHub {
+@@ -1191,11 +1558,22 @@ impl DeviceHub {
      }
  
      async fn seek(&mut self, session_id: &str, request_id: i64, position: f64) {
@@ -10384,7 +10433,7 @@ index 0246d9d..da4d375 100644
          self.player
              .send(PlayerCommand::Seek {
                  session_id: session_id.to_string(),
-@@ -1206,6 +1579,9 @@ impl DeviceHub {
+@@ -1206,6 +1584,9 @@ impl DeviceHub {
      }
  
      async fn stop_playback(&mut self, session_id: &str, request_id: i64) {
@@ -10394,7 +10443,7 @@ index 0246d9d..da4d375 100644
          self.clear_audio_cache(session_id);
          self.transition(session_id, request_id, |coordinator| {
              coordinator.set_idle(Some(IdleReason::Cancelled));
-@@ -1233,13 +1609,14 @@ impl DeviceHub {
+@@ -1233,13 +1614,14 @@ impl DeviceHub {
          tracing::info!(
              session_id = %transport,
              request_id = load.request_id,
@@ -10410,7 +10459,7 @@ index 0246d9d..da4d375 100644
                  let coordinator = &mut session.coordinator;
                  coordinator.media_session_id += 1;
                  let loading = loading_media_info(&load);
-@@ -1256,19 +1633,24 @@ impl DeviceHub {
+@@ -1256,19 +1638,24 @@ impl DeviceHub {
          // Phase 2: resolve media off the mailbox and feed the result back. The
          // context is broadcast-capable so apps can push custom messages while
          // resolving (e.g. TV4's legacy snapshot).
@@ -10438,7 +10487,7 @@ index 0246d9d..da4d375 100644
                      request_id,
                      connection_id: conn_id,
                      sender_id,
-@@ -1276,22 +1658,36 @@ impl DeviceHub {
+@@ -1276,22 +1663,36 @@ impl DeviceHub {
                  }))
                  .await;
          });
@@ -10479,7 +10528,7 @@ index 0246d9d..da4d375 100644
              Ok(media) => media,
              Err(failure) => {
                  self.fail_load(&session_id, connection_id, &sender_id, request_id, &failure)
-@@ -1299,6 +1695,16 @@ impl DeviceHub {
+@@ -1299,6 +1700,16 @@ impl DeviceHub {
                  return;
              }
          };
@@ -10496,7 +10545,7 @@ index 0246d9d..da4d375 100644
          if media.streams.is_empty() {
              let failure = MediaResolveError::internal("INVALID_APP_MEDIA");
              self.fail_load(&session_id, connection_id, &sender_id, request_id, &failure)
-@@ -1326,6 +1732,7 @@ impl DeviceHub {
+@@ -1326,6 +1737,7 @@ impl DeviceHub {
              }
              AppPlaybackCommand::Load(media) => {
                  if let Some(session) = self.sessions.get_mut(&session_id) {
@@ -10504,7 +10553,7 @@ index 0246d9d..da4d375 100644
                      session.coordinator.media_session_id += 1;
                  }
                  self.start_resolved_media(&session_id, 0, media).await;
-@@ -1343,6 +1750,10 @@ impl DeviceHub {
+@@ -1343,6 +1755,10 @@ impl DeviceHub {
          request_id: i64,
          mut media: PlaybackMedia,
      ) {
@@ -10515,7 +10564,7 @@ index 0246d9d..da4d375 100644
          media.session_id = session_id.to_string();
          let media_session_id = self
              .sessions
-@@ -1378,10 +1789,12 @@ impl DeviceHub {
+@@ -1378,10 +1794,12 @@ impl DeviceHub {
          self.broadcast(session_id, ns::MEDIA, &loading).await;
          self.broadcast(session_id, ns::MEDIA, &buffering).await;
  
@@ -10529,7 +10578,7 @@ index 0246d9d..da4d375 100644
              })
              .await;
          self.notify_app(session_id).await;
-@@ -1417,7 +1830,7 @@ impl DeviceHub {
+@@ -1417,7 +1835,7 @@ impl DeviceHub {
                  }
                  session.audio_cache = requested.map(|(url, hint)| {
                      Arc::new(crate::audio_cache::AudioCache::new(
@@ -10538,7 +10587,7 @@ index 0246d9d..da4d375 100644
                          url,
                          hint,
                      ))
-@@ -1463,12 +1876,13 @@ impl DeviceHub {
+@@ -1463,12 +1881,13 @@ impl DeviceHub {
      }
  
      fn clear_audio_cache(&mut self, session_id: &str) {
@@ -10558,7 +10607,7 @@ index 0246d9d..da4d375 100644
          }
      }
  
-@@ -1487,20 +1901,29 @@ impl DeviceHub {
+@@ -1487,20 +1906,29 @@ impl DeviceHub {
              retryable = failure.retryable,
              "load failed"
          );
@@ -10589,7 +10638,7 @@ index 0246d9d..da4d375 100644
          self.send_to(conn_id, session_id, sender_id, ns::MEDIA, &failed)
              .await;
          self.broadcast(session_id, ns::MEDIA, &status).await;
-@@ -1522,16 +1945,21 @@ impl DeviceHub {
+@@ -1522,16 +1950,21 @@ impl DeviceHub {
          if let Err(error) = result {
              tracing::warn!(%error, "cannot persist receiver volume");
          }
@@ -10617,7 +10666,7 @@ index 0246d9d..da4d375 100644
          }
      }
  
-@@ -1540,6 +1968,23 @@ impl DeviceHub {
+@@ -1540,6 +1973,23 @@ impl DeviceHub {
          if !self.sessions.contains_key(&session_id) {
              return;
          }
@@ -10641,7 +10690,7 @@ index 0246d9d..da4d375 100644
          match report {
              PlayerReport::Artwork {
                  source_url, url, ..
-@@ -1553,6 +1998,9 @@ impl DeviceHub {
+@@ -1553,6 +2003,9 @@ impl DeviceHub {
                  }
              }
              PlayerReport::ControlRequest { control, .. } => {
@@ -10651,7 +10700,7 @@ index 0246d9d..da4d375 100644
                  self.on_output_control(&session_id, control).await;
              }
              PlayerReport::State {
-@@ -1576,6 +2024,9 @@ impl DeviceHub {
+@@ -1576,6 +2029,9 @@ impl DeviceHub {
                      let response = self.receiver_status(0);
                      self.broadcast(RECEIVER_0, ns::RECEIVER, &response).await;
                  }
@@ -10661,7 +10710,7 @@ index 0246d9d..da4d375 100644
                  tracing::debug!(
                      session_id = %session_id,
                      state = ?player_state,
-@@ -1593,8 +2044,11 @@ impl DeviceHub {
+@@ -1593,8 +2049,11 @@ impl DeviceHub {
                  )
                  .await;
              }
@@ -10675,7 +10724,7 @@ index 0246d9d..da4d375 100644
                  let (current_time, duration) = match self.sessions.get(&session_id) {
                      Some(session) => (
                          session.coordinator.current_time,
-@@ -1621,10 +2075,10 @@ impl DeviceHub {
+@@ -1621,10 +2080,10 @@ impl DeviceHub {
      async fn on_output_control(&mut self, session_id: &str, control: PlayerControlRequest) {
          match control {
              PlayerControlRequest::Play => self.request_play(session_id, 0).await,
@@ -10689,7 +10738,7 @@ index 0246d9d..da4d375 100644
              }
              PlayerControlRequest::Seek { .. } => {}
              PlayerControlRequest::Volume { level, muted } if level.is_finite() => {
-@@ -1641,13 +2095,7 @@ impl DeviceHub {
+@@ -1641,13 +2100,7 @@ impl DeviceHub {
                  } else {
                      OutputControl::Previous
                  };
@@ -10704,7 +10753,7 @@ index 0246d9d..da4d375 100644
              }
          }
      }
-@@ -1660,6 +2108,37 @@ impl DeviceHub {
+@@ -1660,6 +2113,37 @@ impl DeviceHub {
          duration: Option<f64>,
          idle_reason: Option<IdleReason>,
      ) {
@@ -10742,7 +10791,7 @@ index 0246d9d..da4d375 100644
          let response = match self.sessions.get_mut(session_id) {
              Some(session) => {
                  let coordinator = &mut session.coordinator;
-@@ -1692,20 +2171,258 @@ impl DeviceHub {
+@@ -1692,20 +2176,258 @@ impl DeviceHub {
  
      // -- helpers ------------------------------------------------------------
  
@@ -11005,7 +11054,7 @@ index 0246d9d..da4d375 100644
          });
          self.subscriptions
              .insert((conn_id, source.to_owned()), transport.to_owned());
-@@ -1714,20 +2431,20 @@ impl DeviceHub {
+@@ -1714,20 +2436,20 @@ impl DeviceHub {
          // each platform sender on the displaced controller that its app
          // session ended before closing its app channels. Other subscribers
          // (including the incoming controller) keep the real receiver status.
@@ -11034,7 +11083,7 @@ index 0246d9d..da4d375 100644
                      .await;
              }
          }
-@@ -1743,19 +2460,23 @@ impl DeviceHub {
+@@ -1743,19 +2465,23 @@ impl DeviceHub {
          }
          tracing::info!(
              session_id = transport,
@@ -11064,7 +11113,7 @@ index 0246d9d..da4d375 100644
          }
      }
  
-@@ -1764,7 +2485,63 @@ impl DeviceHub {
+@@ -1764,7 +2490,63 @@ impl DeviceHub {
              .sessions
              .get(transport)
              .is_some_and(|session| session.app.exclusive_sender_takeover())
@@ -11129,7 +11178,7 @@ index 0246d9d..da4d375 100644
      }
  
      /// Current connection handles subscribed to a transport (for broadcasts).
-@@ -1810,7 +2587,7 @@ impl DeviceHub {
+@@ -1810,7 +2592,7 @@ impl DeviceHub {
          .with_playback_controller(session.ctx.playback_controller())
      }
  
@@ -11138,7 +11187,7 @@ index 0246d9d..da4d375 100644
          let (jobs, ctx, state) = match self.sessions.get(session_id) {
              Some(session) => {
                  let coordinator = &session.coordinator;
-@@ -1819,6 +2596,12 @@ impl DeviceHub {
+@@ -1819,6 +2601,12 @@ impl DeviceHub {
                      current_time: coordinator.current_time,
                      duration: coordinator.current_media.as_ref().and_then(|m| m.duration),
                      idle_reason: coordinator.idle_reason,
@@ -11151,7 +11200,7 @@ index 0246d9d..da4d375 100644
                  };
                  (
                      session.jobs.clone(),
-@@ -1828,7 +2611,29 @@ impl DeviceHub {
+@@ -1828,7 +2616,29 @@ impl DeviceHub {
              }
              None => return,
          };
@@ -11341,7 +11390,7 @@ index f77dbe8..ada4c22 100644
          PlaybackMedia::new(
              "sess",
 diff --git a/crates/vibecast-core/src/tests.rs b/crates/vibecast-core/src/tests.rs
-index 3ba74b0..31d8a9f 100644
+index 3ba74b0..eea74b8 100644
 --- a/crates/vibecast-core/src/tests.rs
 +++ b/crates/vibecast-core/src/tests.rs
 @@ -16,8 +16,9 @@ use vibecast_player_api::{LicenseHandler, ManifestHandler, Player, PlayerCommand
@@ -11488,7 +11537,7 @@ index 3ba74b0..31d8a9f 100644
  }
  
  fn attenuation_volume() -> Volume {
-@@ -363,17 +425,23 @@ async fn setup_with_options(
+@@ -363,22 +425,29 @@ async fn setup_with_options(
      let player = Arc::new(FakePlayer::default());
      let proxy = Arc::new(FakeProxy::default());
      let launched_setting = Arc::new(Mutex::new(None));
@@ -11513,7 +11562,13 @@ index 3ba74b0..31d8a9f 100644
          volume: attenuation_volume(),
          user_agent: String::new(),
          cast_device_capabilities: String::new(),
-@@ -391,7 +459,7 @@ async fn setup_with_options(
+         capabilities: PlayerCapabilities::default(),
+         player_settings,
++        device_capabilities: 199_429,
+     });
+     let hub_handle = hub.handle();
+     {
+@@ -391,7 +460,7 @@ async fn setup_with_options(
              }
          });
      }
@@ -11522,7 +11577,7 @@ index 3ba74b0..31d8a9f 100644
  
      Harness {
          client: Framed::new(client_end, CastCodec),
-@@ -399,6 +467,9 @@ async fn setup_with_options(
+@@ -399,6 +468,9 @@ async fn setup_with_options(
          player,
          proxy,
          launched_setting,
@@ -11532,7 +11587,7 @@ index 3ba74b0..31d8a9f 100644
      }
  }
  
-@@ -434,6 +505,79 @@ async fn next_json(client: &mut Framed<DuplexStream, CastCodec>) -> Value {
+@@ -434,6 +506,79 @@ async fn next_json(client: &mut Framed<DuplexStream, CastCodec>) -> Value {
      serde_json::from_str(message.payload_utf8.as_deref().unwrap()).unwrap()
  }
  
@@ -11612,7 +11667,7 @@ index 3ba74b0..31d8a9f 100644
  async fn launch(client: &mut Framed<DuplexStream, CastCodec>) -> String {
      launch_id(client, "APP1").await
  }
-@@ -474,6 +618,136 @@ async fn launch_id(client: &mut Framed<DuplexStream, CastCodec>, app_id: &str) -
+@@ -474,6 +619,136 @@ async fn launch_id(client: &mut Framed<DuplexStream, CastCodec>, app_id: &str) -
  
  // -- tests -----------------------------------------------------------------
  
@@ -11749,7 +11804,7 @@ index 3ba74b0..31d8a9f 100644
  #[tokio::test]
  async fn current_cache_survives_eof_repeat_but_not_title_change_or_stop() {
      async fn push(h: &mut Harness, session: &str, kind: &str, loads: usize) -> String {
-@@ -521,6 +795,7 @@ async fn current_cache_survives_eof_repeat_but_not_title_change_or_stop() {
+@@ -521,6 +796,7 @@ async fn current_cache_survives_eof_repeat_but_not_title_change_or_stop() {
      let old = h.proxy.manifests.lock().unwrap()[&session].clone();
      h.hub
          .send_player_report(PlayerReport::State {
@@ -11757,7 +11812,7 @@ index 3ba74b0..31d8a9f 100644
              session_id: session.clone(),
              player_state: PlayerState::Idle,
              current_time: 100.0,
-@@ -618,6 +893,7 @@ async fn app_owned_cast_play_loads_fresh_media_without_false_playing() {
+@@ -618,6 +894,7 @@ async fn app_owned_cast_play_loads_fresh_media_without_false_playing() {
      harness
          .hub
          .send_player_report(PlayerReport::ControlRequest {
@@ -11765,7 +11820,7 @@ index 3ba74b0..31d8a9f 100644
              session_id: transport.clone(),
              control: vibecast_player_api::PlayerControlRequest::Play,
          })
-@@ -713,66 +989,450 @@ async fn unavailable_app_settings_return_launch_error() {
+@@ -713,66 +990,450 @@ async fn unavailable_app_settings_return_launch_error() {
  }
  
  #[tokio::test]
@@ -12262,7 +12317,7 @@ index 3ba74b0..31d8a9f 100644
          commands.first(),
          Some(PlayerCommand::Volume { .. })
      ));
-@@ -852,7 +1512,7 @@ async fn live_seek_is_rejected_without_player_command() {
+@@ -852,7 +1513,7 @@ async fn live_seek_is_rejected_without_player_command() {
          &mut harness.client,
          ns::MEDIA,
          &transport,
@@ -12271,7 +12326,7 @@ index 3ba74b0..31d8a9f 100644
      )
      .await;
      let rejected = next_json(&mut harness.client).await;
-@@ -894,6 +1554,76 @@ async fn load_failure_sends_load_failed() {
+@@ -894,6 +1555,76 @@ async fn load_failure_sends_load_failed() {
      assert_eq!(idle["status"][0]["idleReason"], "ERROR");
  }
  
@@ -12348,7 +12403,7 @@ index 3ba74b0..31d8a9f 100644
  #[tokio::test]
  async fn primary_player_report_broadcasts_status() {
      let mut harness = setup().await;
-@@ -920,6 +1650,7 @@ async fn primary_player_report_broadcasts_status() {
+@@ -920,6 +1651,7 @@ async fn primary_player_report_broadcasts_status() {
      harness
          .hub
          .send_player_report(PlayerReport::State {
@@ -12356,7 +12411,7 @@ index 3ba74b0..31d8a9f 100644
              session_id: transport.clone(),
              player_state: PlayerState::Playing,
              current_time: 33.5,
-@@ -938,27 +1669,185 @@ async fn primary_player_report_broadcasts_status() {
+@@ -938,27 +1670,185 @@ async fn primary_player_report_broadcasts_status() {
  }
  
  #[tokio::test]
@@ -12560,7 +12615,7 @@ index 3ba74b0..31d8a9f 100644
  
  #[tokio::test]
  async fn custom_namespace_message_is_handled_and_replies() {
-@@ -1126,8 +2015,8 @@ async fn owner_disconnect_grace_expires_despite_existing_observer_and_platform_p
+@@ -1126,8 +2016,8 @@ async fn owner_disconnect_grace_expires_despite_existing_observer_and_platform_p
  }
  
  #[tokio::test]
@@ -12571,7 +12626,7 @@ index 3ba74b0..31d8a9f 100644
  }
  
  #[tokio::test]
-@@ -1145,11 +2034,6 @@ async fn explicit_owner_close_stops_even_with_an_observer() {
+@@ -1145,11 +2035,6 @@ async fn explicit_owner_close_stops_even_with_an_observer() {
      retained_session_disconnect(true, DisconnectAction::OwnerClose).await;
  }
  
@@ -12583,7 +12638,7 @@ index 3ba74b0..31d8a9f 100644
  #[tokio::test]
  async fn replacement_session_is_not_stopped_by_old_grace_deadline() {
      retained_session_disconnect(true, DisconnectAction::Replace).await;
-@@ -1539,6 +2423,94 @@ async fn owner_disconnect_notifies_a_separate_observer_and_allows_takeover() {
+@@ -1539,6 +2424,94 @@ async fn owner_disconnect_notifies_a_separate_observer_and_allows_takeover() {
          .any(|c| matches!(c, PlayerCommand::Stop { .. })));
  }
  
@@ -12678,7 +12733,7 @@ index 3ba74b0..31d8a9f 100644
  #[tokio::test]
  async fn replacing_running_app_announces_removal_before_launch_response() {
      let mut harness = setup_exclusive().await;
-@@ -1698,64 +2670,774 @@ async fn exclusive_app_transfers_control_to_the_new_physical_sender() {
+@@ -1698,64 +2671,774 @@ async fn exclusive_app_transfers_control_to_the_new_physical_sender() {
          .await;
          assert_eq!(next_json(&mut harness.client).await["type"], "MEDIA_STATUS");
      }
@@ -13494,7 +13549,16 @@ index 3ba74b0..31d8a9f 100644
  }
  
  #[tokio::test]
-@@ -2014,3 +3696,351 @@ async fn platform_volume_subscription_survives_app_connect() {
+@@ -1882,6 +3565,8 @@ async fn platform_get_device_info() {
+     .await;
+     let reply = next_json(client).await;
+     assert_eq!(reply["type"], "DEVICE_INFO");
++    // Must mirror the configured (mDNS) capability bitfield, not a constant.
++    assert_eq!(reply["deviceCapabilities"], 199_429);
+     assert_eq!(reply["friendlyName"], "Living Room");
+     assert_eq!(reply["deviceId"], "dev-1");
+ }
+@@ -2014,3 +3699,351 @@ async fn platform_volume_subscription_survives_app_connect() {
      .expect("media volume changes must update platform observers too");
      assert_eq!(reply["status"]["volume"]["level"], 0.43);
  }
@@ -13846,11 +13910,77 @@ index 3ba74b0..31d8a9f 100644
 +        .iter()
 +        .any(|command| matches!(command, PlayerCommand::Stop { .. })));
 +}
+diff --git a/crates/vibecast-discovery/src/lib.rs b/crates/vibecast-discovery/src/lib.rs
+index 4f3056a..0f0920c 100644
+--- a/crates/vibecast-discovery/src/lib.rs
++++ b/crates/vibecast-discovery/src/lib.rs
+@@ -19,7 +19,9 @@ mod mdns;
+ 
+ pub use error::DiscoveryError;
+ pub use eureka::{DeviceCapabilities, EurekaIdentity, EurekaServer};
+-pub use mdns::{CastAdvertisement, CastServiceTxt};
++pub use mdns::{
++    cast_capabilities, CastAdvertisement, CastServiceTxt, CA_AUDIO_SPEAKER, CA_VIDEO_OUT,
++};
+ 
+ #[cfg(feature = "mdns")]
+ pub use mdns::MdnsResponder;
 diff --git a/crates/vibecast-discovery/src/mdns.rs b/crates/vibecast-discovery/src/mdns.rs
-index 6365d76..52e2929 100644
+index 6365d76..aa75e23 100644
 --- a/crates/vibecast-discovery/src/mdns.rs
 +++ b/crates/vibecast-discovery/src/mdns.rs
-@@ -254,18 +254,34 @@ impl MdnsResponder {
+@@ -20,6 +20,23 @@ const SERVICE_TYPE: &str = "_googlecast._tcp.local.";
+ const INSTANCE_PREFIX: &str = "vibecast-";
+ const MAX_LABEL_LENGTH: usize = 63;
+ 
++/// Default audio-speaker `ca` bitfield (observed Nest Audio profile).
++pub const CA_AUDIO_SPEAKER: u32 = 199_428;
++/// `ca` bit 0 (`VIDEO_OUT`). Some senders, notably the regular YouTube app,
++/// list only receivers that advertise it.
++pub const CA_VIDEO_OUT: u32 = 1;
++
++/// The `ca` capability bitfield for this receiver. The same value must be
++/// reported in mDNS and in the Cast `DEVICE_INFO` response; senders probe both.
++#[must_use]
++pub fn cast_capabilities(video_output: bool) -> u32 {
++    if video_output {
++        CA_AUDIO_SPEAKER | CA_VIDEO_OUT
++    } else {
++        CA_AUDIO_SPEAKER
++    }
++}
++
+ /// Structured Cast TXT record payload (short keys are the on-wire names).
+ #[derive(Debug, Clone, PartialEq, Eq)]
+ pub struct CastServiceTxt {
+@@ -57,7 +74,7 @@ impl CastServiceTxt {
+             friendly_name: friendly_name.into(),
+             id: clean_id.into(),
+             cd: cert_digest.to_uppercase(),
+-            ca: "199428".into(),
++            ca: CA_AUDIO_SPEAKER.to_string(),
+             bs: bs.into(),
+             st: "0".into(),
+             nf: "1".into(),
+@@ -177,6 +194,17 @@ impl CastAdvertisement {
+         }
+     }
+ 
++    /// Advertise (or withdraw) the `VIDEO_OUT` capability bit.
++    ///
++    /// Off by default: the receiver stays an audio-only speaker. When enabled,
++    /// senders that require a display (the regular YouTube app) list the
++    /// receiver; it still renders audio only.
++    #[must_use]
++    pub fn with_video_output(mut self, enabled: bool) -> Self {
++        self.txt.ca = cast_capabilities(enabled).to_string();
++        self
++    }
++
+     /// The advertised TXT record.
+     #[must_use]
+     pub fn txt(&self) -> &CastServiceTxt {
+@@ -254,18 +282,34 @@ impl MdnsResponder {
      pub fn start(advertisement: &CastAdvertisement) -> Result<Self, DiscoveryError> {
          use mdns_sd::ServiceDaemon;
  
@@ -13890,7 +14020,7 @@ index 6365d76..52e2929 100644
      }
  
      /// Stop advertising and shut down the responder.
-@@ -310,6 +326,65 @@ impl Drop for MdnsResponder {
+@@ -310,6 +354,65 @@ impl Drop for MdnsResponder {
  mod tests {
      use super::*;
  
@@ -13956,6 +14086,27 @@ index 6365d76..52e2929 100644
      #[test]
      fn cleans_and_builds_instance_and_bs() {
          assert_eq!(clean_device_id("ab-cd-ef"), "abcdef");
+@@ -334,6 +437,20 @@ mod tests {
+         assert_eq!(advertisement.txt().cd, "DEF456");
+     }
+ 
++    #[test]
++    fn video_output_bit_is_opt_in_and_reversible() {
++        let ad = CastAdvertisement::new("Living Room", "Speaker", "dev-id", 8009, "abc");
++        assert_eq!(ad.txt().ca, "199428");
++        let ad = ad.with_video_output(true);
++        assert_eq!(ad.txt().ca, "199429");
++        assert_eq!(
++            ad.txt().ca.parse::<u32>().unwrap() & CA_VIDEO_OUT,
++            CA_VIDEO_OUT
++        );
++        let ad = ad.with_video_output(false);
++        assert_eq!(ad.txt().ca, "199428");
++    }
++
+     #[test]
+     fn server_name_prefers_canonical_uuid() {
+         let clean = "12345678123412341234123456789abc";
 diff --git a/crates/vibecast-ffi/src/lib.rs b/crates/vibecast-ffi/src/lib.rs
 index 500b171..e92c3bf 100644
 --- a/crates/vibecast-ffi/src/lib.rs
@@ -13969,6 +14120,24 @@ index 500b171..e92c3bf 100644
              | PlatformError::SettingsCatalog(_)
              | PlatformError::Settings(_) => ReceiverError::Config { reason: message },
              PlatformError::Discovery(_)
+diff --git a/crates/vibecast-messages/src/discovery.rs b/crates/vibecast-messages/src/discovery.rs
+index 2290487..77471db 100644
+--- a/crates/vibecast-messages/src/discovery.rs
++++ b/crates/vibecast-messages/src/discovery.rs
+@@ -58,4 +58,13 @@ impl DeviceInfoResponse {
+             wifi_proximity_id: String::new(),
+         }
+     }
++
++    /// Override the capability bitfield. It must match the mDNS `ca` value:
++    /// senders re-read it here after discovery, so a mismatch hides the
++    /// receiver from senders that filter on capabilities.
++    #[must_use]
++    pub fn with_capabilities(mut self, device_capabilities: i64) -> Self {
++        self.device_capabilities = device_capabilities;
++        self
++    }
+ }
 diff --git a/crates/vibecast-messages/src/media.rs b/crates/vibecast-messages/src/media.rs
 index 7a8e4e6..017315e 100644
 --- a/crates/vibecast-messages/src/media.rs
@@ -14043,8 +14212,72 @@ index 7a8e4e6..017315e 100644
      #[test]
      fn unknown_media_type_fails_to_parse() {
          let result: Result<MediaRequest, _> =
+diff --git a/crates/vibecast-platform/src/config.rs b/crates/vibecast-platform/src/config.rs
+index 3edd225..719ce92 100644
+--- a/crates/vibecast-platform/src/config.rs
++++ b/crates/vibecast-platform/src/config.rs
+@@ -76,6 +76,10 @@ pub struct DeviceConfig {
+     pub certs: String,
+     /// Eureka device-capability flags (reused from the discovery crate).
+     pub capabilities: DeviceCapabilities,
++    /// Advertise the mDNS `VIDEO_OUT` bit so display-only senders (the regular
++    /// YouTube app) list this receiver. Off by default; use
++    /// [`Config::advertise_video_output`] to keep display flags consistent.
++    pub advertise_video_output: bool,
+ }
+ 
+ impl Default for DeviceConfig {
+@@ -87,6 +91,7 @@ impl Default for DeviceConfig {
+             country_code: "US".into(),
+             certs: "certs.json".into(),
+             capabilities: DeviceCapabilities::default(),
++            advertise_video_output: false,
+         }
+     }
+ }
+@@ -218,12 +223,40 @@ impl Config {
+             }),
+         }
+     }
++
++    /// Present the receiver as a display device: set the mDNS `VIDEO_OUT` bit
++    /// and report `display_supported` in eureka_info and the streaming
++    /// capability header, so all three sender-visible signals agree.
++    /// Playback itself is unchanged (audio-only players stay audio-only).
++    pub fn enable_video_output(&mut self) {
++        self.device.advertise_video_output = true;
++        self.device.capabilities.display_supported = true;
++        self.cast.device_capabilities.display_supported = true;
++    }
+ }
+ 
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn video_output_is_opt_in_and_aligns_display_flags() {
++        let mut config: Config = toml::from_str(
++            "[device.capabilities]\ndisplay_supported = false\n\n\
++             [cast.device_capabilities]\ndisplay_supported = false\n",
++        )
++        .unwrap();
++        assert!(!config.device.advertise_video_output);
++        config.enable_video_output();
++        assert!(config.device.advertise_video_output);
++        assert!(config.device.capabilities.display_supported);
++        assert!(config.cast.device_capabilities.display_supported);
++
++        let from_toml: Config =
++            toml::from_str("[device]\nadvertise_video_output = true\n").unwrap();
++        assert!(from_toml.device.advertise_video_output);
++    }
++
+     #[test]
+     fn empty_config_is_all_defaults() {
+         let config: Config = toml::from_str("").unwrap();
 diff --git a/crates/vibecast-platform/src/lib.rs b/crates/vibecast-platform/src/lib.rs
-index b6c3abb..4916cc4 100644
+index b6c3abb..207e89e 100644
 --- a/crates/vibecast-platform/src/lib.rs
 +++ b/crates/vibecast-platform/src/lib.rs
 @@ -90,6 +90,18 @@ pub struct PlatformInputs {
@@ -14066,10 +14299,19 @@ index b6c3abb..4916cc4 100644
      /// Reading persistent receiver state failed.
      #[error("reading receiver state {path}")]
      StateRead {
-@@ -211,6 +223,15 @@ pub async fn run(
+@@ -207,10 +219,23 @@ impl RunningReceiver {
+ /// running. Players then register over the bridge and each is given its own Cast
+ /// receiver; per-player lifecycle is surfaced through `observer`.
+ pub async fn run(
+-    config: Config,
++    mut config: Config,
      inputs: PlatformInputs,
      observer: Option<Arc<dyn PlayerObserver>>,
  ) -> Result<RunningReceiver, PlatformError> {
++    // Keep eureka/streaming display flags consistent with the mDNS bit.
++    if config.device.advertise_video_output {
++        config.enable_video_output();
++    }
 +    // Validate before filesystem/network work or spawning the manager. Invalid
 +    // TOML floats otherwise panic inside Duration or the timer task.
 +    let cert_rotation_poll = positive_duration(
@@ -14082,7 +14324,7 @@ index b6c3abb..4916cc4 100644
      let PlatformInputs {
          data_dir,
          certs_path,
-@@ -258,8 +279,8 @@ pub async fn run(
+@@ -258,8 +283,8 @@ pub async fn run(
      )
      .await?;
  
@@ -14093,7 +14335,7 @@ index b6c3abb..4916cc4 100644
  
      // Device-auth CRL: prefer the manifest's embedded CRL, else fetch from Google.
      let crl = resolve_crl(&http, bundle.crl.clone()).await;
-@@ -281,9 +302,10 @@ pub async fn run(
+@@ -281,9 +306,10 @@ pub async fn run(
          registry,
          installation_id,
          http,
@@ -14105,16 +14347,17 @@ index b6c3abb..4916cc4 100644
          user_agent: config.cast.user_agent.clone(),
          cast_device_capabilities: config.cast.device_capabilities.header_value(),
          resolver,
-@@ -300,7 +322,7 @@ pub async fn run(
+@@ -300,7 +326,8 @@ pub async fn run(
              capabilities: config.device.capabilities.clone(),
          },
          advertise_mdns,
 -        cert_rotation_poll: config.network.cert_rotation_poll,
++        advertise_video_output: config.device.advertise_video_output,
 +        cert_rotation_poll,
          observer,
      };
      let shutdown = CancellationToken::new();
-@@ -610,30 +632,114 @@ impl From<SettingsFileApp> for PersistedAppSettings {
+@@ -610,30 +637,114 @@ impl From<SettingsFileApp> for PersistedAppSettings {
      }
  }
  
@@ -14167,14 +14410,14 @@ index b6c3abb..4916cc4 100644
 +    };
 +    let http = client()
 +        .timeout(timeout)
-+        .build()
+         .build()
+-        .map_err(PlatformError::HttpClient)
 +        .map_err(PlatformError::HttpClient)?;
 +    // Separate connection pools, shared authentication policy. The cache owns
 +    // response-header and active-read deadlines; a pause must not expire the body.
 +    let media_http = client()
 +        .connect_timeout(timeout)
-         .build()
--        .map_err(PlatformError::HttpClient)
++        .build()
 +        .map_err(PlatformError::HttpClient)?;
 +    Ok((http, media_http))
 +}
@@ -14239,7 +14482,7 @@ index b6c3abb..4916cc4 100644
  }
  
  /// Resolve the device-auth CRL: prefer the manifest's, else fetch from Google.
-@@ -681,6 +787,93 @@ pub fn detect_local_ip(bind_host: &str) -> String {
+@@ -681,6 +792,93 @@ pub fn detect_local_ip(bind_host: &str) -> String {
  mod tests {
      use super::*;
  
@@ -14334,7 +14577,7 @@ index b6c3abb..4916cc4 100644
      fn app_providers_are_registered() {
          let providers = build_app_providers();
 diff --git a/crates/vibecast-platform/src/manager.rs b/crates/vibecast-platform/src/manager.rs
-index b8dc6e9..56e5b18 100644
+index b8dc6e9..2d784c0 100644
 --- a/crates/vibecast-platform/src/manager.rs
 +++ b/crates/vibecast-platform/src/manager.rs
 @@ -75,6 +75,7 @@ pub(crate) struct ManagerConfig {
@@ -14345,16 +14588,17 @@ index b8dc6e9..56e5b18 100644
      pub data_dir: PathBuf,
      pub model: String,
      pub volume: Volume,
-@@ -87,7 +88,7 @@ pub(crate) struct ManagerConfig {
+@@ -87,7 +88,8 @@ pub(crate) struct ManagerConfig {
      pub local_ip: String,
      pub eureka: EurekaConfig,
      pub advertise_mdns: bool,
 -    pub cert_rotation_poll: f64,
++    pub advertise_video_output: bool,
 +    pub cert_rotation_poll: Duration,
      pub observer: Option<Arc<dyn PlayerObserver>>,
  }
  
-@@ -122,7 +123,7 @@ impl PlayerManager {
+@@ -122,7 +124,7 @@ impl PlayerManager {
          mut events: mpsc::Receiver<PlayerEvent>,
          shutdown: CancellationToken,
      ) {
@@ -14363,7 +14607,7 @@ index b8dc6e9..56e5b18 100644
          let mut ticker = tokio::time::interval(period);
          ticker.tick().await; // consume the immediate first tick
  
-@@ -166,6 +167,16 @@ impl PlayerManager {
+@@ -166,6 +168,16 @@ impl PlayerManager {
      ) {
          let player_id = registration.player_id.clone();
  
@@ -14380,7 +14624,7 @@ index b8dc6e9..56e5b18 100644
          // Reconnect / duplicate id: replace the previous receiver.
          if let Some(existing) = self.receivers.remove(&player_id) {
              existing.receiver.shutdown().await;
-@@ -187,6 +198,7 @@ impl PlayerManager {
+@@ -187,6 +199,7 @@ impl PlayerManager {
              proxy: self.config.bridge.clone(),
              reports,
              http: self.config.http.clone(),
@@ -14388,6 +14632,14 @@ index b8dc6e9..56e5b18 100644
              data_dir: self.config.data_dir.clone(),
              volume: self.config.volume.clone(),
              user_agent: self.config.user_agent.clone(),
+@@ -202,6 +215,7 @@ impl PlayerManager {
+             eureka_http_port: 0,
+             eureka_https_port: 0,
+             advertise_mdns: self.config.advertise_mdns,
++            advertise_video_output: self.config.advertise_video_output,
+         };
+ 
+         let receiver = match spawn_receiver(params).await {
 diff --git a/crates/vibecast-player-api/src/protocol.rs b/crates/vibecast-player-api/src/protocol.rs
 index 833145d..fef281a 100644
 --- a/crates/vibecast-player-api/src/protocol.rs
@@ -14549,7 +14801,7 @@ index 833145d..fef281a 100644
      fn load_command_serializes_camel_case_with_type_tag() {
          let command = PlayerCommand::Load {
 diff --git a/crates/vibecast-receiver/src/lib.rs b/crates/vibecast-receiver/src/lib.rs
-index f63ea3b..3a673bf 100644
+index f63ea3b..cf00a48 100644
 --- a/crates/vibecast-receiver/src/lib.rs
 +++ b/crates/vibecast-receiver/src/lib.rs
 @@ -21,8 +21,8 @@ use std::time::Duration;
@@ -14571,7 +14823,16 @@ index f63ea3b..3a673bf 100644
      /// Base data directory.
      pub data_dir: PathBuf,
      /// Initial receiver volume.
-@@ -160,7 +162,7 @@ impl RotationHandle {
+@@ -77,6 +79,8 @@ pub struct ReceiverParams {
+     pub eureka_https_port: u16,
+     /// Advertise over mDNS from Rust (desktop `true`; frontend-owned discovery `false`).
+     pub advertise_mdns: bool,
++    /// Advertise the `VIDEO_OUT` capability bit (opt-in; playback stays audio-only).
++    pub advertise_video_output: bool,
+ }
+ 
+ /// Errors composing or starting a receiver.
+@@ -160,7 +164,7 @@ impl RotationHandle {
  /// A running receiver instance and the discovery facts a frontend needs.
  pub struct RunningReceiver {
      shutdown: CancellationToken,
@@ -14580,7 +14841,7 @@ index f63ea3b..3a673bf 100644
      hub_handle: DeviceHubHandle,
      cast_server: Arc<CastServer>,
      advertiser: Arc<tokio::sync::Mutex<Advertiser>>,
-@@ -188,17 +190,21 @@ impl RunningReceiver {
+@@ -188,17 +192,21 @@ impl RunningReceiver {
  
      /// Cooperatively tear this receiver down: stop advertising, stop app
      /// sessions cleanly, then cancel and await the supervised tasks.
@@ -14610,7 +14871,7 @@ index f63ea3b..3a673bf 100644
      }
  }
  
-@@ -213,6 +219,7 @@ pub async fn spawn(params: ReceiverParams) -> Result<RunningReceiver, ReceiverEr
+@@ -213,6 +221,7 @@ pub async fn spawn(params: ReceiverParams) -> Result<RunningReceiver, ReceiverEr
          proxy,
          reports,
          http,
@@ -14618,7 +14879,15 @@ index f63ea3b..3a673bf 100644
          data_dir,
          volume,
          user_agent,
-@@ -285,6 +292,7 @@ pub async fn spawn(params: ReceiverParams) -> Result<RunningReceiver, ReceiverEr
+@@ -227,6 +236,7 @@ pub async fn spawn(params: ReceiverParams) -> Result<RunningReceiver, ReceiverEr
+         eureka_http_port,
+         eureka_https_port,
+         advertise_mdns,
++        advertise_video_output,
+     } = params;
+ 
+     // Advertisement identity strings, captured before `identity` moves into the hub.
+@@ -285,17 +295,21 @@ pub async fn spawn(params: ReceiverParams) -> Result<RunningReceiver, ReceiverEr
          player,
          proxy,
          http,
@@ -14626,7 +14895,13 @@ index f63ea3b..3a673bf 100644
          data_dir,
          volume,
          user_agent,
-@@ -295,7 +303,7 @@ pub async fn spawn(params: ReceiverParams) -> Result<RunningReceiver, ReceiverEr
+         cast_device_capabilities,
+         capabilities,
+         player_settings,
++        device_capabilities: i64::from(vibecast_discovery::cast_capabilities(
++            advertise_video_output,
++        )),
+     });
      let hub_handle = hub.handle();
  
      let shutdown = CancellationToken::new();
@@ -14635,7 +14910,7 @@ index f63ea3b..3a673bf 100644
  
      // Player reports -> hub.
      {
-@@ -308,7 +316,11 @@ pub async fn spawn(params: ReceiverParams) -> Result<RunningReceiver, ReceiverEr
+@@ -308,7 +322,11 @@ pub async fn spawn(params: ReceiverParams) -> Result<RunningReceiver, ReceiverEr
                      () = shutdown.cancelled() => break,
                      report = reports.recv() => match report {
                          Some(report) => {
@@ -14648,7 +14923,7 @@ index f63ea3b..3a673bf 100644
                                  break;
                              }
                          }
-@@ -326,8 +338,16 @@ pub async fn spawn(params: ReceiverParams) -> Result<RunningReceiver, ReceiverEr
+@@ -326,8 +344,16 @@ pub async fn spawn(params: ReceiverParams) -> Result<RunningReceiver, ReceiverEr
          crl,
      };
      let cast_server = Arc::new(CastServer::new(cast_tls, auth, events_tx));
@@ -14667,7 +14942,17 @@ index f63ea3b..3a673bf 100644
      {
          let cast_server = cast_server.clone();
          let shutdown = shutdown.clone();
-@@ -428,7 +448,7 @@ fn local_port(listener: &TcpListener, fallback: u16) -> u16 {
+@@ -382,7 +408,8 @@ pub async fn spawn(params: ReceiverParams) -> Result<RunningReceiver, ReceiverEr
+         &adv_id,
+         cast_port,
+         &bundle.cert_digest_md5(),
+-    );
++    )
++    .with_video_output(advertise_video_output);
+ 
+     #[cfg(feature = "mdns")]
+     let responder = if advertise_mdns {
+@@ -428,7 +455,7 @@ fn local_port(listener: &TcpListener, fallback: u16) -> u16 {
  }
  
  fn spawn_server_forward(
@@ -14676,7 +14961,7 @@ index f63ea3b..3a673bf 100644
      shutdown: CancellationToken,
      mut events_rx: mpsc::Receiver<ServerEvent>,
      hub_handle: DeviceHubHandle,
-@@ -439,7 +459,11 @@ fn spawn_server_forward(
+@@ -439,7 +466,11 @@ fn spawn_server_forward(
                  () = shutdown.cancelled() => break,
                  event = events_rx.recv() => match event {
                      Some(event) => {
@@ -14689,7 +14974,7 @@ index f63ea3b..3a673bf 100644
                              break;
                          }
                      }
-@@ -459,3 +483,32 @@ fn txt_pairs(advertisement: &CastAdvertisement) -> Vec<(String, String)> {
+@@ -459,3 +490,32 @@ fn txt_pairs(advertisement: &CastAdvertisement) -> Vec<(String, String)> {
          .map(|(key, value)| (key.to_string(), value))
          .collect()
  }
