@@ -22,11 +22,13 @@ options:
   log_level: INFO
   artwork_public_url: ""
   certificate_path: ""
+  advertise_video_output: false
 schema:
   web_port: port
   log_level: list(DEBUG|INFO|WARNING|ERROR)
   artwork_public_url: str?
   certificate_path: str
+  advertise_video_output: bool?
 map:
   - type: share
     read_only: true

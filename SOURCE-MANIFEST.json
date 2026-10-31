@@ -696,9 +696,9 @@
       "sha256": "ecbdf1cc17460a74000310289bfbe02634f8636bfb02187512f128cc26a5611e"
     },
     {
-      "bytes": 598735,
+      "bytes": 606766,
       "path": "patches/vibecast-0.7.0.dev1-current.patch",
-      "sha256": "3d4119abefbeff18a0f86b90a4252cafa7a3341ce136c8fd4c6103a6a5e62204"
+      "sha256": "6ea2956e22e642ae2a3a7bbc636c2099d122d455cee447008503b4c2fa2d6030"
     },
     {
       "bytes": 1818,

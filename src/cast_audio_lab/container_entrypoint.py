@@ -47,6 +47,30 @@ def _supervisor_self_info(
     return data
 
 
+def _advertise_video_output(environ, options: dict) -> bool:
+    """Opt-in display advertisement for senders that hide audio-only speakers.
+
+    The regular YouTube app lists only Cast receivers with the VIDEO_OUT
+    capability; YouTube Music also lists audio-only speakers. Playback stays
+    audio-only either way. Invalid values fail closed instead of guessing.
+    """
+
+    raw = environ.get("CAST_AUDIO_ADVERTISE_VIDEO_OUTPUT")
+    if raw is not None:
+        value = raw.strip().lower()
+        if value in {"1", "true", "yes", "on"}:
+            return True
+        if value in {"", "0", "false", "no", "off"}:
+            return False
+        raise ValueError("invalid CAST_AUDIO_ADVERTISE_VIDEO_OUTPUT value")
+    value = options.get("advertise_video_output", False)
+    if value is None:
+        return False
+    if type(value) is not bool:
+        raise ValueError("advertise_video_output must be true or false")
+    return value
+
+
 def runtime_argv(
     *,
     environ: dict[str, str] | None = None,
@@ -66,7 +90,13 @@ def runtime_argv(
     else:
         ha_ingress = options_path.exists()
         options = _options(options_path)
-    allowed = {"web_port", "log_level", "artwork_public_url", "certificate_path"}
+    allowed = {
+        "web_port",
+        "log_level",
+        "artwork_public_url",
+        "certificate_path",
+        "advertise_video_output",
+    }
     unknown = set(options) - allowed
     if unknown:
         raise ValueError(f"unknown Home Assistant option: {sorted(unknown)[0]}")
@@ -97,6 +127,8 @@ def runtime_argv(
     ]
     if artwork:
         argv += ["--artwork-public-url", artwork]
+    if _advertise_video_output(env, options):
+        argv.append("--advertise-video-output")
     if ha_ingress:
         raw_ingress_port = env.get("CAST_AUDIO_INGRESS_PORT")
         try:

@@ -30,6 +30,14 @@ the application deliberately has no second login layer.
 `http://192.168.1.20:8788` if Cast clients should receive locally processed
 square cover URLs. Leave it empty if that address is not stable.
 
+`advertise_video_output` is optional and off by default. The regular YouTube
+Android app only lists Cast receivers that advertise video output, while
+YouTube Music also lists audio-only speakers. Enable this option if the
+speakers should also appear in the regular YouTube app. The receivers then
+announce the Cast `VIDEO_OUT` capability and `display_supported`, so senders
+and Google Home may show them as TVs; playback remains audio-only through the
+same YouTube Lounge path as YouTube Music. Restart the App after changing it.
+
 `amd64` and `aarch64` (64-bit ARM) have native image builds, architecture-specific
 pinned AirPlay assets/wheels and runtime checks. Physical ARM speaker acceptance
 remains open. 32-bit ARM is not supported.
