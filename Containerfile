@@ -16,7 +16,7 @@ RUN git clone --filter=blob:none "${VIBECAST_REPOSITORY}" . \
     && git apply /tmp/vibecast-current.patch
 RUN cargo build --locked --release -p vibecast-cli
 
-FROM python:3.12-slim-bookworm AS python-builder
+FROM python:3.15-slim-bookworm AS python-builder
 WORKDIR /src
 COPY config/container-build-cp312.lock.txt /tmp/build-requirements.txt
 RUN python -m pip install --no-cache-dir --disable-pip-version-check \
@@ -46,7 +46,7 @@ RUN case "$TARGETARCH" in \
     && echo "${airplay_sha}  /tmp/cliairplay" | sha256sum --check --strict \
     && chmod 0755 /tmp/cliairplay
 
-FROM python:3.12-slim-bookworm
+FROM python:3.15-slim-bookworm
 ARG TARGETARCH
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
