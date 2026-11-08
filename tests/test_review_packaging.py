@@ -65,6 +65,10 @@ class ReviewPackagingTests(unittest.TestCase):
             hashlib.sha256(snapshot.read_bytes()).hexdigest(),
             current["development_snapshot_sha256"],
         )
+        self.assertIn(
+            "!" + current["development_snapshot"],
+            (ROOT / ".dockerignore").read_text().splitlines(),
+        )
         for path in ["Containerfile", ".github/workflows/ci.yml"]:
             text = (ROOT / path).read_text()
             self.assertIn(current["commit"], text)
