@@ -20,7 +20,7 @@ import tarfile
 import tempfile
 
 COMPONENTS = [
-    (".", "431c5c582eef9307c4e39c50a0ea65e970bc1128", "airplay"),
+    (".", "0a58c239d5fb3cf8927b9707a71c6fe897266b6a", "airplay"),
     ("libraop", "81c2182649da8645ac2a58b78e9f370c79a4165b", "airplay/libraop"),
     ("libraop/crosstools", "41544c653760a205cbf6cebfdeda4a9394cc6455", "airplay/libraop/crosstools"),
     ("libraop/dmap-parser", "2f8ee61e2427a177beea919d72dde8931084fe51", "airplay/libraop/dmap-parser"),
@@ -83,7 +83,7 @@ def _package(checkout, destination, *, components):
                     "openssl_override_reason": "Matching 3.5.4 source from preceding proxy commit; see audit",
                     "prebuilt_binaries_included": False,
                 }, indent=2).encode() + b"\n")
-                add_bytes("BUILD-README.txt", b"""AirPlay v0.5.4 Linux x86_64 source candidate
+                add_bytes("BUILD-README.txt", b"""AirPlay v0.5.9 Linux x86_64 source candidate
 
 Sources come from the immutable commits in SOURCE-COMPONENTS.json, not local
 working-tree files. Existing binary archives and top-level build outputs are

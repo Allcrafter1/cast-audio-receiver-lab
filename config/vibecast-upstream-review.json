@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "repository": "https://github.com/emilsvennesson/vibecast.git",
+  "reviewed_commit": "4cde20b3f49b296debec8cb9a2badb51c7bae940",
+  "reviewed_date": "2026-11-08",
+  "fork_source_commit": "1a040ed9483745e4532e1c79ec32138198be5710",
+  "decision": "Reviewed, not merged wholesale. Preserve tested audio fork; overlapping YouTube and discovery changes require selective regression work.",
+  "report": "docs/upstream-review-20261108.md"
+}

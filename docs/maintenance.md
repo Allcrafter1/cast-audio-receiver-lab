@@ -19,7 +19,7 @@ be applied as a series.
 | Our adapter | `pyproject.toml`, package version, `CHANGELOG.md`, dev18 release | Keep release tag, image digest and HA version aligned. |
 | Vibecast | Public base `83ba470158189de3bc223701decdc4c502d47644`, hash-locked `0.7.0.dev1` cumulative snapshot, Cargo.lock and per-release vendored-source archive | Frozen archive rebuild is a release gate; full OS/toolchain bit reproducibility is not claimed. |
 | yt-dlp extraction stack | `config/youtube-extractor-requirements.txt`: yt-dlp 2026.8.19, yt-dlp-ejs 0.8.0, deno 2.9.6; complete container resolution in `config/container-linux-x86_64-cp312.lock.txt` | amd64 CPython 3.12 is hash-locked and offline-verified; ARM remains separate. |
-| AirPlay sender | `config/cliairplay-linux-x86_64.lock.json`: unified Music Assistant airplay-cli v0.5.4, source/asset/checksum pins | Linux x86_64/reference-RAOP verified; HomePod/Yamaha and other architectures remain separate. |
+| AirPlay sender | `config/cliairplay-linux-x86_64.lock.json`: unified Music Assistant airplay-cli v0.5.9 candidate, source/asset/checksum pins | Release hashes, source rebuild, upstream tests and native DACP/RTSP probe verified; v0.5.9 physical playback and ARM64 execution remain pending. |
 | Python libraries | Tested constraints and separate 17-wheel CPython3.12/3.13 Linux x86_64 hash locks | Fresh offline install/pip-check/tests verified for both; ARM and extractor/build dependencies remain separate. See dependency-locks.md. |
 | FFmpeg / mpv | Host-installed executables | Host versions/build options must be recorded; no application-controlled pin yet. |
 | Device authentication | Separately released, hash-pinned, replaceable bundle and validation tools | Coverage, installed file and sender acceptance are separate facts; revocation can happen before expiry. |
@@ -219,3 +219,11 @@ be investigated independently. It is not an availability guarantee: a Cast
 trust-policy change or unavailable service API may require substantial work or
 have no sustainable fix. The project does not claim bit-for-bit reproducibility
 or universal one-click recovery from external protocol changes.
+
+## Review recorded on 2026-11-08
+
+See [the upstream review](upstream-review-20261108.md) for the source-only
+Vibecast prerelease, AirPlay 0.5.9 candidate and Python PR #19 diagnosis.
+Python base-image minor upgrades require matching build/runtime locks, wheel
+and source inventories for both architectures, and CI coverage of that minor.
+The container ABI gate rejects an image-only change; Dependabot remains enabled.

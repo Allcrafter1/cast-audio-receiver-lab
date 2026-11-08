@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "airplay_commit": "431c5c582eef9307c4e39c50a0ea65e970bc1128",
+  "airplay_commit": "0a58c239d5fb3cf8927b9707a71c6fe897266b6a",
   "openssl_proxy_path": "libraop/libopenssl",
   "openssl_proxy_commit": "ac74d79efc7a702386fcf00d4b7e0a785721a3ed",
   "binary_introduction_commit": "d8653048bbfaf65b44bcef67c8c66e368b822cde",
