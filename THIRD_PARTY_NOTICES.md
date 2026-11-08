@@ -14,6 +14,7 @@ material, executables or authentication artifacts.
 
 | Project / author | Actual role here | Recorded source / license status |
 | --- | --- | --- |
+| [mdns-sd](https://github.com/keepsimple1/mdns-sd), keepsimple and contributors | Rust Cast discovery; local multi-subtype and subtype-only browse support | v0.20.1, Apache-2.0 OR MIT. Original texts in `licenses/mdns-sd-APACHE.txt` and `licenses/mdns-sd-MIT.txt`; modified sources and change notice in the frontend's `vendor/mdns-sd`. Upstream crate SHA-256 `fb75febbe5fa1837a52fdbd1c735e168286c5c645fc2ddd31526f65c49941c2e`. |
 | [Vibecast](https://github.com/emilsvennesson/vibecast), Nils Emil Svensson and contributors | Active Cast frontend, application/player architecture and YouTube implementation, maintained in our [reviewable fork](https://github.com/Allcrafter1/vibecast/commit/f28befe02fe930db300294d6bf49cdf5fec5a747) | Fork commit `f28befe02fe930db300294d6bf49cdf5fec5a747`, based on upstream `b4616f8f399be706a1409ed21922aa2df892e303`; MIT. Preserve upstream copyright/license; copy in `licenses/Vibecast-MIT.txt`. |
 | [ffindog/ytm-cast-receiver](https://github.com/ffindog/ytm-cast-receiver) and [Vibecast PR #1](https://github.com/Allcrafter1/vibecast/pull/1), ffindog | Behavioural reference, iOS reconnect reproduction and a narrower session-ownership proposal reviewed while designing the independent hub-level reconnect/takeover fix | MIT reference project. The PR is unmerged and is not an ancestor of this release; no implementation source was imported. |
 | [patrickkfkan/yt-cast-receiver](https://github.com/patrickkfkan/yt-cast-receiver), Patrick K. F. Kan | Behavioural reference for YouTube Lounge `/next`, CTT and queue-context request shapes | MIT as declared upstream. Protocol behaviour was compared; no implementation source was imported. |
@@ -41,10 +42,13 @@ reproducible finding is not a blanket legal guarantee.
 
 Current maintained Vibecast build input is public base commit
 `83ba470158189de3bc223701decdc4c502d47644` plus the hash-locked cumulative
-`0.7.0.dev1` snapshot recorded in `config/vibecast-frontend.lock.json`. It
-includes the accepted YouTube resolver/session and Home Assistant control work.
+`0.7.0.dev2` snapshot recorded in `config/vibecast-frontend.lock.json`. It
+includes the accepted YouTube resolver/session and Home Assistant control work,
+TuneIn, volume integration and shared-runtime dual Cast identities.
 The older commit in the provenance table remains the integration base; all
 Vibecast files and modifications remain MIT and its notices are unchanged.
+Vendored dependencies retain their own terms; in particular the patched mDNS
+sources remain Apache-2.0 OR MIT rather than being relicensed by the patch file.
 
 The airplay-cli v0.5.9 notice records mixed component licences. Its statement that
 libraop has no licence is now stale: upstream commit
@@ -98,7 +102,8 @@ third-party notices as a separate native-runtime review task; the Python
 wrapper's licence alone is not a complete Deno/V8/TypeScript inventory.
 
 The exact selected wheel filenames, hashes and declared license metadata for
-the tested CPython 3.12 and 3.13 environments are recorded separately in
+the tested management CPython 3.12 and 3.13 environments and the CPython 3.15
+release-container environment are recorded separately in
 `config/management-linux-x86_64-cp312.wheels.json` and the corresponding cp313
 inventory. Principal dependencies:
 

@@ -1,0 +1,1385 @@
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -396,6 +396,15 @@
+     jobs: mpsc::Sender<AppJob>,
+ }
+ 
++/// Only the latest physical owner's app may continue a stopped app identity.
++/// This follows the existing owner-connections policy; logical sender ids on
++/// one physical connection are not separate owners.
++struct OwnerContinuity {
++    app_id: String,
++    key: String,
++    owner_connections: HashSet<u64>,
++}
++
+ impl Session {
+     fn cancel_resolution(&mut self) {
+         self.pending_load_controls = None;
+@@ -470,6 +479,7 @@
+     sender_connect_profiles: HashMap<(u64, String), SenderConnectProfile>,
+     /// session id (== transport id) -> session.
+     sessions: HashMap<String, Session>,
++    last_owner_continuity: Option<OwnerContinuity>,
+     sender_disconnect_deadlines: HashMap<String, tokio::time::Instant>,
+     self_tx: mpsc::Sender<HubEvent>,
+     events: Option<mpsc::Receiver<HubEvent>>,
+@@ -517,6 +527,7 @@
+             platform_subscriptions: HashSet::new(),
+             sender_connect_profiles: HashMap::new(),
+             sessions: HashMap::new(),
++            last_owner_continuity: None,
+             sender_disconnect_deadlines: HashMap::new(),
+             self_tx: tx,
+             events: Some(rx),
+@@ -577,6 +588,9 @@
+                 self.connections.insert(handle.id(), handle);
+             }
+             HubEvent::Server(ServerEvent::Disconnected { id, .. }) => {
++                if let Some(continuity) = &mut self.last_owner_continuity {
++                    continuity.owner_connections.remove(&id);
++                }
+                 let owned: HashSet<String> = self
+                     .sessions
+                     .iter()
+@@ -829,6 +843,24 @@
+             self.broadcast(RECEIVER_0, ns::RECEIVER, &ended).await;
+         }
+ 
++        let owner_continuity_key = self
++            .last_owner_continuity
++            .as_ref()
++            .filter(|previous| {
++                previous.app_id == request.app_id
++                    && previous.owner_connections.contains(&conn_id)
++                    && self.connections.contains_key(&conn_id)
++            })
++            .map(|previous| previous.key.clone())
++            .unwrap_or_else(|| Uuid::new_v4().to_string());
++        // Publish before calling the provider: a failed replacement must not
++        // revive a prior owner's identity on a subsequent launch.
++        self.last_owner_continuity = Some(OwnerContinuity {
++            app_id: request.app_id.clone(),
++            key: owner_continuity_key.clone(),
++            owner_connections: HashSet::from([conn_id]),
++        });
++
+         let session_id = Uuid::new_v4().to_string();
+         let (credentials, credentials_type) = request.resolved_credentials();
+         let app_key = manifest.app_key;
+@@ -854,6 +886,7 @@
+             Arc::new(NoopSenderChannel),
+         )
+         .with_sender_connection_id(Some(conn_id))
++        .with_owner_continuity_key(Some(owner_continuity_key))
+         .with_settings(settings)
+         .with_playback_controller(Arc::new(HubPlaybackController {
+             tx: self.self_tx.clone(),
+@@ -960,6 +993,20 @@
+         let Some(mut session) = self.sessions.remove(session_id) else {
+             return;
+         };
++        self.last_owner_continuity =
++            session
++                .ctx
++                .owner_continuity_key()
++                .map(|key| OwnerContinuity {
++                    app_id: session.app_id.clone(),
++                    key: key.to_owned(),
++                    owner_connections: session
++                        .owner_connections
++                        .iter()
++                        .filter(|connection| self.connections.contains_key(connection))
++                        .copied()
++                        .collect(),
++                });
+         session.cancel_resolution();
+         if let Some(cache) = session.audio_cache.take() {
+             cache.cancel();
+@@ -2483,6 +2530,16 @@
+             .map(|session| session.owner_connections.clone())
+             .unwrap_or_default();
+         if let Some(session) = self.sessions.get_mut(transport) {
++            let key = Uuid::new_v4().to_string();
++            session.ctx = session
++                .ctx
++                .clone()
++                .with_owner_continuity_key(Some(key.clone()));
++            self.last_owner_continuity = Some(OwnerContinuity {
++                app_id: session.app_id.clone(),
++                key,
++                owner_connections: HashSet::from([conn_id]),
++            });
+             session.superseded_senders.extend(
+                 previous_owners
+                     .iter()
+@@ -2680,6 +2737,7 @@
+             sender,
+         )
+         .with_sender_connection_id(sender_connection_id)
++        .with_owner_continuity_key(session.ctx.owner_continuity_key().map(str::to_owned))
+         .with_settings(session.ctx.settings.clone())
+         .with_playback_controller(session.ctx.playback_controller())
+     }
+--- a/crates/vibecast-core/src/tests.rs
++++ b/crates/vibecast-core/src/tests.rs
+@@ -94,6 +94,9 @@
+     exclusive_sender_takeover: bool,
+     sender_attachments: Arc<Mutex<Vec<SenderAttachment>>>,
+     output_controls: Arc<Mutex<Vec<OutputControl>>>,
++    launched_owner_keys: Arc<Mutex<Vec<String>>>,
++    sender_owner_keys: Arc<Mutex<Vec<(SenderAttachment, String)>>>,
++    fail_next_launch: Arc<std::sync::atomic::AtomicBool>,
+ }
+ 
+ fn fake_manifest() -> AppManifest {
+@@ -127,6 +130,17 @@
+         ctx: &AppContext,
+         _credentials: LaunchCredentials,
+     ) -> Result<Arc<dyn AppSession>, LaunchError> {
++        self.launched_owner_keys.lock().unwrap().push(
++            ctx.owner_continuity_key()
++                .expect("hub supplies an owner continuity key")
++                .to_owned(),
++        );
++        if self
++            .fail_next_launch
++            .swap(false, std::sync::atomic::Ordering::Relaxed)
++        {
++            return Err(LaunchError::new("injected launch failure"));
++        }
+         *self.launched_setting.lock().unwrap() = ctx
+             .settings
+             .snapshot()
+@@ -139,6 +153,7 @@
+             self.exclusive_sender_takeover,
+             self.sender_attachments.clone(),
+             self.output_controls.clone(),
++            self.sender_owner_keys.clone(),
+         )))
+     }
+ }
+@@ -152,6 +167,7 @@
+     bool,
+     Arc<Mutex<Vec<SenderAttachment>>>,
+     Arc<Mutex<Vec<OutputControl>>>,
++    Arc<Mutex<Vec<(SenderAttachment, String)>>>,
+ );
+ 
+ #[async_trait]
+@@ -174,11 +190,17 @@
+ 
+     async fn on_sender_connected(
+         &self,
+-        _ctx: &AppContext,
++        ctx: &AppContext,
+         _sender_id: &str,
+         attachment: SenderAttachment,
+     ) {
+         self.4.lock().unwrap().push(attachment);
++        self.6.lock().unwrap().push((
++            attachment,
++            ctx.owner_continuity_key()
++                .expect("sender callback retains owner continuity")
++                .to_owned(),
++        ));
+     }
+ 
+     async fn on_playback_update(&self, ctx: &AppContext, state: vibecast_sdk::PlaybackState) {
+@@ -322,6 +344,16 @@
+                 Some("APP_PAUSE") => ctx.playback_controller().pause().await,
+                 Some("APP_SEEK") => ctx.playback_controller().seek(33.0).await,
+                 Some("APP_STOP") => ctx.playback_controller().stop().await,
++                Some("OWNER_KEY") => {
++                    ctx.send_custom(
++                        namespace,
++                        serde_json::json!({
++                            "type": "OWNER_KEY",
++                            "key": ctx.owner_continuity_key(),
++                        }),
++                    )
++                    .await;
++                }
+                 Some("FLOOD_CALLBACK") => {
+                     // More than both bounded mailboxes combined: the callback
+                     // waits for hub capacity while hub notifications fill jobs.
+@@ -372,6 +404,9 @@
+     launched_setting: Arc<Mutex<Option<String>>>,
+     sender_attachments: Arc<Mutex<Vec<SenderAttachment>>>,
+     output_controls: Arc<Mutex<Vec<OutputControl>>>,
++    launched_owner_keys: Arc<Mutex<Vec<String>>>,
++    sender_owner_keys: Arc<Mutex<Vec<(SenderAttachment, String)>>>,
++    fail_next_launch: Arc<std::sync::atomic::AtomicBool>,
+     hub_abort: tokio::task::AbortHandle,
+ }
+ 
+@@ -456,6 +491,9 @@
+     let launched_setting = Arc::new(Mutex::new(None));
+     let sender_attachments = Arc::new(Mutex::new(Vec::new()));
+     let output_controls = Arc::new(Mutex::new(Vec::new()));
++    let launched_owner_keys = Arc::new(Mutex::new(Vec::new()));
++    let sender_owner_keys = Arc::new(Mutex::new(Vec::new()));
++    let fail_next_launch = Arc::new(std::sync::atomic::AtomicBool::new(false));
+     let hub = DeviceHub::new(HubConfig {
+         identity: DeviceIdentity::new("Living Room".into(), "Chromecast".into(), "dev-1".into()),
+         registry: AppRegistry::new(vec![Arc::new(FakeApp {
+@@ -463,6 +501,9 @@
+             exclusive_sender_takeover,
+             sender_attachments: sender_attachments.clone(),
+             output_controls: output_controls.clone(),
++            launched_owner_keys: launched_owner_keys.clone(),
++            sender_owner_keys: sender_owner_keys.clone(),
++            fail_next_launch: fail_next_launch.clone(),
+         })])
+         .expect("registry"),
+         player: player.clone(),
+@@ -498,6 +539,9 @@
+         launched_setting,
+         sender_attachments,
+         output_controls,
++        launched_owner_keys,
++        sender_owner_keys,
++        fail_next_launch,
+         hub_abort,
+     }
+ }
+@@ -643,6 +687,324 @@
+         ])
+     );
+     app["transportId"].as_str().unwrap().to_string()
++}
++
++async fn launch_for_continuity(
++    client: &mut Framed<DuplexStream, CastCodec>,
++    source: &str,
++    app_id: &str,
++    request_id: i64,
++) -> String {
++    send_as(
++        client,
++        source,
++        ns::CONNECTION,
++        "receiver-0",
++        r#"{"type":"CONNECT"}"#,
++    )
++    .await;
++    send_as(
++        client,
++        source,
++        ns::RECEIVER,
++        "receiver-0",
++        &serde_json::json!({"type":"LAUNCH","requestId":request_id,"appId":app_id}).to_string(),
++    )
++    .await;
++    let reply = next_json_for_request(client, request_id).await;
++    assert_eq!(reply["type"], "RECEIVER_STATUS");
++    reply["status"]["applications"][0]["transportId"]
++        .as_str()
++        .unwrap()
++        .to_owned()
++}
++
++async fn stop_for_continuity(
++    client: &mut Framed<DuplexStream, CastCodec>,
++    transport: &str,
++    request_id: i64,
++) {
++    send(
++        client,
++        ns::RECEIVER,
++        "receiver-0",
++        &serde_json::json!({"type":"STOP","requestId":request_id,"sessionId":transport})
++            .to_string(),
++    )
++    .await;
++    let reply = next_json_for_request(client, request_id).await;
++    assert!(reply["status"]["applications"]
++        .as_array()
++        .unwrap()
++        .is_empty());
++}
++
++fn launched_owner_key(harness: &Harness) -> String {
++    harness
++        .launched_owner_keys
++        .lock()
++        .unwrap()
++        .last()
++        .unwrap()
++        .clone()
++}
++
++async fn callback_owner_key(
++    client: &mut Framed<DuplexStream, CastCodec>,
++    source: &str,
++    transport: &str,
++) -> String {
++    send_as(
++        client,
++        source,
++        ns::CONNECTION,
++        transport,
++        r#"{"type":"CONNECT"}"#,
++    )
++    .await;
++    send_as(
++        client,
++        source,
++        FAKE_NS,
++        transport,
++        r#"{"type":"OWNER_KEY"}"#,
++    )
++    .await;
++    next_json_of_type(client, "OWNER_KEY").await["key"]
++        .as_str()
++        .unwrap()
++        .to_owned()
++}
++
++#[tokio::test]
++async fn owner_continuity_survives_stop_close_and_direct_relaunch_on_the_same_connection() {
++    let mut harness = setup_exclusive().await;
++    let transport = launch_for_continuity(&mut harness.client, "browser-1", "APP1", 1001).await;
++    let initial = launched_owner_key(&harness);
++    assert!(uuid::Uuid::parse_str(&initial).is_ok());
++    assert_eq!(
++        callback_owner_key(&mut harness.client, "tab-one", &transport).await,
++        initial
++    );
++    stop_for_continuity(&mut harness.client, &transport, 1002).await;
++
++    let mut observer = connect_peer(&harness.hub, 2, "ha-observer").await;
++    send_as(
++        &mut observer,
++        "home-assistant",
++        ns::CONNECTION,
++        "receiver-0",
++        r#"{"type":"CONNECT","userAgent":"PyChromecast"}"#,
++    )
++    .await;
++    send_as(
++        &mut observer,
++        "home-assistant",
++        ns::RECEIVER,
++        "receiver-0",
++        r#"{"type":"GET_STATUS","requestId":1003}"#,
++    )
++    .await;
++    next_json_for_request(&mut observer, 1003).await;
++
++    // Logical sender ids can change without changing the existing physical
++    // owner, as happens when Chrome reopens a Cast route.
++    let transport = launch_for_continuity(&mut harness.client, "browser-2", "APP1", 1004).await;
++    assert_eq!(launched_owner_key(&harness), initial);
++    assert_eq!(
++        callback_owner_key(&mut harness.client, "tab-two", &transport).await,
++        initial
++    );
++    send_as(
++        &mut harness.client,
++        "tab-two",
++        ns::CONNECTION,
++        &transport,
++        r#"{"type":"CLOSE"}"#,
++    )
++    .await;
++    send(
++        &mut harness.client,
++        ns::RECEIVER,
++        "receiver-0",
++        r#"{"type":"GET_STATUS","requestId":1005}"#,
++    )
++    .await;
++    assert!(
++        next_json_for_request(&mut harness.client, 1005).await["status"]["applications"]
++            .as_array()
++            .unwrap()
++            .is_empty()
++    );
++
++    launch_for_continuity(&mut harness.client, "browser-3", "APP1", 1006).await;
++    assert_eq!(launched_owner_key(&harness), initial);
++    let replaced = launch_for_continuity(&mut harness.client, "browser-4", "APP1", 1007).await;
++    assert_eq!(launched_owner_key(&harness), initial);
++    assert_eq!(
++        callback_owner_key(&mut harness.client, "tab-four", &replaced).await,
++        initial
++    );
++    harness.hub.shutdown().await;
++}
++
++#[tokio::test]
++async fn owner_continuity_keeps_only_the_latest_launcher() {
++    let mut harness = setup_exclusive().await;
++    launch_for_continuity(&mut harness.client, "owner-a", "APP1", 1101).await;
++    let first_a = launched_owner_key(&harness);
++    let mut other = connect_peer(&harness.hub, 2, "different-device").await;
++    launch_for_continuity(&mut other, "owner-b", "APP1", 1102).await;
++    let b = launched_owner_key(&harness);
++    assert_ne!(first_a, b);
++    let transport = launch_for_continuity(&mut harness.client, "owner-a", "APP1", 1103).await;
++    let returning_a = launched_owner_key(&harness);
++    assert_ne!(
++        returning_a, first_a,
++        "a previous owner must not recover its old identity"
++    );
++    assert_ne!(returning_a, b);
++    assert_eq!(
++        callback_owner_key(&mut harness.client, "owner-a", &transport).await,
++        returning_a
++    );
++    harness.hub.shutdown().await;
++}
++
++#[tokio::test]
++async fn owner_continuity_rotates_before_takeover_callbacks_and_follows_the_new_owner() {
++    let mut harness = setup_exclusive().await;
++    let transport = launch_for_continuity(&mut harness.client, "owner-a", "APP1", 1201).await;
++    let a = callback_owner_key(&mut harness.client, "owner-a", &transport).await;
++    let mut other = connect_peer(&harness.hub, 2, "different-device").await;
++    send_as(
++        &mut other,
++        "owner-b",
++        ns::CONNECTION,
++        &transport,
++        r#"{"type":"CONNECT"}"#,
++    )
++    .await;
++    send_as(
++        &mut other,
++        "owner-b",
++        FAKE_NS,
++        &transport,
++        r#"{"type":"CLAIM"}"#,
++    )
++    .await;
++    next_json_of_type(&mut other, "PONG").await;
++    let b = callback_owner_key(&mut other, "owner-b", &transport).await;
++    assert_ne!(a, b);
++    assert!(harness
++        .sender_owner_keys
++        .lock()
++        .unwrap()
++        .iter()
++        .any(|(attachment, key)| *attachment == SenderAttachment::Takeover && key == &b));
++
++    stop_for_continuity(&mut other, &transport, 1202).await;
++    launch_for_continuity(&mut other, "owner-b-again", "APP1", 1203).await;
++    assert_eq!(launched_owner_key(&harness), b);
++    launch_for_continuity(&mut harness.client, "owner-a", "APP1", 1204).await;
++    let returning_a = launched_owner_key(&harness);
++    assert_ne!(returning_a, a);
++    assert_ne!(returning_a, b);
++    harness.hub.shutdown().await;
++}
++
++#[tokio::test]
++async fn owner_continuity_is_invalidated_by_physical_disconnect_and_fresh_hubs() {
++    let mut harness = setup_exclusive().await;
++    let transport = launch_for_continuity(&mut harness.client, "owner-a", "APP1", 1301).await;
++    let initial = launched_owner_key(&harness);
++    stop_for_continuity(&mut harness.client, &transport, 1302).await;
++    let keys = harness.launched_owner_keys.clone();
++    let mut observer = connect_peer(&harness.hub, 2, "observer").await;
++    send(
++        &mut observer,
++        ns::CONNECTION,
++        "receiver-0",
++        r#"{"type":"CONNECT"}"#,
++    )
++    .await;
++    send(
++        &mut observer,
++        ns::RECEIVER,
++        "receiver-0",
++        r#"{"type":"GET_STATUS","requestId":1303}"#,
++    )
++    .await;
++    next_json_for_request(&mut observer, 1303).await;
++    drop(harness.client);
++    // The disconnect broadcast is a barrier: the hub has retired connection1.
++    next_json_of_type(&mut observer, "RECEIVER_STATUS").await;
++    let mut reused_counter = connect_peer(&harness.hub, 1, "peer").await;
++    launch_for_continuity(&mut reused_counter, "owner-a", "APP1", 1304).await;
++    let after_close = keys.lock().unwrap().last().unwrap().clone();
++    assert_ne!(after_close, initial);
++    harness.hub.shutdown().await;
++
++    let mut fresh = setup_exclusive().await;
++    launch_for_continuity(&mut fresh.client, "owner-a", "APP1", 1305).await;
++    let after_restart = launched_owner_key(&fresh);
++    assert_ne!(after_restart, initial);
++    assert_ne!(after_restart, after_close);
++    fresh.hub.shutdown().await;
++}
++
++#[tokio::test]
++async fn owner_continuity_does_not_cross_app_switches() {
++    let mut harness = setup_exclusive().await;
++    launch_for_continuity(&mut harness.client, "owner-a", "APP1", 1401).await;
++    let first = launched_owner_key(&harness);
++    launch_for_continuity(&mut harness.client, "owner-a", "CC1AD845", 1402).await;
++    let other_app = launched_owner_key(&harness);
++    launch_for_continuity(&mut harness.client, "owner-a", "APP1", 1403).await;
++    let returning = launched_owner_key(&harness);
++    assert_ne!(first, other_app);
++    assert_ne!(first, returning);
++    assert_ne!(other_app, returning);
++    harness.hub.shutdown().await;
++}
++
++#[tokio::test]
++async fn owner_continuity_does_not_revive_an_owner_after_a_failed_replacement() {
++    let mut harness = setup_exclusive().await;
++    let transport = launch_for_continuity(&mut harness.client, "owner-a", "APP1", 1501).await;
++    let first_a = launched_owner_key(&harness);
++    stop_for_continuity(&mut harness.client, &transport, 1502).await;
++    let mut other = connect_peer(&harness.hub, 2, "different-device").await;
++    send_as(
++        &mut other,
++        "owner-b",
++        ns::CONNECTION,
++        "receiver-0",
++        r#"{"type":"CONNECT"}"#,
++    )
++    .await;
++    harness
++        .fail_next_launch
++        .store(true, std::sync::atomic::Ordering::Relaxed);
++    send_as(
++        &mut other,
++        "owner-b",
++        ns::RECEIVER,
++        "receiver-0",
++        r#"{"type":"LAUNCH","requestId":1503,"appId":"APP1"}"#,
++    )
++    .await;
++    assert_eq!(
++        next_json_for_request(&mut other, 1503).await["type"],
++        "LAUNCH_ERROR"
++    );
++    let failed_b = launched_owner_key(&harness);
++    assert_ne!(first_a, failed_b);
++    launch_for_continuity(&mut harness.client, "owner-a", "APP1", 1504).await;
++    let returning_a = launched_owner_key(&harness);
++    assert_ne!(returning_a, first_a);
++    assert_ne!(returning_a, failed_b);
++    harness.hub.shutdown().await;
+ }
+ 
+ // -- tests -----------------------------------------------------------------
+--- a/crates/vibecast-sdk/src/context.rs
++++ b/crates/vibecast-sdk/src/context.rs
+@@ -116,6 +116,7 @@
+     /// Live effective settings for this app and player.
+     pub settings: AppSettingsReader,
+     sender_connection_id: Option<u64>,
++    owner_continuity_key: Option<String>,
+     sender: Arc<dyn SenderChannel>,
+     playback: Arc<dyn PlaybackController>,
+ }
+@@ -140,6 +141,7 @@
+             http,
+             receiver,
+             sender_connection_id: None,
++            owner_continuity_key: None,
+             sender,
+             playback: Arc::new(NoopPlaybackController),
+         }
+@@ -157,6 +159,22 @@
+     #[must_use]
+     pub fn sender_connection_id(&self) -> Option<u64> {
+         self.sender_connection_id
++    }
++
++    /// Bind an opaque identifier for the receiver's current owner generation.
++    /// Hosts may preserve it across app restarts by the same connected owner;
++    /// it must change for a different owner and must not be reconstructed from
++    /// an IP address or a connection counter after a receiver restart.
++    #[must_use]
++    pub fn with_owner_continuity_key(mut self, key: Option<String>) -> Self {
++        self.owner_continuity_key = key;
++        self
++    }
++
++    /// Opaque owner-generation identifier, when supplied by the host.
++    #[must_use]
++    pub fn owner_continuity_key(&self) -> Option<&str> {
++        self.owner_continuity_key.as_deref()
+     }
+ 
+     /// Bind this context to the app's live effective settings.
+@@ -298,6 +316,8 @@
+         assert_eq!(ctx.settings.snapshot().app_id(), "APP");
+         assert_eq!(ctx.settings.snapshot().revision(), 0);
+         assert!(ctx.settings.snapshot().values().is_empty());
++        assert!(ctx.owner_continuity_key().is_none());
++        assert!(cloned.owner_continuity_key().is_none());
+         assert_eq!(cloned.settings.snapshot(), ctx.settings.snapshot());
+     }
+ }
+--- a/crates/vibecast-apps-youtube/src/lib.rs
++++ b/crates/vibecast-apps-youtube/src/lib.rs
+@@ -20,7 +20,7 @@
+     SenderAttachment, SettingDescriptor, SettingScope,
+ };
+ 
+-use lounge::{LoungeCommand, LoungeConnection, LoungeIdentity, LoungeRunExit};
++use lounge::{LoungeCommand, LoungeConnection, LoungeIdentity, LoungeRunExit, LoungeTakeover};
+ use resolver::{
+     NavigationItem, NavigationRequest, PreferredVideoCodec, ResolveError, Resolver,
+     PREFERRED_VIDEO_CODEC_KEY,
+@@ -188,10 +188,11 @@
+             worker_event_tx,
+             cancel.subscribe(),
+         ));
+-        tokio::spawn(run_lounge(
++        let lounge_task = tokio::spawn(run_lounge(
+             ctx.http.clone(),
+             ctx.receiver.clone(),
+             ctx.app_id == YOUTUBE_MUSIC_APP_ID,
++            ctx.owner_continuity_key().map(str::to_owned),
+             command_tx,
+             playback_rx,
+             output_control_rx,
+@@ -211,6 +212,7 @@
+             legacy_status_scheduled,
+             ownership_generation_tx,
+             takeover_tx,
++            lounge_task: Mutex::new(Some(lounge_task)),
+             playback_tx,
+             output_control_tx,
+             volume_tx,
+@@ -227,12 +229,32 @@
+     mdx_requested: Arc<AtomicBool>,
+     legacy_status_scheduled: Arc<AtomicBool>,
+     ownership_generation_tx: watch::Sender<u64>,
+-    takeover_tx: mpsc::Sender<tokio::sync::oneshot::Sender<()>>,
++    takeover_tx: mpsc::Sender<LoungeTakeover>,
++    lounge_task: Mutex<Option<tokio::task::JoinHandle<()>>>,
+     playback_tx: mpsc::Sender<PlaybackState>,
+     output_control_tx: mpsc::Sender<OutputControl>,
+     volume_tx: watch::Sender<(f64, bool)>,
+     volume_compatibility: Arc<WebVolumeCompatibility>,
+     cancel: watch::Sender<bool>,
++}
++
++struct AbortOnDrop(tokio::task::AbortHandle);
++
++impl Drop for AbortOnDrop {
++    fn drop(&mut self) {
++        self.0.abort();
++    }
++}
++
++impl Drop for YouTubeSession {
++    fn drop(&mut self) {
++        let _ = self.cancel.send(true);
++        // Core can time out an earlier callback before on_stop is reached.
++        // A dropped JoinHandle would otherwise detach this HTTP worker.
++        if let Some(task) = self.lounge_task.get_mut().unwrap().take() {
++            task.abort();
++        }
++    }
+ }
+ 
+ #[async_trait]
+@@ -317,7 +339,14 @@
+             self.ownership_generation_tx
+                 .send_modify(|value| *value += 1);
+             let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+-            match self.takeover_tx.send(ready_tx).await {
++            match self
++                .takeover_tx
++                .send(LoungeTakeover {
++                    ready: ready_tx,
++                    owner_continuity_key: ctx.owner_continuity_key().map(str::to_owned),
++                })
++                .await
++            {
+                 Err(_) => tracing::warn!("could not rotate YouTube Lounge ownership"),
+                 Ok(()) => match tokio::time::timeout(std::time::Duration::from_secs(15), ready_rx)
+                     .await
+@@ -424,6 +453,20 @@
+ 
+     async fn on_stop(&self, _ctx: &AppContext) {
+         let _ = self.cancel.send(true);
++        // A relaunch can bind the same proven owner's Lounge screen. Finish
++        // the old worker first so it cannot bind/persist/send after replacement.
++        let task = self.lounge_task.lock().unwrap().take();
++        if let Some(mut task) = task {
++            // Core's teardown deadline can cancel this callback after take().
++            let _abort = AbortOnDrop(task.abort_handle());
++            if tokio::time::timeout(std::time::Duration::from_secs(1), &mut task)
++                .await
++                .is_err()
++            {
++                task.abort();
++                let _ = task.await;
++            }
++        }
+     }
+ }
+ 
+@@ -496,6 +539,7 @@
+     http: reqwest::Client,
+     receiver: vibecast_sdk::ReceiverContext,
+     youtube_music: bool,
++    mut owner_continuity_key: Option<String>,
+     command_tx: mpsc::Sender<LoungeCommand>,
+     playback_rx: mpsc::Receiver<PlaybackState>,
+     output_control_rx: mpsc::Receiver<OutputControl>,
+@@ -503,7 +547,7 @@
+     volume_rx: watch::Receiver<(f64, bool)>,
+     mut worker_event_rx: mpsc::Receiver<WorkerEvent>,
+     mut cancel: watch::Receiver<bool>,
+-    mut takeover_rx: mpsc::Receiver<tokio::sync::oneshot::Sender<()>>,
++    mut takeover_rx: mpsc::Receiver<LoungeTakeover>,
+     volume_compatibility: Arc<WebVolumeCompatibility>,
+ ) {
+     let mut playback_rx = playback_rx;
+@@ -514,13 +558,20 @@
+     loop {
+         volume_compatibility.reset();
+         let mut lounge = loop {
+-            let establish = LoungeConnection::establish(http.clone(), &receiver, youtube_music);
++            let establishing_key = owner_continuity_key.clone();
++            let establish = LoungeConnection::establish(
++                http.clone(),
++                &receiver,
++                youtube_music,
++                establishing_key.as_deref(),
++            );
+             let result = tokio::select! {
+                 result = establish => Some(result),
+                 request = takeover_rx.recv() => {
+                     let Some(request) = request else { return; };
+                     let _ = identity_tx.send(None);
+-                    pending_ready.push(request);
++                    owner_continuity_key = request.owner_continuity_key;
++                    pending_ready.push(request.ready);
+                     None
+                 }
+                 result = cancel.changed() => {
+@@ -539,7 +590,8 @@
+                         request = takeover_rx.recv() => {
+                             let Some(request) = request else { return; };
+                             let _ = identity_tx.send(None);
+-                            pending_ready.push(request);
++                            owner_continuity_key = request.owner_continuity_key;
++                            pending_ready.push(request.ready);
+                         }
+                         result = cancel.changed() => {
+                             if result.is_err() || *cancel.borrow() {
+@@ -573,7 +625,7 @@
+         {
+             LoungeRunExit::Stopped => return,
+             LoungeRunExit::Takeover {
+-                ready,
++                request,
+                 ownership_epoch: previous_epoch,
+             } => {
+                 ownership_epoch = previous_epoch.wrapping_add(1);
+@@ -585,7 +637,8 @@
+                 }
+                 while playback_rx.try_recv().is_ok() {}
+                 while output_control_rx.try_recv().is_ok() {}
+-                pending_ready.push(ready);
++                owner_continuity_key = request.owner_continuity_key;
++                pending_ready.push(request.ready);
+             }
+         }
+     }
+@@ -2250,6 +2303,7 @@
+                 legacy_status_scheduled: Arc::new(AtomicBool::new(false)),
+                 ownership_generation_tx,
+                 takeover_tx,
++                lounge_task: Mutex::new(None),
+                 playback_tx,
+                 output_control_tx,
+                 volume_tx,
+@@ -2259,6 +2313,137 @@
+             ctx,
+             sender,
+         )
++    }
++
++    #[tokio::test]
++    async fn takeover_passes_the_new_controllers_continuity_key() {
++        let (mut session, ctx, _) = mdx_test_session();
++        let ctx = ctx.with_owner_continuity_key(Some("new-controller".into()));
++        let (takeover_tx, mut takeover_rx) = mpsc::channel(1);
++        session.takeover_tx = takeover_tx;
++        let callback = tokio::spawn(async move {
++            session
++                .on_sender_connected(&ctx, "new-owner", SenderAttachment::Takeover)
++                .await;
++        });
++        let request = tokio::time::timeout(std::time::Duration::from_secs(1), takeover_rx.recv())
++            .await
++            .unwrap()
++            .unwrap();
++        assert_eq!(
++            request.owner_continuity_key.as_deref(),
++            Some("new-controller")
++        );
++        request.ready.send(()).unwrap();
++        callback.await.unwrap();
++    }
++
++    #[tokio::test]
++    async fn stop_drains_the_old_lounge_worker_before_relaunch() {
++        let (session, ctx, _) = mdx_test_session();
++        let mut cancel = session.cancel.subscribe();
++        let drained = Arc::new(AtomicBool::new(false));
++        let worker_drained = drained.clone();
++        *session.lounge_task.lock().unwrap() = Some(tokio::spawn(async move {
++            cancel.changed().await.unwrap();
++            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
++            worker_drained.store(true, Ordering::Release);
++        }));
++
++        session.on_stop(&ctx).await;
++
++        assert!(drained.load(Ordering::Acquire));
++        assert!(session.lounge_task.lock().unwrap().is_none());
++        // Core may repeat STOP during teardown; the completed task is not joined twice.
++        session.on_stop(&ctx).await;
++    }
++
++    #[tokio::test]
++    async fn stop_aborts_and_reaps_a_lounge_worker_that_does_not_drain() {
++        struct Dropped(Arc<AtomicBool>);
++        impl Drop for Dropped {
++            fn drop(&mut self) {
++                self.0.store(true, Ordering::Release);
++            }
++        }
++
++        let (session, ctx, _) = mdx_test_session();
++        let dropped = Arc::new(AtomicBool::new(false));
++        let worker_dropped = dropped.clone();
++        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
++        *session.lounge_task.lock().unwrap() = Some(tokio::spawn(async move {
++            let _guard = Dropped(worker_dropped);
++            started_tx.send(()).unwrap();
++            std::future::pending::<()>().await;
++        }));
++        started_rx.await.unwrap();
++
++        session.on_stop(&ctx).await;
++
++        assert!(dropped.load(Ordering::Acquire));
++        assert!(session.lounge_task.lock().unwrap().is_none());
++    }
++
++    #[tokio::test]
++    async fn dropping_a_session_aborts_its_lounge_worker_without_a_stop_callback() {
++        struct Dropped(Option<tokio::sync::oneshot::Sender<()>>);
++        impl Drop for Dropped {
++            fn drop(&mut self) {
++                let _ = self.0.take().unwrap().send(());
++            }
++        }
++
++        let (session, _, _) = mdx_test_session();
++        let (dropped_tx, dropped_rx) = tokio::sync::oneshot::channel();
++        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
++        *session.lounge_task.lock().unwrap() = Some(tokio::spawn(async move {
++            let _guard = Dropped(Some(dropped_tx));
++            started_tx.send(()).unwrap();
++            std::future::pending::<()>().await;
++        }));
++        started_rx.await.unwrap();
++
++        drop(session);
++
++        tokio::time::timeout(std::time::Duration::from_secs(1), dropped_rx)
++            .await
++            .unwrap()
++            .unwrap();
++    }
++
++    #[tokio::test]
++    async fn cancelling_stop_cleanup_still_aborts_the_taken_lounge_worker() {
++        struct Dropped(Option<tokio::sync::oneshot::Sender<()>>);
++        impl Drop for Dropped {
++            fn drop(&mut self) {
++                let _ = self.0.take().unwrap().send(());
++            }
++        }
++
++        let (session, ctx, _) = mdx_test_session();
++        let session = Arc::new(session);
++        let (dropped_tx, dropped_rx) = tokio::sync::oneshot::channel();
++        let (started_tx, started_rx) = tokio::sync::oneshot::channel();
++        *session.lounge_task.lock().unwrap() = Some(tokio::spawn(async move {
++            let _guard = Dropped(Some(dropped_tx));
++            started_tx.send(()).unwrap();
++            std::future::pending::<()>().await;
++        }));
++        started_rx.await.unwrap();
++        let stopping = session.clone();
++        let cleanup = tokio::spawn(async move { stopping.on_stop(&ctx).await });
++        while session.lounge_task.lock().unwrap().is_some() {
++            tokio::task::yield_now().await;
++        }
++
++        // Core may reach its callback deadline during this cleanup await.
++        cleanup.abort();
++        let _ = cleanup.await;
++
++        tokio::time::timeout(std::time::Duration::from_secs(1), dropped_rx)
++            .await
++            .unwrap()
++            .unwrap();
+     }
+ 
+     #[tokio::test]
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -112,9 +112,14 @@
+ pub(crate) enum LoungeRunExit {
+     Stopped,
+     Takeover {
+-        ready: tokio::sync::oneshot::Sender<()>,
++        request: LoungeTakeover,
+         ownership_epoch: u64,
+     },
++}
++
++pub(crate) struct LoungeTakeover {
++    pub(crate) ready: tokio::sync::oneshot::Sender<()>,
++    pub(crate) owner_continuity_key: Option<String>,
+ }
+ 
+ #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+@@ -122,6 +127,8 @@
+     screen_id: String,
+     screen_id_secret: String,
+     device_id: String,
++    #[serde(default, skip_serializing_if = "Option::is_none")]
++    owner_continuity_key: Option<String>,
+ }
+ 
+ #[derive(Clone)]
+@@ -442,6 +449,18 @@
+     Protocol(&'static str),
+ }
+ 
++impl LoungeError {
++    fn rejects_stored_identity(&self) -> bool {
++        match self {
++            Self::Protocol("token response omitted screen") => true,
++            Self::Http(error) => error
++                .status()
++                .is_some_and(|status| matches!(status.as_u16(), 401 | 403 | 404 | 410)),
++            _ => false,
++        }
++    }
++}
++
+ impl LoungeConnection {
+     pub(crate) fn with_volume_compatibility(
+         mut self,
+@@ -467,6 +486,7 @@
+         http: reqwest::Client,
+         receiver: &ReceiverContext,
+         youtube_music: bool,
++        owner_continuity_key: Option<&str>,
+     ) -> Result<Self, LoungeError> {
+         let (base, identity_file, theme) = if youtube_music {
+             (MUSIC_LOUNGE_BASE, MUSIC_LOUNGE_IDENTITY_FILE, "m")
+@@ -474,7 +494,15 @@
+             (LOUNGE_BASE, LOUNGE_IDENTITY_FILE, "cl")
+         };
+         tracing::debug!(youtube_music, theme, "selecting YouTube Lounge service");
+-        Self::establish_fresh_at(http, receiver, base, identity_file, theme).await
++        Self::establish_fresh_at(
++            http,
++            receiver,
++            base,
++            identity_file,
++            theme,
++            owner_continuity_key,
++        )
++        .await
+     }
+ 
+     #[cfg(test)]
+@@ -494,19 +522,42 @@
+         base: &str,
+         identity_file: &str,
+         theme: &str,
++        owner_continuity_key: Option<&str>,
+     ) -> Result<Self, LoungeError> {
+         let base = Url::parse(base).map_err(|_| LoungeError::Protocol("invalid base URL"))?;
+         let path = receiver.data_dir.join(identity_file);
+ 
+-        // Keep the receiver's Lounge device id stable, but rotate the screen
+-        // id/secret for every app ownership generation. Reusing the whole
+-        // screen identity lets an older phone or browser keep controlling a
+-        // newly launched virtual receiver session.
+-        let stable_device_id = load_lounge_identity(&path).map(|identity| identity.device_id);
++        let stored = load_lounge_identity(&path);
++        // Only core can prove that the last controller still owns this output.
++        // Its live-owner key survives that controller's STOP -> LAUNCH, keeping
++        // the sender's cached screen valid. Missing or changed keys rotate the
++        // screen so a displaced cloud controller cannot regain access.
++        if let Some(identity) = stored.as_ref().filter(|identity| {
++            owner_continuity_key.is_some()
++                && identity.owner_continuity_key.as_deref() == owner_continuity_key
++        }) {
++            match Self::establish_identity_at(
++                http.clone(),
++                receiver,
++                base.clone(),
++                identity.clone(),
++                theme,
++            )
++            .await
++            {
++                Ok(connection) => return Ok(connection),
++                Err(error) if error.rejects_stored_identity() => {
++                    tracing::debug!("stored YouTube Lounge identity rejected; replacing once");
++                }
++                Err(error) => return Err(error),
++            }
++        }
++
+         let mut identity = generate_lounge_identity(&http, &base).await?;
+-        if let Some(device_id) = stable_device_id {
+-            identity.device_id = device_id;
+-        }
++        if let Some(stored) = stored {
++            identity.device_id = stored.device_id;
++        }
++        identity.owner_continuity_key = owner_continuity_key.map(str::to_owned);
+         let connection =
+             Self::establish_identity_at(http, receiver, base, identity.clone(), theme).await?;
+         if let Err(error) = save_lounge_identity(&path, &identity) {
+@@ -562,7 +613,7 @@
+         output_control_rx: &mut mpsc::Receiver<OutputControl>,
+         worker_event_rx: &mut mpsc::Receiver<WorkerEvent>,
+         cancel: &mut watch::Receiver<bool>,
+-        takeover_rx: &mut mpsc::Receiver<tokio::sync::oneshot::Sender<()>>,
++        takeover_rx: &mut mpsc::Receiver<LoungeTakeover>,
+     ) -> LoungeRunExit {
+         loop {
+             if *cancel.borrow() {
+@@ -584,8 +635,8 @@
+                 result = bound => result,
+                 _ = cancellation.changed() => return LoungeRunExit::Stopped,
+                 request = takeover_rx.recv() => {
+-                    return request.map_or(LoungeRunExit::Stopped, |ready| LoungeRunExit::Takeover {
+-                        ready,
++                    return request.map_or(LoungeRunExit::Stopped, |request| LoungeRunExit::Takeover {
++                        request,
+                         ownership_epoch: ownership_epoch.load(Ordering::Acquire),
+                     });
+                 }
+@@ -622,8 +673,8 @@
+                         }
+                     }
+                     request = takeover_rx.recv() => {
+-                        return request.map_or(LoungeRunExit::Stopped, |ready| LoungeRunExit::Takeover {
+-                            ready,
++                        return request.map_or(LoungeRunExit::Stopped, |request| LoungeRunExit::Takeover {
++                            request,
+                             ownership_epoch: ownership_epoch.load(Ordering::Acquire),
+                         });
+                     }
+@@ -660,8 +711,8 @@
+                     }
+                     _ = cancel.changed() => return LoungeRunExit::Stopped,
+                     request = takeover_rx.recv() => {
+-                        return request.map_or(LoungeRunExit::Stopped, |ready| LoungeRunExit::Takeover {
+-                            ready,
++                        return request.map_or(LoungeRunExit::Stopped, |request| LoungeRunExit::Takeover {
++                            request,
+                             ownership_epoch: ownership_epoch.load(Ordering::Acquire),
+                         });
+                     }
+@@ -1206,6 +1257,7 @@
+         screen_id: screen.screen_id,
+         screen_id_secret: screen.screen_id_secret,
+         device_id: uuid::Uuid::new_v4().to_string(),
++        owner_continuity_key: None,
+     })
+ }
+ 
+@@ -2376,6 +2428,7 @@
+             screen_id: "stable-screen".into(),
+             screen_id_secret: "secret".into(),
+             device_id: "stable-device".into(),
++            owner_continuity_key: None,
+         };
+ 
+         save_lounge_identity(&path, &identity).unwrap();
+@@ -3072,12 +3125,265 @@
+         assert!(current.recovery.enabled);
+         assert!(!current.recovery.resolution_terminal);
+     }
+-    use std::path::PathBuf;
++    use std::{
++        collections::{HashMap, HashSet},
++        path::PathBuf,
++        sync::Mutex,
++    };
+     use wiremock::matchers::{method, path};
+     use wiremock::{Mock, MockServer, ResponseTemplate};
+ 
+     fn frame(value: &str) -> String {
+         format!("{}\n{}\n", value.len(), value)
++    }
++
++    struct OwnerIdentityFixture {
++        server: MockServer,
++        receiver: ReceiverContext,
++        generated: Arc<AtomicU64>,
++        bind_failures: Arc<Mutex<HashMap<String, u16>>>,
++        omitted_tokens: Arc<Mutex<HashSet<String>>>,
++    }
++
++    impl OwnerIdentityFixture {
++        async fn start() -> Self {
++            let server = MockServer::start().await;
++            let generated = Arc::new(AtomicU64::new(0));
++            let counter = generated.clone();
++            Mock::given(method("GET"))
++                .and(path("/api/lounge/pairing/generate_screen_id"))
++                .respond_with(move |_: &wiremock::Request| {
++                    let generation = counter.fetch_add(1, Ordering::Relaxed) + 1;
++                    ResponseTemplate::new(200).set_body_json(serde_json::json!({
++                        "screenId": format!("screen-{generation}"),
++                        "screenIdSecret": format!("secret-{generation}")
++                    }))
++                })
++                .mount(&server)
++                .await;
++            let omitted_tokens = Arc::new(Mutex::new(HashSet::new()));
++            let omissions = omitted_tokens.clone();
++            Mock::given(method("POST"))
++                .and(path("/api/lounge/pairing/get_lounge_token_batch"))
++                .respond_with(move |request: &wiremock::Request| {
++                    let screen = url::form_urlencoded::parse(&request.body)
++                        .find(|(key, _)| key == "screen_ids")
++                        .unwrap()
++                        .1
++                        .into_owned();
++                    let screens = if omissions.lock().unwrap().contains(&screen) {
++                        vec![]
++                    } else {
++                        vec![serde_json::json!({"screenId":screen,"loungeToken":"fixture-token"})]
++                    };
++                    ResponseTemplate::new(200).set_body_json(serde_json::json!({"screens":screens}))
++                })
++                .mount(&server)
++                .await;
++            let bind_failures = Arc::new(Mutex::new(HashMap::new()));
++            let failures = bind_failures.clone();
++            Mock::given(method("POST"))
++                .and(path("/api/lounge/bc/bind"))
++                .respond_with(move |request: &wiremock::Request| {
++                    let secret = request
++                        .url
++                        .query_pairs()
++                        .find(|(key, _)| key == "screenIdSecret")
++                        .unwrap()
++                        .1
++                        .into_owned();
++                    let failures = failures.lock().unwrap();
++                    let status = failures
++                        .get(&secret)
++                        .or_else(|| failures.get("*"))
++                        .copied()
++                        .unwrap_or(200);
++                    ResponseTemplate::new(status)
++                        .set_body_string(frame(r#"[[0,["c","SID","",8]],[1,["S","GSID"]]]"#))
++                })
++                .mount(&server)
++                .await;
++            let directory = std::env::temp_dir()
++                .join(format!("vibecast-owner-identity-{}", uuid::Uuid::new_v4()));
++            let receiver = ReceiverContext::new("Test speaker", "Model", "cast-id", directory);
++            Self {
++                server,
++                receiver,
++                generated,
++                bind_failures,
++                omitted_tokens,
++            }
++        }
++
++        async fn establish(&self, key: Option<&str>) -> Result<LoungeConnection, LoungeError> {
++            LoungeConnection::establish_fresh_at(
++                reqwest::Client::new(),
++                &self.receiver,
++                &format!("{}/api/lounge", self.server.uri()),
++                LOUNGE_IDENTITY_FILE,
++                "cl",
++                key,
++            )
++            .await
++        }
++
++        fn stored_path(&self) -> PathBuf {
++            self.receiver.data_dir.join(LOUNGE_IDENTITY_FILE)
++        }
++
++        fn generations(&self) -> u64 {
++            self.generated.load(Ordering::Relaxed)
++        }
++    }
++
++    impl Drop for OwnerIdentityFixture {
++        fn drop(&mut self) {
++            let _ = std::fs::remove_dir_all(&self.receiver.data_dir);
++        }
++    }
++
++    #[tokio::test]
++    async fn same_proven_owner_keeps_the_screen_across_app_relaunches() {
++        let fixture = OwnerIdentityFixture::start().await;
++        let first = fixture.establish(Some("owner-a")).await.unwrap().identity();
++        let second = fixture.establish(Some("owner-a")).await.unwrap().identity();
++        assert_eq!(
++            second.screen_id, first.screen_id,
++            "same owner relaunch invalidates the sender's cached screen"
++        );
++        assert_eq!(second.device_id, first.device_id);
++        assert_eq!(fixture.generations(), 1);
++        let stored: Value =
++            serde_json::from_slice(&std::fs::read(fixture.stored_path()).unwrap()).unwrap();
++        assert_eq!(stored["owner_continuity_key"], "owner-a");
++        assert!(stored.get("lounge_token").is_none());
++    }
++
++    #[tokio::test]
++    async fn owner_changes_rotate_without_restoring_an_older_owners_screen() {
++        let fixture = OwnerIdentityFixture::start().await;
++        let first = fixture
++            .establish(Some("owner-a-first"))
++            .await
++            .unwrap()
++            .identity();
++        let second = fixture.establish(Some("owner-b")).await.unwrap().identity();
++        let returning = fixture
++            .establish(Some("owner-a-new-generation"))
++            .await
++            .unwrap()
++            .identity();
++        assert_ne!(first.screen_id, second.screen_id);
++        assert_ne!(returning.screen_id, first.screen_id);
++        assert_ne!(returning.screen_id, second.screen_id);
++        assert_eq!(first.device_id, second.device_id);
++        assert_eq!(first.device_id, returning.device_id);
++        assert_eq!(fixture.generations(), 3);
++    }
++
++    #[tokio::test]
++    async fn missing_continuity_and_legacy_files_never_reuse_a_screen() {
++        let fixture = OwnerIdentityFixture::start().await;
++        let first = fixture.establish(None).await.unwrap().identity();
++        let second = fixture.establish(None).await.unwrap().identity();
++        assert_ne!(
++            first.screen_id, second.screen_id,
++            "None must not prove ownership"
++        );
++        let mut legacy: Value =
++            serde_json::from_slice(&std::fs::read(fixture.stored_path()).unwrap()).unwrap();
++        legacy
++            .as_object_mut()
++            .unwrap()
++            .remove("owner_continuity_key");
++        std::fs::write(fixture.stored_path(), serde_json::to_vec(&legacy).unwrap()).unwrap();
++        let upgraded = fixture.establish(Some("owner-a")).await.unwrap().identity();
++        assert_ne!(second.screen_id, upgraded.screen_id);
++        assert_eq!(second.device_id, upgraded.device_id);
++        assert_eq!(fixture.generations(), 3);
++    }
++
++    #[tokio::test]
++    async fn definitively_rejected_owner_screen_is_replaced_once() {
++        for status in [401, 403, 404, 410] {
++            let fixture = OwnerIdentityFixture::start().await;
++            fixture.establish(Some("owner-a")).await.unwrap();
++            fixture
++                .bind_failures
++                .lock()
++                .unwrap()
++                .insert("secret-1".into(), status);
++            let replacement = fixture.establish(Some("owner-a")).await.unwrap();
++            assert_eq!(replacement.identity().screen_id, "screen-2");
++            assert_eq!(fixture.generations(), 2);
++            assert_eq!(
++                load_lounge_identity(&fixture.stored_path())
++                    .unwrap()
++                    .screen_id,
++                "screen-2"
++            );
++        }
++        let fixture = OwnerIdentityFixture::start().await;
++        fixture.establish(Some("owner-a")).await.unwrap();
++        fixture
++            .omitted_tokens
++            .lock()
++            .unwrap()
++            .insert("screen-1".into());
++        assert_eq!(
++            fixture
++                .establish(Some("owner-a"))
++                .await
++                .unwrap()
++                .identity()
++                .screen_id,
++            "screen-2"
++        );
++        assert_eq!(fixture.generations(), 2);
++    }
++
++    #[tokio::test]
++    async fn transient_rebind_errors_do_not_rotate_or_overwrite_the_owner_screen() {
++        for status in [429, 500, 503] {
++            let fixture = OwnerIdentityFixture::start().await;
++            fixture.establish(Some("owner-a")).await.unwrap();
++            let previous = std::fs::read(fixture.stored_path()).unwrap();
++            fixture
++                .bind_failures
++                .lock()
++                .unwrap()
++                .insert("secret-1".into(), status);
++            assert!(fixture.establish(Some("owner-a")).await.is_err());
++            assert_eq!(
++                fixture.generations(),
++                1,
++                "transient error rotated the screen"
++            );
++            assert_eq!(std::fs::read(fixture.stored_path()).unwrap(), previous);
++        }
++    }
++
++    #[tokio::test]
++    async fn failed_replacement_is_bounded_and_preserves_the_last_bound_identity() {
++        let fixture = OwnerIdentityFixture::start().await;
++        fixture.establish(Some("owner-a")).await.unwrap();
++        let previous = std::fs::read(fixture.stored_path()).unwrap();
++        fixture
++            .bind_failures
++            .lock()
++            .unwrap()
++            .insert("*".into(), 410);
++        assert!(fixture.establish(Some("owner-a")).await.is_err());
++        assert_eq!(fixture.generations(), 2);
++        assert_eq!(std::fs::read(fixture.stored_path()).unwrap(), previous);
++        fixture
++            .bind_failures
++            .lock()
++            .unwrap()
++            .insert("*".into(), 503);
++        assert!(fixture.establish(Some("owner-b")).await.is_err());
++        assert_eq!(fixture.generations(), 3);
++        assert_eq!(std::fs::read(fixture.stored_path()).unwrap(), previous);
+     }
+ 
+     #[test]

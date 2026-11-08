@@ -15,6 +15,7 @@ import time
 import tomllib
 import urllib.error
 import urllib.request
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 REPO = 'Allcrafter1/cast-audio-receiver-lab'
@@ -26,10 +27,14 @@ def run(*args):
 
 
 def image_tag(version):
-    match = re.fullmatch(r'(\d+\.\d+\.\d+)\.dev(\d+)', version)
+    match = re.fullmatch(r'(\d+\.\d+\.\d+)(?:\.dev(\d+))?', version)
     if not match:
-        raise ValueError('Expected a Python development version, e.g. 0.6.0.dev21')
-    return match[1] + '-dev' + match[2]
+        raise ValueError('Expected a Python release version, e.g. 0.8.0 or 0.8.0.dev1')
+    return match[1] + (('-dev' + match[2]) if match[2] else '')
+
+
+def is_prerelease(tag):
+    return '-dev' in tag
 
 
 def candidate(root=ROOT):
@@ -154,6 +159,33 @@ def verify_source(assets, root=ROOT):
         raise ValueError('Source archive does not match the frontend pin')
 
 
+def verify_python_sources(assets, root=ROOT):
+    archive = assets / 'container-python-sources.zip'
+    expected = (assets / 'container-python-sources.zip.sha256').read_text().split()[0]
+    with archive.open('rb') as source:
+        if hashlib.file_digest(source, 'sha256').hexdigest() != expected:
+            raise ValueError('Python source archive checksum mismatch')
+    checked = json.loads((root / 'config/container-python-source-references.json').read_text())
+    with zipfile.ZipFile(archive) as bundle:
+        names = bundle.namelist()
+        if len(names) != len(set(names)) or 'SOURCE-REFERENCES.json' not in names:
+            raise ValueError('Invalid Python source archive members')
+        recorded = json.loads(bundle.read('SOURCE-REFERENCES.json'))
+        expected_names = {'SOURCE-REFERENCES.json'}
+        for package in checked['packages']:
+            for source in package['sources']:
+                expected_names.add(source['filename'])
+                payload = bundle.read(source['filename'])
+                if (len(payload) != source['size']
+                        or hashlib.sha256(payload).hexdigest() != source['sha256']):
+                    raise ValueError('Python source archive member mismatch')
+        if set(names) != expected_names:
+            raise ValueError('Python source archive contents do not match inventory')
+    checked['source_archives_downloaded'] = True
+    if recorded != checked:
+        raise ValueError('Python source archive inventory mismatch')
+
+
 def promoted_config(config, tag):
     result, count = re.subn(r'(?m)^version: "[^"\n]+"$', f'version: "{tag}"', config)
     if count != 1 or '\n  - amd64\n' not in result or '\n  - aarch64\n' not in result:
@@ -176,6 +208,7 @@ def promote(tag, sha, assets):
         raise ValueError('Release already exists; inspect before promotion')
     wait_ci(sha)
     verify_source(assets)
+    verify_python_sources(assets)
     digest = verify_image(tag, sha)
     if (assets / 'image-digest.txt').read_text().strip() != digest:
         raise ValueError('Build record differs from anonymous registry readback')
@@ -190,7 +223,11 @@ def promote(tag, sha, assets):
     # Keep the two prominent install references in sync; no global history rewrite.
     for name in ('README.md', 'docs/installation.md'):
         doc = ROOT / name
-        content = re.sub(re.escape(IMAGE) + r':\d+\.\d+\.\d+-dev\d+', IMAGE + ':' + tag, doc.read_text())
+        content = re.sub(
+            re.escape(IMAGE) + r':\d+\.\d+\.\d+(?:-dev\d+)?',
+            IMAGE + ':' + tag,
+            doc.read_text(),
+        )
         doc.write_text(content.replace('**' + previous_tag + '**', '**' + tag + '**'))
     run('git', 'add', 'cast-audio-receiver/config.yaml', 'README.md', 'docs/installation.md')
     if run('git', 'diff', '--cached', '--name-only'):
@@ -198,11 +235,16 @@ def promote(tag, sha, assets):
             'commit', '-m', f'release: promote verified {tag} App metadata [skip ci]')
         run('git', 'push', 'origin', 'HEAD:main')  # normal fast-forward push; never force
     target = run('git', 'rev-parse', 'HEAD')
+    release_flags = (
+        ['--title', tag + ' — experimental pre-release', '--prerelease', '--latest=false']
+        if is_prerelease(tag)
+        else ['--title', tag, '--latest']
+    )
     run('gh', 'release', 'create', 'v' + tag, '--repo', REPO, '--target', target,
-        '--title', tag + ' — experimental pre-release', '--prerelease', '--latest=false',
-        '--notes-file', str(assets / 'release-notes.md'),
+        *release_flags, '--notes-file', str(assets / 'release-notes.md'),
         *[str(assets / name) for name in ('image-digest.txt', 'image-manifest.json',
-            'vibecast-vendored-source.tar.gz', 'vibecast-vendored-source.tar.gz.sha256')])
+            'vibecast-vendored-source.tar.gz', 'vibecast-vendored-source.tar.gz.sha256',
+            'container-python-sources.zip', 'container-python-sources.zip.sha256')])
     print(f'Published {tag}. Check the INSTALLED HA app repository, not only store availability.')
 
 
@@ -225,7 +267,8 @@ def main():
         parser.error(f'Expected-tag must explicitly equal source version {tag}')
     notes(tag)
     if args.command == 'plan':
-        print(f'{tag}: CI -> cached native builds + offline source -> public readback -> App metadata -> prerelease')
+        release_kind = 'prerelease' if is_prerelease(tag) else 'stable release'
+        print(f'{tag}: CI -> cached native builds + offline source -> public readback -> App metadata -> {release_kind}')
         print('No writes. Existing tags are refused. No live receiver or HA installation is changed.')
         return
     if not args.sha or not re.fullmatch('[0-9a-f]{40}', args.sha):

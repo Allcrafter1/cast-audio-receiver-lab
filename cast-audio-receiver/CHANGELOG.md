@@ -1,5 +1,38 @@
 # App changelog
 
+## 0.8.0-dev1 — dual Cast identities, safer volume and more outputs
+
+- Every configured output now appears as its normal audio receiver and as a
+  second YouTube endpoint with (YT) appended to the name. Both entries control
+  the same speaker and share playback, session takeover and volume.
+- Regular YouTube and YouTube Music are supported through their separate Cast
+  identities. YouTube replay after a finished title, reconnects, queue controls,
+  track changes and controller handover use the same shared runtime.
+- Add TuneIn casting with station metadata and normal playback controls.
+- At session start, adopt the output's actual non-zero, unmuted volume where it
+  can be read. A muted, zero or unavailable level safely falls back to 25%,
+  unmuted; subsequent changes stay synchronized both ways.
+- Improve direct Sonos with metadata/artwork, relay and transcoding support,
+  event-driven volume/mute feedback and polling fallback. Direct physical Sonos
+  hardware remains unverified; Sonos through AirPlay has contributor use.
+- Update AirPlay CLI to 0.5.9 and harden mpv, AirPlay and DLNA seek, lifecycle,
+  feedback and cleanup behavior. Native amd64 and ARM64 images are built and
+  smoke-tested separately.
+- Home Assistant will normally discover two Google Cast entities per output.
+  Disable the entity whose name ends in (YT) if you do not use regular YouTube
+  casting.
+
+## 0.7.0-dev2 — candidate source, not yet in the App store
+
+- Add a YouTube-specific video identity beside each existing Cast speaker.
+  YouTube and Music share one playback/session/volume runtime, including output
+  takeover; Music and normal Cast discovery retain the speaker identity.
+- Include safe startup-volume adoption with 25% fallback, Sonos metadata and
+  event monitoring with polling fallback, shared media conversion, TuneIn and
+  the previously accepted playback/reconnect fixes.
+- See the repository's TESTING record for the laptop candidate. This entry is
+  release preparation, not a hardware claim or promotion of the installed App.
+
 ## 0.7.0-dev1 — resilient YouTube sessions and full Home Assistant controls
 
 - Keep an active YouTube Music session alive for up to 60 seconds after an

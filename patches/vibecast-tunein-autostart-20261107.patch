@@ -1,0 +1,54 @@
+--- a/crates/vibecast-apps-tunein/src/lib.rs
++++ b/crates/vibecast-apps-tunein/src/lib.rs
+@@ -145,9 +145,6 @@
+             return resolve_direct(&ctx.session_id, request);
+         };
+         let tune = TuneRequest::parse(data)?;
+-        if request.current_time > 0.0 {
+-            return Err(MediaResolveError::invalid_request("LIVE_SEEK_UNSUPPORTED"));
+-        }
+         let listen_id = SystemTime::now()
+             .duration_since(UNIX_EPOCH)
+             .unwrap_or_default()
+@@ -243,7 +240,10 @@
+         media.subtitle = metadata.subtitle.clone();
+         media.images = metadata.images.clone();
+         media.metadata = Some(metadata);
+-        media.autoplay = request.autoplay;
++        // Native TuneIn LOADs carry the sender's elapsed radio time and may
++        // disable autoplay for preloading. Its receiver starts the station
++        // after resolution, at the live edge; explicit later controls still win.
++        media.autoplay = true;
+         media.custom_data = Some(json!({"guideId": tune.guide_id, "contentId": tune.guide_id}));
+         Ok(media)
+     }
+--- a/crates/vibecast-apps-tunein/src/tests.rs
++++ b/crates/vibecast-apps-tunein/src/tests.rs
+@@ -113,6 +113,9 @@
+     .await;
+     let mut request = load();
+     request.autoplay = false;
++    // Android hands off the elapsed local radio time with autoplay=false.
++    // TuneIn station LOAD starts the live edge rather than resuming or pausing.
++    request.current_time = 37.25;
+     // A sender's stale URL must not override its selected TuneIn station.
+     request.media.content_url = Some("https://stale.example/old.mp3".into());
+     let media = session.resolve_media(&context(), &request).await.unwrap();
+@@ -127,7 +130,7 @@
+     assert_eq!(media.images[0].url, "https://radio.example/logo.png");
+     assert_eq!(media.duration, None);
+     assert_eq!(media.start_time, 0.0);
+-    assert!(!media.autoplay);
++    assert!(media.autoplay);
+     assert_eq!(
+         media.custom_data,
+         Some(json!({"guideId":"s123","contentId":"s123"}))
+@@ -326,7 +329,7 @@
+             .unwrap_err();
+         assert_eq!(error.code, MediaResolveCode::InvalidRequest);
+     }
+-    for time in [-1.0, 1.0, f64::NAN, f64::INFINITY] {
++    for time in [-1.0, f64::NAN, f64::INFINITY] {
+         let mut request = load();
+         request.current_time = time;
+         assert_eq!(

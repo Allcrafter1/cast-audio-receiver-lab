@@ -1,6 +1,32 @@
-# YouTube Music repeat — dev19
+# YouTube replay and repeat
 
-## Repeat-one stream preparation
+## Replay after natural EOF — 0.7.0.dev3
+
+The regular YouTube Android app's Replay button sends Play after natural EOF.
+Previously this unpaused the exhausted decoder without reloading the title.
+Cast Play and Lounge `play` now use the existing RepeatCurrent path only after
+an accepted natural Finished state, with a selected title and no pending load.
+The same title restarts at zero; its committed audio track and reusable resolved
+media are retained. Repeated Play while loading does not enqueue another reload.
+Paused playback, explicit Stop and failed-load recovery retain their behavior.
+Music's Off/One/All modes and manual Next are unchanged.
+
+Replay also clears a pending end-of-queue wait before reusing the cached stream.
+Otherwise a later queue update could unexpectedly interrupt the replay.
+Regression tests reproduce both failures before the fix and pass afterward;
+they cover Cast and Lounge controls, both YouTube session types, duplicate Play,
+paused/playing/cancelled states, and delayed queue enrichment.
+
+The reviewed receiver log (2026-11-08, 11:10–11:38 UTC) contains explicit
+app-level CLOSE messages from Android Google Play services at 11:23:03 and
+11:29:59 UTC. No receiver warning/error or heartbeat timeout is recorded in
+that interval. The owner's unexpected disconnect cannot be assigned to either
+message without a timestamp. No speculative change to ownership, explicit
+Close, reconnect grace or takeover is made.
+
+## Historical Music implementation — dev19
+
+### Repeat-one stream preparation
 
 Follow-up frontend `35ffe1b5ceca4962903a4f217cb18ef7d3dfb071` retains the current
 resolved stream description in memory. A distinct repeat-one EOF command reuses

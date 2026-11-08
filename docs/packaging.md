@@ -20,7 +20,8 @@ authentication bundle into an image layer.
 
 The image also installs the optional DLNA and Sonos adapter dependencies; those
 adapters remain opt-in. One older Samsung DLNA renderer is user-confirmed;
-Sonos and wider hardware acceptance remain unverified.
+Direct Sonos and wider hardware acceptance remain unverified. Contributor-reported
+Sonos AirPlay use is documented separately in [network outputs](network-outputs.md).
 
 The container starts through a minimal state bootstrap because Home Assistant
 and ordinary container engines may mount `/data` as root-owned. The bootstrap
@@ -42,9 +43,9 @@ cannot be treated like an ordinary isolated web app.
 ## Reproducibility boundary
 
 The Rust lockfile, maintained source commit and AirPlay artifact are pinned. The
-container's CPython 3.12/x86_64 runtime, including extractor, DLNA and Sonos
+container's CPython 3.15 runtime, including extractor, DLNA and Sonos
 transitive wheels, is hash-locked in
-`config/container-linux-x86_64-cp312.lock.txt`. Its isolated project-wheel build
+the architecture-specific `config/container-linux-*-cp315.lock.txt` files. Its isolated project-wheel build
 also uses hash-pinned setuptools/wheel. Debian base-image digests and apt package
 versions are not yet content-addressed, so the Containerfile is more repeatable
 but still not a bit-for-bit reproducible release claim.

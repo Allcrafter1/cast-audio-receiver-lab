@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
+import math
 import shlex
 import signal
 import time
@@ -32,7 +33,7 @@ class PlaybackStatus:
     url: str | None = None
     content_type: str = "audio/mpeg"
     current_time: float = 0.0
-    volume: float = 1.0
+    volume: float = 0.25
     muted: bool = False
     idle_reason: str | None = None
 
@@ -73,6 +74,8 @@ class AudioBackend(Protocol):
     async def stop(self) -> None: ...
 
     async def seek(self, position: float) -> None: ...
+
+    async def initialize_volume(self) -> None: ...
 
     async def set_volume(self, level: float, muted: bool) -> None: ...
 
@@ -126,6 +129,28 @@ class NullAudioBackend:
     async def seek(self, position: float) -> None:
         self._set_position(max(0.0, position))
         self._emit_status()
+
+    async def read_volume(self) -> tuple[float, bool] | None:
+        """Read the output, never a persisted/optimistic bridge snapshot."""
+        return None
+
+    async def initialize_volume(self) -> None:
+        """Apply the shared new-session policy before any audio can start."""
+        try:
+            async with asyncio.timeout(10):
+                current = await self.read_volume()
+            level, muted = current if current is not None else (0.0, False)
+            valid = (not isinstance(level, bool) and isinstance(level, (int, float))
+                     and math.isfinite(level) and 0 < level <= 1
+                     and muted is False)
+        except Exception:
+            valid = False
+        if not valid:
+            # Failure to WRITE must abort playback, rather than claim safety.
+            await self.set_volume(0.25, False)
+        else:
+            self._status.volume, self._status.muted = float(level), False
+            self._emit_status()
 
     async def set_volume(self, level: float, muted: bool) -> None:
         self._status.volume = max(0.0, min(1.0, level))
@@ -201,6 +226,14 @@ class CommandAudioBackend(NullAudioBackend):
         self._process: asyncio.subprocess.Process | None = None
         self._watch_task: asyncio.Task[None] | None = None
         self._cleanup_task: asyncio.Task[None] | None = None
+
+    async def initialize_volume(self) -> None:
+        # A free-form subprocess has no volume API. Do not report a safe level
+        # while launching an uncontrolled player at its own default volume.
+        raise RuntimeError("command output cannot initialize volume; use the mpv output")
+
+    async def set_volume(self, level: float, muted: bool) -> None:
+        raise RuntimeError("command output has no volume control; use the mpv output")
 
     async def load(
         self, url: str, content_type: str, autoplay: bool, start_time: float

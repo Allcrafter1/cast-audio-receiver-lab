@@ -30,7 +30,7 @@ In Home Assistant, open **Settings → Apps → App store → Repositories**, ad
 `https://github.com/Allcrafter1/cast-audio-receiver-lab`, refresh the store and
 install **Cast Audio Receiver Lab**. This release supports `amd64` and `aarch64`
 (64-bit ARM), not 32-bit ARM. To update an existing installation, refresh the
-store, choose version **0.7.0-dev1**, and retain the App backup option.
+store, choose version **0.8.0-dev1**, and retain the App backup option.
 
 The source package under `cast-audio-receiver/` has passed a real HAOS/
 Supervisor source build, install, ingress, LAN, local-audio restart and
@@ -58,6 +58,12 @@ Persistent routes, frontend identity and the acquired bundle live under the
 App's `/data`; an App restart retains them. Updating or rolling back must
 preserve `/data`.
 
+Each enabled route advertises its configured audio name and a second name with
+`(YT)` appended for the regular YouTube app. They share one player and output.
+Home Assistant may create two Google Cast entities as a result; disable the
+`(YT)` entity there if it is not useful. Do not delete or rotate receiver IDs as
+a cache workaround, because stable identities are what preserve reconnects.
+
 ## Local OCI build
 
 The checked-in `Containerfile` builds the maintained Vibecast fork, the Python
@@ -75,7 +81,7 @@ private state before permanently dropping to UID/GID 1000:
 docker run --rm --network host \
   -v /absolute/cast-audio-state:/data \
   -e CAST_AUDIO_WEB_PORT=8788 \
-  ghcr.io/allcrafter1/cast-audio-receiver:0.7.0-dev1
+ghcr.io/allcrafter1/cast-audio-receiver:0.8.0-dev1
 ```
 
 For BYO material, additionally mount the file read-only and set

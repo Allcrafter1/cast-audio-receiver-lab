@@ -10,7 +10,7 @@ and [Python PR #19](https://github.com/Allcrafter1/cast-audio-receiver-lab/pull/
 | Maintained Vibecast | Commit and publish the verified dev3 source as a prerelease | Does not publish a product image or upgrade an installation |
 | Vibecast upstream main | Review through `4cde20b3f49b296debec8cb9a2badb51c7bae940`; no wholesale merge | Overlapping YouTube/discovery changes require separate regression work |
 | AirPlay CLI | Prepare v0.5.9 with both Linux asset hashes and rebuilt source evidence | Physical AirPlay 2 acceptance remains unverified; native amd64/ARM64 container build and startup pass CI; deployed laptop runtime is unchanged |
-| Python image | Retain the coherent 3.12 environment; do not merge PR #19 as written | A 3.15 migration needs new dependency/wheel/source inventories and matching CI coverage |
+| Python image | Do not merge PR #19 as written; migrate independently with complete 3.15 records | The release uses new architecture-specific locks, source inventory and CI coverage |
 
 ## Vibecast publication and upstream comparison
 
@@ -92,10 +92,14 @@ exercise only 3.11, 3.12 and 3.13, so they do not validate the proposed 3.15 ima
 Do not weaken `--require-hashes` or allow an unreviewed source-build fallback.
 The new consistency regression checks every Python FROM against the locked
 CPython ABI; the exact image-only PR19 mutation fails that check. Both container
-pip stages also reject an interpreter mismatch with a direct diagnostic. Python
-3.12 stays selected; Dependabot remains enabled and unchanged. A future 3.15
-upgrade must update the build/runtime locks, both architecture wheel inventories,
-source references, CI interpreter matrix and container checks as one change.
+pip stages also reject an interpreter mismatch with a direct diagnostic.
+
+The `0.8.0-dev1` follow-up performs the complete migration instead: CPython 3.15
+build/runtime images, matching `cp315` build and runtime locks, separate
+amd64/ARM64 wheel inventories, refreshed source references, ABI checks and
+Python 3.15 CI. Official wheels are available for all 31 packages. Only
+`aiohttp` 3.14.3 → 3.14.5 and Brotli 1.2.0 → 1.2.1 needed version changes; no
+locally built dependency or source fallback is used.
 
 ## Validation of the maintenance change
 

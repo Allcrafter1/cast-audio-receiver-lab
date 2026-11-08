@@ -94,7 +94,7 @@ class ReleaseRecordTests(unittest.TestCase):
         declared.extend(project["project"]["optional-dependencies"]["dlna"])
         declared.extend(project["project"]["optional-dependencies"]["sonos"])
         lock = json.loads(
-            (ROOT / "config" / "container-linux-x86_64-cp312.wheels.json").read_text()
+            (ROOT / "config" / "container-linux-x86_64-cp315.wheels.json").read_text()
         )
         locked_names = {
             re.sub(r"[-_.]+", "-", item["name"]).lower() for item in lock

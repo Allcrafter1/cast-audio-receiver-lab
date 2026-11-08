@@ -27,7 +27,7 @@ source archives are retained separately from the authentication bundle.
 - AI-development disclosure and contribution guidance.
 - Maintained Vibecast fork commit plus complete fallback patch, source hashes
   and reconstruction checks.
-- Python versioning, complete container CPython 3.12 runtime/build locks and
+- Python versioning, complete container CPython 3.15 runtime/build locks and
   tested x86_64 CPython 3.12/3.13 management wheel locks.
 - AirPlay upstream asset/version record and initial credits/license inventory.
 - Speaker UI without login, stable IDs, deletion and configurable web port.

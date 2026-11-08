@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.11", "3.12", "3.13"]
+        python: ["3.11", "3.12", "3.13", "3.14", "3.15"]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -33,16 +33,16 @@ jobs:
       - run: python -m pip install -e '.[youtube,legacy-research,dlna,sonos]'
       - run: PYTHONPATH=src:. python -m unittest discover -s tests -v
       - name: Check reachable publication history
-        if: matrix.python == '3.12'
+        if: matrix.python == '3.15'
         run: python tools/check_public_history.py .
       - name: Test the isolated publication export
-        if: matrix.python == '3.12'
+        if: matrix.python == '3.15'
         run: |
           python tools/create_public_source_export.py "$RUNNER_TEMP/public-source"
           cd "$RUNNER_TEMP/public-source"
           PYTHONPATH=src:. python -m unittest discover -s tests -v
       - name: Build and inspect runtime wheel
-        if: matrix.python == '3.12'
+        if: matrix.python == '3.15'
         run: |
           python -m pip wheel --no-deps --wheel-dir dist .
           python tools/check_release_wheel.py dist/cast_audio_receiver_lab-*.whl
@@ -60,8 +60,8 @@ jobs:
         run: |
           git clone https://github.com/Allcrafter1/vibecast.git /tmp/vibecast
           git -C /tmp/vibecast checkout --detach 83ba470158189de3bc223701decdc4c502d47644
-          git -C /tmp/vibecast apply --check "$GITHUB_WORKSPACE/patches/vibecast-0.7.0.dev1-current.patch"
-          git -C /tmp/vibecast apply "$GITHUB_WORKSPACE/patches/vibecast-0.7.0.dev1-current.patch"
+          git -C /tmp/vibecast apply --check "$GITHUB_WORKSPACE/patches/vibecast-0.7.0.dev3-current.patch"
+          git -C /tmp/vibecast apply "$GITHUB_WORKSPACE/patches/vibecast-0.7.0.dev3-current.patch"
       - name: Test changed frontend crates
         working-directory: /tmp/vibecast
         run: >-
@@ -72,13 +72,20 @@ jobs:
           -p vibecast-apps-tv4play
           -p vibecast-apps-viaplay
           -p vibecast-apps-youtube
+          -p vibecast-apps-tunein
           -p vibecast-bridge
           -p vibecast-messages
           -p vibecast-platform
           -p vibecast-core
           -p vibecast-player-api
           -p vibecast-sdk
+          -p vibecast-discovery
+          --features vibecast-receiver/mdns
           --lib
+      - name: Test vendored mDNS responder
+        run: |
+          cp -a /tmp/vibecast/vendor/mdns-sd /tmp/mdns-sd-tests
+          cargo test --locked --manifest-path /tmp/mdns-sd-tests/Cargo.toml --lib
       - name: Verify formatting of maintained files
         working-directory: /tmp/vibecast
         run: cargo fmt --all -- --check

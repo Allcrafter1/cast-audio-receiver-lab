@@ -1,0 +1,1002 @@
+--- a/crates/vibecast-apps-youtube/src/lib.rs
++++ b/crates/vibecast-apps-youtube/src/lib.rs
+@@ -70,6 +70,7 @@
+ }
+ 
+ struct CommittedContext {
++    audio_track_id: Option<String>,
+     ownership_epoch: u64,
+     selection_serial: u64,
+     video_id: String,
+@@ -80,6 +81,11 @@
+ }
+ 
+ enum WorkerEvent {
++    AudioTrackRejected {
++        ownership_epoch: u64,
++        selection_serial: u64,
++        video_id: String,
++    },
+     ContextCommitted(CommittedContext),
+     ResolutionFailed {
+         ownership_epoch: u64,
+@@ -163,7 +169,8 @@
+         ctx: &AppContext,
+         _credentials: LaunchCredentials,
+     ) -> Result<Arc<dyn AppSession>, LaunchError> {
+-        let resolver = Resolver::new(ctx.http.clone());
++        let resolver = Resolver::new(ctx.http.clone())
++            .for_ordinary_youtube(ctx.app_id != YOUTUBE_MUSIC_APP_ID);
+         let playback = ctx.playback_controller();
+         let capabilities = ctx.receiver.capabilities.clone();
+ 
+@@ -205,7 +212,8 @@
+         ));
+ 
+         Ok(Arc::new(YouTubeSession {
+-            resolver: Resolver::new(ctx.http.clone()),
++            resolver: Resolver::new(ctx.http.clone())
++                .for_ordinary_youtube(ctx.app_id != YOUTUBE_MUSIC_APP_ID),
+             capabilities: ctx.receiver.capabilities.clone(),
+             identity,
+             mdx_requested,
+@@ -1049,6 +1057,7 @@
+     let mut queue = QueueState::default();
+     let mut next_resolution: Option<NextResolution> = None;
+     let mut current_resolution: Option<CurrentResolution> = None;
++    let mut audio_track_id: Option<String> = None;
+     let mut playback_active = false;
+     let mut stopped = false;
+     let mut failed_resolution: Option<FailedResolution> = None;
+@@ -1073,12 +1082,22 @@
+             }
+         };
+ 
++        let changing_audio_track = matches!(command, LoungeCommand::SelectAudioTrack { .. });
++        let mut requested_audio_track = match &command {
++            LoungeCommand::SelectAudioTrack { audio_track_id, .. } => Some(audio_track_id.clone()),
++            LoungeCommand::SetPlaylist { .. }
++            | LoungeCommand::Next
++            | LoungeCommand::Previous
++            | LoungeCommand::Stop => None,
++            _ => audio_track_id.clone(),
++        };
+         let repeating = matches!(command, LoungeCommand::RepeatCurrent);
+         if repeating {
+             queue.selection_serial = queue.selection_serial.wrapping_add(1);
+         }
+         let reload_autoplay = match &command {
+-            LoungeCommand::ReloadCurrent { autoplay, .. } => Some(*autoplay),
++            LoungeCommand::ReloadCurrent { autoplay, .. }
++            | LoungeCommand::SelectAudioTrack { autoplay, .. } => Some(*autoplay),
+             _ => None,
+         };
+         let retries_used = match &command {
+@@ -1128,6 +1147,17 @@
+             );
+         }
+         let load = match command {
++            LoungeCommand::SelectAudioTrack {
++                video_id,
++                current_time,
++                ..
++            } => {
++                if stopped || queue.video_ids.get(queue.current_index) != Some(&video_id) {
++                    continue;
++                }
++                queue.selection_serial = queue.selection_serial.wrapping_add(1);
++                Some((video_id, current_time, queue.credential.clone()))
++            }
+             LoungeCommand::ReloadCurrent {
+                 video_id,
+                 current_time,
+@@ -1237,6 +1267,7 @@
+                 if queue.next_pending && queue.current_index + 1 < queue.video_ids.len() {
+                     queue.selection_serial = queue.selection_serial.wrapping_add(1);
+                     queue.current_index += 1;
++                    requested_audio_track = None;
+                     queue.credential = None;
+                     queue.params = None;
+                     queue.next_pending = false;
+@@ -1360,6 +1391,7 @@
+                 None
+             }
+             LoungeCommand::Stop => {
++                audio_track_id = None;
+                 stopped = true;
+                 failed_resolution = None;
+                 current_resolution = None;
+@@ -1381,7 +1413,12 @@
+         if let Some((video_id, start_time, credential)) = load {
+             stopped = false;
+             failed_resolution = None;
+-            current_resolution = None;
++            // A track change is committed only after successful resolution.
++            // Keep the playing rendition across failures or another track request.
++            if !changing_audio_track {
++                current_resolution = None;
++            }
++            let selected_resolver = resolver.with_audio_track(requested_audio_track.as_deref());
+             tracing::info!(%video_id, start_time, "YouTube queue requests load");
+             let snapshot = settings.snapshot();
+             let preferred_video_codec = PreferredVideoCodec::from_snapshot(&snapshot);
+@@ -1465,7 +1502,7 @@
+                 match prepared {
+                     Some(media) => Ok(media),
+                     None => {
+-                        let mut result = resolver
++                        let mut result = selected_resolver
+                             .resolve(
+                                 &video_id,
+                                 start_time,
+@@ -1483,7 +1520,7 @@
+                         {
+                             tracing::warn!("retrying YouTube resolution after request failure");
+                             tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+-                            result = resolver
++                            result = selected_resolver
+                                 .resolve(
+                                     &video_id,
+                                     start_time,
+@@ -1545,7 +1582,7 @@
+                                 }
+                             }
+                             Some(LoungeCommand::SetPlaylist { video_ids, current_index, current_time, list_id, params, credential: incoming_credential })
+-                                if video_ids.get(current_index) == Some(&video_id)
++                                if !changing_audio_track && video_ids.get(current_index) == Some(&video_id)
+                                     && current_index == queue.current_index && current_time == start_time
+                                     && incoming_credential == credential
+                                     && params == queue.params => {
+@@ -1559,7 +1596,8 @@
+                                 );
+                                 queue.credential = incoming_credential;
+                             }
+-                            Some(LoungeCommand::ReloadCurrent { video_id: retry_id, .. })
++                            Some(LoungeCommand::SelectAudioTrack { video_id: retry_id, .. })
++                            | Some(LoungeCommand::ReloadCurrent { video_id: retry_id, .. })
+                                 if retry_id != video_id => {
+                                 // A delayed recovery for the previous item must not
+                                 // cancel the user's newer in-flight selection.
+@@ -1600,7 +1638,7 @@
+                     media.autoplay = autoplay;
+                     prepare_audio_refresh(
+                         &media,
+-                        &resolver,
++                        &selected_resolver,
+                         &video_id,
+                         &capabilities,
+                         preferred_video_codec,
+@@ -1608,6 +1646,7 @@
+                         effective_credential.as_ref(),
+                     );
+                     playback_active = true;
++                    audio_track_id = requested_audio_track;
+                     current_resolution = Some(CurrentResolution {
+                         video_id: video_id.clone(),
+                         credential: effective_credential.clone(),
+@@ -1620,6 +1659,7 @@
+                         "committing resolved YouTube selection");
+                     let _ = worker_events
+                         .send(WorkerEvent::ContextCommitted(CommittedContext {
++                            audio_track_id: audio_track_id.clone(),
+                             ownership_epoch: expected_ownership_epoch,
+                             selection_serial: event_selection_serial,
+                             video_id: video_id.clone(),
+@@ -1632,6 +1672,17 @@
+                     playback.load(media).await;
+                 }
+                 Err((error, context)) => {
++                    if changing_audio_track && current_resolution.is_some() {
++                        tracing::warn!("requested YouTube audio track could not be resolved; preserving playback");
++                        let _ = worker_events
++                            .send(WorkerEvent::AudioTrackRejected {
++                                ownership_epoch: expected_ownership_epoch,
++                                selection_serial: event_selection_serial,
++                                video_id: video_id.clone(),
++                            })
++                            .await;
++                        continue 'commands;
++                    }
+                     playback_active = false;
+                     let class = resolution_failure_class(&error);
+                     let discovered = known_navigation.lock().unwrap().get(
+@@ -1952,6 +2003,208 @@
+     }
+ 
+     #[tokio::test]
++    async fn ordinary_youtube_track_switch_preserves_position_pause_refresh_and_new_selection() {
++        use wiremock::{
++            matchers::{method, path},
++            Mock, MockServer, ResponseTemplate,
++        };
++        let server = MockServer::start().await;
++        Mock::given(method("GET"))
++            .and(path("/watch"))
++            .respond_with(
++                ResponseTemplate::new(200).set_body_string(r#"{"INNERTUBE_API_KEY":"test"}"#),
++            )
++            .mount(&server)
++            .await;
++        Mock::given(method("POST")).and(path("/youtubei/v1/player"))
++            .respond_with(|req: &wiremock::Request| {
++                let body: serde_json::Value = serde_json::from_slice(&req.body).unwrap();
++                assert_eq!(body.pointer("/context/user/credentialTransferTokens/0/token").and_then(serde_json::Value::as_str), Some("video-token"));
++                let video = body["videoId"].as_str().unwrap();
++                let formats: Vec<_> = [("en-US.4", "English Original", 120000), ("es.3", "Spanish Dubbed", 160000)]
++                    .into_iter().map(|(id, label, bitrate)| serde_json::json!({
++                        "itag":140, "mimeType":"audio/mp4; codecs=\"mp4a.40.2\"", "bitrate":bitrate,
++                        "url":format!("https://media.test/{video}/{id}?itag=140&lmt=123&clen=12345"),
++                        "initRange":{"start":"0","end":"10"},"indexRange":{"start":"11","end":"20"},
++                        "audioTrack":{"id":id,"displayName":label,"audioIsDefault":id=="en-US.4"}
++                    })).collect();
++                ResponseTemplate::new(200).set_body_json(serde_json::json!({
++                    "playabilityStatus":{"status":"OK"},"streamingData":{"adaptiveFormats":formats},
++                    "videoDetails":{"videoId":video,"lengthSeconds":"120"}
++                }))
++            }).mount(&server).await;
++        let resolver = Resolver::with_endpoints(reqwest::Client::new(), &server.uri())
++            .for_ordinary_youtube(true);
++        let player = Arc::new(RecordingPlayback::default());
++        let (tx, rx) = mpsc::channel(8);
++        let (events, mut received) = mpsc::channel(8);
++        let (cancel, cancelled) = watch::channel(false);
++        let mut capabilities = vibecast_sdk::PlayerCapabilities::default();
++        capabilities.local_audio_cache = true;
++        capabilities.audio_codecs = vec!["aac".into()];
++        let worker = tokio::spawn(run_commands_with_events(
++            rx,
++            resolver,
++            player.clone(),
++            capabilities,
++            test_settings(),
++            events,
++            cancelled,
++        ));
++        tx.send(credential_selection(&["A"], 0, "video-token"))
++            .await
++            .unwrap();
++        assert!(matches!(
++            received.recv().await,
++            Some(WorkerEvent::ContextCommitted(_))
++        ));
++        wait_loads(&player, 1).await;
++        assert!(player.loaded.lock().unwrap()[0].streams[0]
++            .source
++            .as_url()
++            .unwrap()
++            .contains("/A/en-US.4?"));
++        tx.send(LoungeCommand::SelectAudioTrack {
++            video_id: "A".into(),
++            audio_track_id: "es.3".into(),
++            current_time: 42.0,
++            autoplay: false,
++        })
++        .await
++        .unwrap();
++        assert!(
++            matches!(received.recv().await, Some(WorkerEvent::ContextCommitted(CommittedContext {
++            audio_track_id:Some(track), .. })) if track == "es.3")
++        );
++        wait_loads(&player, 2).await;
++        let switched = player.loaded.lock().unwrap()[1].clone();
++        assert_eq!(switched.start_time, 42.0);
++        assert!(!switched.autoplay);
++        assert!(switched.streams[0]
++            .source
++            .as_url()
++            .unwrap()
++            .contains("/A/es.3?"));
++        let vibecast_sdk::StreamSource::CachedUrl { cache, .. } = &switched.streams[0].source
++        else {
++            panic!()
++        };
++        let refreshed = cache.source_refresh().unwrap().refresh().await.unwrap();
++        assert!(
++            refreshed.contains("/A/es.3?"),
++            "URL refresh changed the selected track"
++        );
++        // An unavailable requested track must not stop or replace working audio.
++        tx.send(LoungeCommand::SelectAudioTrack {
++            video_id: "A".into(),
++            audio_track_id: "absent".into(),
++            current_time: 43.0,
++            autoplay: false,
++        })
++        .await
++        .unwrap();
++        assert!(matches!(
++            received.recv().await,
++            Some(WorkerEvent::AudioTrackRejected { .. })
++        ));
++        assert_eq!(player.loaded.lock().unwrap().len(), 2);
++        assert!(!player
++            .operations
++            .lock()
++            .unwrap()
++            .iter()
++            .any(|op| op == "stop"));
++        // A different video uses its own default, not the previous video's track.
++        tx.send(credential_selection(&["B"], 0, "video-token"))
++            .await
++            .unwrap();
++        assert!(matches!(
++            received.recv().await,
++            Some(WorkerEvent::ContextCommitted(CommittedContext {
++                audio_track_id: None,
++                ..
++            }))
++        ));
++        wait_loads(&player, 3).await;
++        assert!(player.loaded.lock().unwrap()[2].streams[0]
++            .source
++            .as_url()
++            .unwrap()
++            .contains("/B/en-US.4?"));
++        cancel.send(true).unwrap();
++        worker.await.unwrap();
++    }
++
++    #[tokio::test]
++    async fn superseded_track_requests_keep_the_committed_media_on_failure() {
++        let (resolver, mut requests) = Resolver::controlled();
++        let player = Arc::new(RecordingPlayback::default());
++        let (tx, rx) = mpsc::channel(8);
++        let (events, mut received) = mpsc::channel(8);
++        let (cancel, cancelled) = watch::channel(false);
++        let worker = tokio::spawn(run_commands_with_events(
++            rx,
++            resolver,
++            player.clone(),
++            vibecast_sdk::PlayerCapabilities::default(),
++            test_settings(),
++            events,
++            cancelled,
++        ));
++        tx.send(selection(&["A"], 0)).await.unwrap();
++        requests
++            .recv()
++            .await
++            .unwrap()
++            .1
++            .send(Ok(test_media("original")))
++            .unwrap();
++        assert!(matches!(
++            received.recv().await,
++            Some(WorkerEvent::ContextCommitted(_))
++        ));
++        wait_loads(&player, 1).await;
++        tx.send(LoungeCommand::SelectAudioTrack {
++            video_id: "A".into(),
++            audio_track_id: "es.3".into(),
++            current_time: 42.0,
++            autoplay: true,
++        })
++        .await
++        .unwrap();
++        let (_, cancelled_track) = requests.recv().await.unwrap();
++        tx.send(LoungeCommand::SelectAudioTrack {
++            video_id: "A".into(),
++            audio_track_id: "absent".into(),
++            current_time: 43.0,
++            autoplay: true,
++        })
++        .await
++        .unwrap();
++        let (_, unavailable) = requests.recv().await.unwrap();
++        assert!(cancelled_track.is_closed());
++        unavailable
++            .send(Err(ResolveError::NoCompatibleStream))
++            .unwrap();
++        assert!(matches!(
++            received.recv().await,
++            Some(WorkerEvent::AudioTrackRejected { .. })
++        ));
++        tx.send(LoungeCommand::RepeatCurrent).await.unwrap();
++        wait_loads(&player, 2).await;
++        assert!(
++            requests.try_recv().is_err(),
++            "repeat must reuse the previously committed media"
++        );
++        assert_eq!(
++            *player.operations.lock().unwrap(),
++            ["load:original", "load:original"]
++        );
++        cancel.send(true).unwrap();
++        worker.await.unwrap();
++    }
++
++    #[tokio::test]
+     async fn cache_refresh_accepts_only_the_same_encoded_object() {
+         use vibecast_sdk::MediaSourceRefresh;
+         let original = vibecast_sdk::PlaybackStream::cached_url(
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -71,6 +71,12 @@
+         video_ids: Vec<String>,
+         list_id: Option<String>,
+         params: Option<PlaylistParams>,
++    },
++    SelectAudioTrack {
++        video_id: String,
++        audio_track_id: String,
++        current_time: f64,
++        autoplay: bool,
+     },
+     RemoteDevices(Vec<String>),
+     Play,
+@@ -142,6 +148,11 @@
+ 
+ #[derive(Default)]
+ struct CurrentMedia {
++    // Retain the proven Music queue-enrichment workaround only for Music.
++    // Ordinary YouTube uses setPlaylist/VIDEO_ADDED for an explicit new video.
++    ordinary_youtube: bool,
++    audio_track_id: Option<String>,
++    pending_audio_track: Option<String>,
+     volume_compatibility: Option<(Arc<crate::volume::WebVolumeCompatibility>, u64)>,
+     recovery: LoadRecovery,
+     loop_mode: LoopMode,
+@@ -183,6 +194,7 @@
+             list_id,
+             params,
+             credential,
++            audio_track_id,
+         } = context;
+         if self.ownership_epoch != ownership_epoch
+             || self.selection_serial != selection_serial
+@@ -196,8 +208,12 @@
+         }
+         let list_id = list_id.or_else(|| self.list_id.clone());
+         let params = params.or_else(|| self.params.clone());
+-        let changed =
+-            self.list_id != list_id || self.params != params || self.credential != credential;
++        let changed = self.list_id != list_id
++            || self.params != params
++            || self.credential != credential
++            || self.audio_track_id != audio_track_id;
++        self.pending_audio_track = None;
++        self.audio_track_id = audio_track_id;
+         self.list_id = list_id;
+         self.params = params;
+         self.credential = credential;
+@@ -340,6 +356,31 @@
+     }
+ 
+     fn coalesce_pending_selection(&self, incoming: Incoming) -> Incoming {
++        if let Incoming::AudioTrack {
++            video_id,
++            audio_track_id,
++        } = incoming
++        {
++            if !self.ordinary_youtube
++                || self.stopped
++                || self.video_id.as_deref() != Some(video_id.as_str())
++                || self.pending_audio_track.as_deref() == Some(audio_track_id.as_str())
++                || (self.pending_audio_track.is_none()
++                    && self.audio_track_id.as_deref() == Some(audio_track_id.as_str()))
++            {
++                return Incoming::Ignored;
++            }
++            return Incoming::Command(LoungeCommand::SelectAudioTrack {
++                video_id,
++                audio_track_id,
++                current_time: self.state.as_ref().map_or(0.0, |s| s.current_time),
++                autoplay: !self.recovery.paused
++                    && self
++                        .state
++                        .as_ref()
++                        .is_none_or(|s| s.player_state != PlayerState::Paused),
++            });
++        }
+         if matches!(incoming, Incoming::Command(LoungeCommand::Play))
+             && self.recovery.enabled
+             && self.recovery.failed
+@@ -364,7 +405,8 @@
+                     ..
+                 } = command
+                 {
+-                    if self.video_id.is_some()
++                    if !self.ordinary_youtube
++                        && self.video_id.is_some()
+                         && self
+                             .video_id
+                             .as_ref()
+@@ -595,7 +637,10 @@
+             device_id: identity.device_id,
+             discovery_device_id: cast_cloud_device_id(&receiver.device_id),
+             ownership_epoch: Arc::new(AtomicU64::new(0)),
+-            current: CurrentMedia::default(),
++            current: CurrentMedia {
++                ordinary_youtube: theme == "cl",
++                ..Default::default()
++            },
+         })
+     }
+ 
+@@ -801,7 +846,10 @@
+                     }
+                     event = worker_event_rx.recv() => {
+                         let Some(event) = event else { return Ok(()); };
+-                        if self.apply_worker_event(event) { feedback.push(Outbound::NowPlaying); }
++                        if self.apply_worker_event(event) {
++                            feedback.push(Outbound::NowPlaying);
++                            if self.current.audio_track_id.is_some() { feedback.push(Outbound::AudioTrack); }
++                        }
+                     }
+                     volume = volume_change(&mut self.volume_rx) => {
+                         self.current.volume = Some(volume);
+@@ -893,6 +941,19 @@
+ 
+     fn apply_worker_event(&mut self, event: WorkerEvent) -> bool {
+         match event {
++            WorkerEvent::AudioTrackRejected {
++                ownership_epoch,
++                selection_serial,
++                video_id,
++            } => {
++                let current = self.current.ownership_epoch == ownership_epoch
++                    && self.current.selection_serial == selection_serial
++                    && self.current.video_id.as_deref() == Some(video_id.as_str());
++                if current {
++                    self.current.pending_audio_track = None;
++                }
++                current
++            }
+             WorkerEvent::ContextCommitted(context) => self.current.commit_worker_context(context),
+             WorkerEvent::ResolutionFailed {
+                 ownership_epoch,
+@@ -1032,6 +1093,8 @@
+                 }
+             }
+             Incoming::Command(LoungeCommand::Stop) => {
++                self.current.pending_audio_track = None;
++                self.current.audio_track_id = None;
+                 self.current.stopped = true;
+                 self.current.next_pending = false;
+                 self.current.recovery = LoadRecovery::default();
+@@ -1050,6 +1113,13 @@
+             _ => {}
+         }
+         match incoming {
++            Incoming::Command(LoungeCommand::SelectAudioTrack { audio_track_id, .. }) => {
++                // Keep the old audio/state until the new track has resolved.
++                // Selection serials reject any earlier asynchronous completion.
++                self.current.pending_audio_track = Some(audio_track_id.clone());
++                self.current.selection_serial = self.current.selection_serial.wrapping_add(1);
++                None
++            }
+             Incoming::Command(LoungeCommand::ReloadCurrent {
+                 current_time,
+                 autoplay,
+@@ -1098,6 +1168,8 @@
+                 credential,
+             }) => {
+                 self.current.selection_serial = self.current.selection_serial.wrapping_add(1);
++                self.current.pending_audio_track = None;
++                self.current.audio_track_id = None;
+                 self.current.video_ids.clone_from(video_ids);
+                 self.current.awaiting_load = true;
+                 self.current.video_id = video_ids.get(*current_index).cloned();
+@@ -1140,6 +1212,8 @@
+                         .video_ids
+                         .get(self.current.current_index)
+                         .cloned();
++                    self.current.audio_track_id = None;
++                    self.current.pending_audio_track = None;
+                     self.current.credential = None;
+                     self.current.params = None;
+                     self.current.next_pending = false;
+@@ -1186,6 +1260,8 @@
+                 }
+             }
+             Incoming::Command(LoungeCommand::Previous) => {
++                self.current.pending_audio_track = None;
++                self.current.audio_track_id = None;
+                 if self.current.video_ids.is_empty() {
+                     return None;
+                 }
+@@ -1216,6 +1292,7 @@
+             Incoming::GetDiscoveryDeviceId => Some(Outbound::DiscoveryDeviceId),
+             Incoming::Command(_)
+             | Incoming::QueueAddition(_)
++            | Incoming::AudioTrack { .. }
+             | Incoming::Ignored
+             | Incoming::RemoteVolumeProfile(_) => None,
+         }
+@@ -1409,6 +1486,7 @@
+ }
+ 
+ enum Outbound {
++    AudioTrack,
+     LoopMode,
+     NowPlaying,
+     State(PlaybackState),
+@@ -1436,6 +1514,15 @@
+         )
+         .append_pair("ofs", &ofs.to_string());
+         match self {
++            Self::AudioTrack => {
++                form.append_pair("req0__sc", "onAudioTrackChanged");
++                if let Some(video_id) = &current.video_id {
++                    form.append_pair("req0_videoId", video_id);
++                }
++                if let Some(track) = &current.audio_track_id {
++                    form.append_pair("req0_audioTrackId", track);
++                }
++            }
+             Self::LoopMode => {
+                 form.append_pair("req0__sc", "onLoopModeChanged")
+                     .append_pair("req0_loopMode", current.loop_mode.as_str());
+@@ -1444,6 +1531,9 @@
+                 form.append_pair("req0__sc", "nowPlaying");
+                 if let Some(video_id) = &current.video_id {
+                     form.append_pair("req0_videoId", video_id);
++                }
++                if let Some(track) = &current.audio_track_id {
++                    form.append_pair("req0_audioTrackId", track);
+                 }
+                 if let Some(state) = &current.state {
+                     append_state_fields(&mut form, "req0_", state);
+@@ -1635,6 +1725,10 @@
+ }
+ 
+ enum Incoming {
++    AudioTrack {
++        video_id: String,
++        audio_track_id: String,
++    },
+     RemoteVolumeProfile(bool),
+     SetLoopMode(LoopMode),
+     GetLoopMode,
+@@ -1836,6 +1930,100 @@
+     }
+ 
+     #[test]
++    fn ordinary_youtube_accepts_a_track_change_for_the_current_video_only() {
++        let current = CurrentMedia {
++            ordinary_youtube: true,
++            video_id: Some("active".into()),
++            state: Some(PlaybackState {
++                player_state: PlayerState::Paused,
++                current_time: 42.0,
++                duration: Some(100.0),
++                idle_reason: None,
++                media_recovery_attempts: 0,
++            }),
++            ..Default::default()
++        };
++        let request = |video: &str| {
++            parse_message(&[
++                Value::from("setAudioTrack"),
++                serde_json::json!({"videoId":video,"audioTrackId":"en-US.4"}),
++            ])
++        };
++        assert!(matches!(
++            current.coalesce_pending_selection(request("active")),
++            Incoming::Command(LoungeCommand::SelectAudioTrack {
++                current_time: 42.0,
++                autoplay: false,
++                ..
++            })
++        ));
++        let switching = CurrentMedia {
++            ordinary_youtube: true,
++            video_id: Some("active".into()),
++            audio_track_id: Some("en-US.4".into()),
++            pending_audio_track: Some("es.3".into()),
++            ..Default::default()
++        };
++        assert!(matches!(
++            switching.coalesce_pending_selection(request("active")),
++            Incoming::Command(_)
++        ));
++        assert!(matches!(
++            current.coalesce_pending_selection(request("old")),
++            Incoming::Ignored
++        ));
++        let music = CurrentMedia {
++            ordinary_youtube: false,
++            ..current
++        };
++        assert!(matches!(
++            music.coalesce_pending_selection(request("active")),
++            Incoming::Ignored
++        ));
++    }
++
++    #[test]
++    fn ordinary_youtube_set_playlist_selects_a_newly_added_video() {
++        let current = CurrentMedia {
++            ordinary_youtube: true,
++            video_id: Some("active".into()),
++            video_ids: vec!["active".into()],
++            list_id: Some("queue".into()),
++            ..Default::default()
++        };
++        // Actual Lounge transformation of the web sender's setPlaylist(videoId):
++        // the server inserts an absent item and labels the *selection* VIDEO_ADDED.
++        let selected = current.coalesce_pending_selection(parse_message(&[
++            Value::from("setPlaylist"),
++            serde_json::json!({
++                "videoId":"new", "videoIds":"active,new", "currentIndex":"1",
++                "listId":"queue", "currentTime":"0", "ctt":"new-video-token",
++                "eventDetails":r#"{"eventType":"VIDEO_ADDED","videoId":"new"}"#
++            }),
++        ]));
++        assert!(matches!(
++            selected,
++            Incoming::Command(LoungeCommand::SetPlaylist {
++                current_index: 1,
++                credential: Some(_),
++                ..
++            })
++        ));
++        // Adding without selecting is a different command, despite the same event type.
++        let queued = current.coalesce_pending_selection(parse_message(&[
++            Value::from("updatePlaylist"),
++            serde_json::json!({
++                "videoIds":"active,new", "listId":"queue",
++                "eventDetails":r#"{"eventType":"VIDEO_ADDED","videoId":"new"}"#
++            }),
++        ]));
++        assert!(matches!(
++            queued,
++            Incoming::Command(LoungeCommand::UpdatePlaylist { .. })
++        ));
++    }
++
++    #[test]
+     fn queue_addition_never_replaces_the_active_item_context() {
+         let current = CurrentMedia {
+             video_ids: vec!["active".into(), "next".into()],
+@@ -2183,6 +2371,27 @@
+         return Incoming::Command(command);
+     }
+     match name {
++        "setAudioTrack" => {
++            let video = params
++                .and_then(|p| p.get("videoId"))
++                .and_then(Value::as_str);
++            let track = params
++                .and_then(|p| p.get("audioTrackId"))
++                .and_then(Value::as_str)
++                .filter(|t| {
++                    !t.is_empty()
++                        && t.len() <= 128
++                        && t.bytes()
++                            .all(|b| b.is_ascii_alphanumeric() || b"._-".contains(&b))
++                });
++            match (video, track) {
++                (Some(video), Some(track)) => Incoming::AudioTrack {
++                    video_id: video.to_owned(),
++                    audio_track_id: track.to_owned(),
++                },
++                _ => Incoming::Ignored,
++            }
++        }
+         "setLoopMode" => params
+             .and_then(|p| p.get("loopMode"))
+             .and_then(LoopMode::parse)
+@@ -2861,6 +3070,7 @@
+         };
+ 
+         assert!(current.commit_worker_context(CommittedContext {
++            audio_track_id: None,
+             ownership_epoch: 4,
+             selection_serial: 7,
+             video_id: "selected".into(),
+@@ -3143,6 +3353,7 @@
+             ..Default::default()
+         };
+         current.commit_worker_context(CommittedContext {
++            audio_track_id: None,
+             ownership_epoch: 0,
+             selection_serial: 1,
+             video_id: "a".into(),
+@@ -3153,6 +3364,7 @@
+         });
+         current.mark_resolution_failed(0, 1, "a", ResolutionFailureClass::CredentialsRequired);
+         current.commit_worker_context(CommittedContext {
++            audio_track_id: None,
+             ownership_epoch: 1,
+             selection_serial: 0,
+             video_id: "a".into(),
+--- a/crates/vibecast-apps-youtube/src/resolver.rs
++++ b/crates/vibecast-apps-youtube/src/resolver.rs
+@@ -104,6 +104,8 @@
+ 
+ #[derive(Clone)]
+ pub(crate) struct Resolver {
++    prefer_original_audio: bool,
++    preferred_audio_track: Option<String>,
+     http: reqwest::Client,
+     endpoints: Endpoints,
+     bootstrap: std::sync::Arc<tokio::sync::Mutex<Option<InnertubeBootstrap>>>,
+@@ -193,6 +195,8 @@
+     }
+     pub(crate) fn new(http: reqwest::Client) -> Self {
+         Self {
++            prefer_original_audio: false,
++            preferred_audio_track: None,
+             http,
+             endpoints: Endpoints::default(),
+             bootstrap: Default::default(),
+@@ -206,8 +210,10 @@
+     }
+ 
+     #[cfg(test)]
+-    fn with_endpoints(http: reqwest::Client, base: &str) -> Self {
++    pub(crate) fn with_endpoints(http: reqwest::Client, base: &str) -> Self {
+         Self {
++            prefer_original_audio: false,
++            preferred_audio_track: None,
+             http,
+             endpoints: Endpoints {
+                 watch: format!("{base}/watch"),
+@@ -219,6 +225,17 @@
+             test_contexts: None,
+             test_navigation: None,
+         }
++    }
++
++    pub(crate) fn for_ordinary_youtube(mut self, enabled: bool) -> Self {
++        self.prefer_original_audio = enabled;
++        self
++    }
++
++    pub(crate) fn with_audio_track(&self, track: Option<&str>) -> Self {
++        let mut resolver = self.clone();
++        resolver.preferred_audio_track = track.map(str::to_owned);
++        resolver
+     }
+ 
+     pub(crate) async fn resolve(
+@@ -242,7 +259,7 @@
+         }
+         let credential = credential.filter(|credential| credential.applies_to(video_id));
+         let started = std::time::Instant::now();
+-        if credential.is_some() {
++        if credential.is_some() || self.preferred_audio_track.is_some() {
+             let mut media = self
+                 .resolve_metadata(
+                     video_id,
+@@ -255,7 +272,7 @@
+             make_first_stream_cacheable(&mut media, capabilities.local_audio_cache);
+             tracing::info!(
+                 %video_id,
+-                has_ctt = true,
++                has_ctt = credential.is_some(),
+                 total_ms = started.elapsed().as_millis() as u64,
+                 "YouTube credential-bound resolution completed"
+             );
+@@ -467,7 +484,14 @@
+             return Err(ResolveError::Unplayable { status, reason });
+         }
+ 
+-        playback_media(response, start_time, capabilities, preferred_video_codec)
++        playback_media(
++            response,
++            start_time,
++            capabilities,
++            preferred_video_codec,
++            self.prefer_original_audio,
++            self.preferred_audio_track.as_deref(),
++        )
+     }
+ }
+ 
+@@ -1367,6 +1391,8 @@
+     start_time: f64,
+     capabilities: &PlayerCapabilities,
+     preferred_video_codec: PreferredVideoCodec,
++    prefer_original_audio: bool,
++    preferred_audio_track: Option<&str>,
+ ) -> Result<PlaybackMedia, ResolveError> {
+     let PlayerResponse {
+         streaming_data,
+@@ -1396,7 +1422,17 @@
+                 .iter()
+                 .any(|codec| codec == rep.codec.token())
+         })
+-        .max_by_key(|rep| rep.bitrate)
++        // Choose content before encoding quality. Otherwise a dubbed or
++        // descriptive track with slightly more bytes displaces the original.
++        .filter(|rep| preferred_audio_track.is_none_or(|track| rep.track_id == track))
++        .max_by_key(|rep| {
++            (
++                prefer_original_audio && rep.kind == AudioKind::Original,
++                prefer_original_audio && rep.is_default,
++                prefer_original_audio && !rep.is_drc,
++                rep.bitrate,
++            )
++        })
+         .ok_or(ResolveError::NoCompatibleStream)?;
+     let audio_url = audio.url.to_owned();
+     let audio_content_type = audio.container.to_owned();
+@@ -2859,6 +2895,86 @@
+         assert!(mpd.contains("<Initialization range=\"0-219\"/>"));
+         assert!(mpd.contains("frameRate=\"25\""));
+         assert!(mpd.contains("mediaPresentationDuration=\"PT213.040S\""));
++    }
++
++    #[test]
++    fn direct_audio_track_selection_is_exact_and_music_default_stays_unchanged() {
++        let resolve = |original, track| {
++            playback_media(
++                PlayerResponse {
++                    playability_status: PlayabilityStatus::default(),
++                    streaming_data: Some(StreamingData {
++                        adaptive_formats: multilingual_formats(),
++                    }),
++                    video_details: None,
++                    captions: None,
++                },
++                0.0,
++                &caps(&[], &["aac"], &[], (0, 0)),
++                PreferredVideoCodec::Auto,
++                original,
++                track,
++            )
++        };
++        assert_eq!(
++            resolve(true, None).unwrap().streams[0].source.as_url(),
++            Some("https://media.example/en-aac")
++        );
++        assert_eq!(
++            resolve(true, Some("es.3")).unwrap().streams[0]
++                .source
++                .as_url(),
++            Some("https://media.example/es-aac")
++        );
++        assert_eq!(
++            resolve(true, Some("en.5")).unwrap().streams[0]
++                .source
++                .as_url(),
++            Some("https://media.example/en-description")
++        );
++        assert!(matches!(
++            resolve(true, Some("absent")),
++            Err(ResolveError::NoCompatibleStream)
++        ));
++        // Legacy Music tie-breaking remains exactly the previous max-bitrate rule.
++        assert_eq!(
++            resolve(false, None).unwrap().streams[0].source.as_url(),
++            Some("https://media.example/en-description")
++        );
++    }
++
++    #[test]
++    fn direct_audio_prefers_original_over_a_higher_bitrate_localized_default() {
++        let mut formats = multilingual_formats();
++        for format in &mut formats {
++            if let Some(track) = &mut format.audio_track {
++                track.audio_is_default = track.id == "es.3";
++                if track.id == "es.3" {
++                    format.bitrate = Some(999_000);
++                }
++            }
++        }
++        let media = playback_media(
++            PlayerResponse {
++                playability_status: PlayabilityStatus::default(),
++                streaming_data: Some(StreamingData {
++                    adaptive_formats: formats,
++                }),
++                video_details: None,
++                captions: None,
++            },
++            12.0,
++            &caps(&[], &["opus", "aac"], &[], (0, 0)),
++            PreferredVideoCodec::Auto,
++            true,
++            None,
++        )
++        .unwrap();
++        assert_eq!(
++            media.streams[0].source.as_url(),
++            Some("https://media.example/en-opus-high")
++        );
++        assert_eq!(media.start_time, 12.0);
+     }
+ 
+     #[test]

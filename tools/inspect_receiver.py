@@ -121,7 +121,7 @@ async def inspect(
         )
         try:
             availability = await _wait_for_type(
-                reader, writer, "APP_AVAILABILITY", min(timeout, 3.0)
+                reader, writer, ("GET_APP_AVAILABILITY", "APP_AVAILABILITY"), min(timeout, 3.0)
             )
         except TimeoutError:
             availability = {"type": "NO_APP_AVAILABILITY_RESPONSE"}

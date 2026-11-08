@@ -24,8 +24,8 @@ FILES = (
     "THIRD_PARTY_NOTICES.md",
     "tests/test_mpv_integration.py",
     "tests/test_dlna_media.py",
-    "config/container-build-cp312.lock.txt",
-    "config/container-linux-x86_64-cp312.lock.txt",
+    "config/container-build-cp315.lock.txt",
+    "config/container-linux-x86_64-cp315.lock.txt",
 )
 
 

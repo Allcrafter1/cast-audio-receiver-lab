@@ -1,11 +1,12 @@
 # Dependency artifact locks
 
-The OCI amd64/CPython 3.12 runtime has a separate complete Python artifact lock:
-`config/container-linux-x86_64-cp312.lock.txt` and its metadata/licence inventory
-`config/container-linux-x86_64-cp312.wheels.json`. It includes the YouTube
+The OCI CPython 3.15 runtime has separate complete Python artifact locks for
+amd64 and ARM64: `config/container-linux-x86_64-cp315.lock.txt` and
+`config/container-linux-aarch64-cp315.lock.txt`, with matching metadata/licence
+inventories. They include the YouTube
 extractor stack and optional DLNA/Sonos adapters. Project-wheel build tools are
-isolated in `config/container-build-cp312.lock.txt` with the matching
-`config/container-build-cp312.wheels.json`; they are not runtime dependencies.
+isolated in `config/container-build-cp315.lock.txt` with the matching
+`config/container-build-cp315.wheels.json`; they are not runtime dependencies.
 CI verifies that every direct Python runtime dependency declared by the project
 is represented in the container lock. These locks do not cover Debian packages
 or the base image.
@@ -16,9 +17,10 @@ The accompanying `.wheels.json` records filenames, digests and declared licenses
 from wheel METADATA. It was generated from the already-tested version constraints,
 not by upgrading packages. Total downloaded artifacts were about 9.1 MiB.
 
-The container lock was verified in a new CPython 3.12 virtual environment with
-an offline `--require-hashes` installation, `pip check`, and imports of all major
-runtime adapters. A separate CPython 3.13 Linux x86_64 management lock
+The container locks are installed with `--only-binary`, `--require-hashes` and
+`pip check` during both native image builds. The Python 3.15 migration required
+official wheels for `aiohttp 3.14.5` and `brotli 1.2.1`; nothing is compiled or
+locally substituted by the lock generation. A separate CPython 3.13 Linux x86_64 management lock
 is now available as `management-linux-x86_64-cp313.lock.txt` with its own wheel
 inventory. A fresh environment on the laptop passed offline hash-locked install,
 `pip check`, and all 137 tests without skips using the installed dev5 wheel
@@ -30,13 +32,13 @@ Use python3.13 and the cp313 lock in the commands below for that target.
 For that exact interpreter/platform, prepare a wheelhouse from public PyPI:
 
 ```sh
-python3.12 -m pip download --index-url https://pypi.org/simple \
+python3.15 -m pip download --index-url https://pypi.org/simple \
   --only-binary=:all: --require-hashes \
-  -r config/management-linux-x86_64-cp312.lock.txt --dest /private/wheelhouse
-python3.12 -m venv /private/test-environment
+  -r config/container-linux-x86_64-cp315.lock.txt --dest /private/wheelhouse
+python3.15 -m venv /private/test-environment
 /private/test-environment/bin/python -m pip install --no-index \
   --find-links /private/wheelhouse --require-hashes \
-  -r config/management-linux-x86_64-cp312.lock.txt
+  -r config/container-linux-x86_64-cp315.lock.txt
 /private/test-environment/bin/python -m pip check
 PYTHONPATH=src /private/test-environment/bin/python -m unittest discover -s tests
 ```

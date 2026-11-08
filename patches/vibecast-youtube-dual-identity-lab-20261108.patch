@@ -1,0 +1,240 @@
+--- a/vendor/mdns-sd/src/service_info.rs
++++ b/vendor/mdns-sd/src/service_info.rs
+@@ -123,6 +123,11 @@
+ 
+     /// If true, only link-local addresses are published.
+     is_link_local_only: bool,
++
++    /// Whether this instance participates in the ordinary base-type browse.
++    /// Subtype-only services are an experimental compatibility seam; normal
++    /// DNS-SD registrations keep this enabled.
++    advertise_base_type: bool,
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Eq)]
+@@ -232,6 +237,7 @@
+             status: HashMap::new(),
+             requires_probe: true,
+             is_link_local_only: false,
++            advertise_base_type: true,
+             supported_intfs: vec![IfKind::All],
+         };
+ 
+@@ -267,6 +273,17 @@
+         self.is_link_local_only = is_link_local_only;
+     }
+ 
++    /// Include or exclude this instance from the base service-type browse.
++    /// Resolution by fullname and explicitly registered subtypes is unchanged.
++    pub fn set_advertise_base_type(&mut self, advertise: bool) {
++        self.advertise_base_type = advertise;
++    }
++
++    /// Returns whether the base service-type PTR is advertised.
++    pub const fn advertises_base_type(&self) -> bool {
++        self.advertise_base_type
++    }
++
+     /// Set the supported interfaces for this service.
+     ///
+     /// The service will be advertised on the provided interfaces only. When ips are auto-detected
+@@ -364,7 +381,7 @@
+ 
+     /// Returns whether the service type or subtype matches the given name.
+     pub(crate) fn matches_type_or_subtype(&self, name: &str) -> bool {
+-        name.eq_ignore_ascii_case(self.get_type())
++        (self.advertise_base_type && name.eq_ignore_ascii_case(self.get_type()))
+             || self
+                 .get_subtypes()
+                 .any(|subtype| name.eq_ignore_ascii_case(subtype))
+@@ -1517,6 +1534,28 @@
+     }
+ 
+     #[test]
++    fn subtype_only_service_does_not_match_base_browse() {
++        let base = "_googlecast._tcp.local.";
++        let youtube = "_233637DE._sub._googlecast._tcp.local.";
++        let mut service = ServiceInfo::new(
++            base,
++            "youtube-tv",
++            "youtube-tv.local.",
++            "192.0.2.2",
++            8009,
++            None,
++        )
++        .unwrap()
++        .with_subtypes([youtube])
++        .unwrap();
++        assert!(service.matches_type_or_subtype(base));
++        assert!(service.matches_type_or_subtype(youtube));
++        service.set_advertise_base_type(false);
++        assert!(!service.matches_type_or_subtype(base));
++        assert!(service.matches_type_or_subtype(youtube));
++    }
++
++    #[test]
+     fn added_subtypes_validate_service_domain_and_single_label_without_panicking() {
+         let service = ServiceInfo::new(
+             "_googlecast._tcp.local.",
+--- a/vendor/mdns-sd/src/service_daemon.rs
++++ b/vendor/mdns-sd/src/service_daemon.rs
+@@ -3172,7 +3172,7 @@
+                             dns_registry,
+                             is_ipv4,
+                         );
+-                    } else if q_name == META_QUERY {
++                    } else if q_name == META_QUERY && service.advertises_base_type() {
+                         let ttl = service.get_other_ttl();
+                         let alias = service.get_type().to_string();
+                         let ptr = DnsPointer::new(q_name, RRType::PTR, CLASS_IN, ttl, alias);
+@@ -4497,7 +4497,19 @@
+ /// All browse paths identify the same service instance. Announcements and
+ /// goodbyes must publish/withdraw every path together.
+ fn add_service_ptrs(out: &mut DnsOutgoing, info: &ServiceInfo, fullname: &str, ttl: u32) {
+-    for ptr_name in std::iter::once(info.get_type()).chain(info.get_subtypes()) {
++    if info.advertises_base_type() {
++        out.add_answer_at_time(
++            DnsPointer::new(
++                info.get_type(),
++                RRType::PTR,
++                CLASS_IN,
++                ttl,
++                fullname.to_string(),
++            ),
++            0,
++        );
++    }
++    for ptr_name in info.get_subtypes() {
+         out.add_answer_at_time(
+             DnsPointer::new(ptr_name, RRType::PTR, CLASS_IN, ttl, fullname.to_string()),
+             0,
+--- a/crates/vibecast-discovery/src/mdns.rs
++++ b/crates/vibecast-discovery/src/mdns.rs
+@@ -189,12 +189,18 @@
+         I: IntoIterator<Item = S>,
+         S: AsRef<str>,
+     {
++        let only_app = std::env::var("CAST_LAB_APP_SUBTYPE_ONLY")
++            .ok()
++            .map(|value| value.to_ascii_uppercase());
+         self.app_subtypes = app_ids
+             .into_iter()
+             .filter_map(|id| {
+                 let id = id.as_ref();
+-                (id.len() == 8 && id.bytes().all(|byte| byte.is_ascii_hexdigit()))
+-                    .then(|| format!("_{}._sub.{SERVICE_TYPE}", id.to_ascii_uppercase()))
++                let normalized = id.to_ascii_uppercase();
++                (id.len() == 8
++                    && id.bytes().all(|byte| byte.is_ascii_hexdigit())
++                    && only_app.as_ref().is_none_or(|only| only == &normalized))
++                    .then(|| format!("_{normalized}._sub.{SERVICE_TYPE}"))
+             })
+             .collect::<std::collections::BTreeSet<_>>()
+             .into_iter()
+@@ -256,7 +262,7 @@
+ /// Build the mDNS `ServiceInfo` for the base `_googlecast._tcp` service.
+ #[cfg(feature = "mdns")]
+ fn service_info(advertisement: &CastAdvertisement) -> Result<mdns_sd::ServiceInfo, DiscoveryError> {
+-    let info = mdns_sd::ServiceInfo::new(
++    let mut info = mdns_sd::ServiceInfo::new(
+         SERVICE_TYPE,
+         &advertisement.instance,
+         &advertisement.server,
+@@ -268,6 +274,9 @@
+     .with_subtypes(advertisement.subtype_types())
+     .map_err(|e| DiscoveryError::Mdns(e.to_string()))?
+     .enable_addr_auto();
++    if std::env::var("CAST_LAB_MDNS_SUBTYPE_ONLY").as_deref() == Ok("1") {
++        info.set_advertise_base_type(false);
++    }
+     Ok(info)
+ }
+ 
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -43,6 +43,7 @@
+ use vibecast_player_api::ProxyRegistrar;
+ 
+ const RECEIVER_0: &str = "receiver-0";
++const LAB_APP_AVAILABILITY_ONLY_ENV: &str = "CAST_LAB_APP_AVAILABILITY_ONLY";
+ #[cfg(not(test))]
+ const SENDER_RECONNECT_GRACE: std::time::Duration = std::time::Duration::from_secs(60);
+ // Keep the established real-time expiry tests bounded; production uses the
+@@ -459,6 +460,9 @@
+ pub struct DeviceHub {
+     identity: DeviceIdentity,
+     registry: AppRegistry,
++    /// Lab-only discovery isolation. Production leaves the environment variable
++    /// unset and therefore continues to expose every registered application.
++    lab_app_availability_only: Option<String>,
+     player: Arc<dyn Player>,
+     proxy: Arc<dyn ProxyRegistrar>,
+     http: reqwest::Client,
+@@ -503,6 +507,10 @@
+     #[must_use]
+     pub fn new(config: HubConfig) -> Self {
+         let (tx, rx) = mpsc::channel(128);
++        let lab_app_availability_only = std::env::var(LAB_APP_AVAILABILITY_ONLY_ENV)
++            .ok()
++            .map(|value| value.trim().to_owned())
++            .filter(|value| !value.is_empty());
+         let volume = std::fs::read(volume_path(&config.data_dir, &config.identity.device_id))
+             .ok()
+             .and_then(|bytes| serde_json::from_slice::<Volume>(&bytes).ok())
+@@ -511,6 +519,7 @@
+         Self {
+             identity: config.identity,
+             registry: config.registry,
++            lab_app_availability_only,
+             player: config.player,
+             proxy: config.proxy,
+             http: config.http,
+@@ -750,7 +759,12 @@
+                 let mut response =
+                     vibecast_messages::AppAvailabilityResponse::available(r.request_id, &r.app_id);
+                 for (app_id, availability) in &mut response.availability {
+-                    if self.registry.get(app_id).is_none() {
++                    if self.registry.get(app_id).is_none()
++                        || !lab_app_availability_allows(
++                            self.lab_app_availability_only.as_deref(),
++                            app_id,
++                        )
++                    {
+                         *availability = "APP_UNAVAILABLE".to_owned();
+                     }
+                     // Log only bounded public app identifiers, never arbitrary sender data.
+@@ -2953,6 +2967,34 @@
+     }
+ }
+ 
++fn lab_app_availability_allows(only: Option<&str>, app_id: &str) -> bool {
++    only.is_none_or(|allowed| allowed == app_id)
++}
++
++#[cfg(test)]
++mod lab_app_availability_tests {
++    use super::lab_app_availability_allows;
++
++    #[test]
++    fn unset_filter_preserves_all_registered_app_ids() {
++        assert!(lab_app_availability_allows(None, "233637DE"));
++        assert!(lab_app_availability_allows(None, "2DB7CC49"));
++    }
++
++    #[test]
++    fn configured_filter_allows_only_the_exact_app_id() {
++        assert!(lab_app_availability_allows(Some("233637DE"), "233637DE"));
++        assert!(!lab_app_availability_allows(
++            Some("233637DE"),
++            "2DB7CC49"
++        ));
++        assert!(!lab_app_availability_allows(
++            Some("233637DE"),
++            "233637de"
++        ));
++    }
++}
++
+ fn parse_payload(message: &CastMessage) -> Option<serde_json::Value> {
+     let text = message.payload_utf8.as_deref()?;
+     serde_json::from_str(text).ok()

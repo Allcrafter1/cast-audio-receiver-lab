@@ -8,9 +8,9 @@
   },
   {
     "name": "aiohttp",
-    "version": "3.14.3",
-    "filename": "aiohttp-3.14.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
-    "sha256": "f631fe87a6f30df5fbe6d79640b25e4cffb38c31c7fb6f10871517b84b0f8c1a",
+    "version": "3.14.5",
+    "filename": "aiohttp-3.14.5-cp315-cp315-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "276a4fc00b1d9ae492b802763a789c5b86328b989c5ea169f2faa447d6a11c7c",
     "license": "Apache-2.0 AND MIT"
   },
   {
@@ -43,9 +43,9 @@
   },
   {
     "name": "brotli",
-    "version": "1.2.0",
-    "filename": "brotli-1.2.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
-    "sha256": "acec55bb7c90f1dfc476126f9711a8e81c9af7fb617409a9ee2953115343f08d",
+    "version": "1.2.1",
+    "filename": "brotli-1.2.1-cp315-cp315-manylinux2014_x86_64.manylinux_2_17_x86_64.whl",
+    "sha256": "f00ff4b56caf151365c77988eb85a4a71eb26fe63047d4084d5614e06d65e3cf",
     "license": "MIT"
   },
   {
@@ -58,8 +58,8 @@
   {
     "name": "charset-normalizer",
     "version": "3.5.1",
-    "filename": "charset_normalizer-3.5.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
-    "sha256": "4582c27e8c889d64811987b5967fbd3ae0c823fe1fd933b543d55ac20bb475fa",
+    "filename": "charset_normalizer-3.5.1-cp315-cp315-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "5c84bec0ab5ae0c64bfe73a7d2adcb5ce73b467523fc27fd6a28ab2aa6cbe35a",
     "license": "MIT"
   },
   {
@@ -72,15 +72,15 @@
   {
     "name": "deno",
     "version": "2.9.6",
-    "filename": "deno-2.9.6-py3-none-manylinux_2_27_aarch64.whl",
-    "sha256": "f8e1f6c053d3376388b61e658a2438ba45904a62b261988f2b858efefdc0aaad",
+    "filename": "deno-2.9.6-py3-none-manylinux_2_27_x86_64.whl",
+    "sha256": "037458003a1c76382e41baa1cd152b3325d9a13b2678f75cc653c893c0b2dfec",
     "license": "MIT"
   },
   {
     "name": "frozenlist",
     "version": "1.8.0",
-    "filename": "frozenlist-1.8.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
-    "sha256": "96f423a119f4777a4a056b66ce11527366a8bb92f54e541ade21f2374433f6d4",
+    "filename": "frozenlist-1.8.0-py3-none-any.whl",
+    "sha256": "0c18a16eab41e82c295618a77502e17b195883241c563b00f0aa5106fc4eaa0d",
     "license": "Apache-2.0"
   },
   {
@@ -100,15 +100,15 @@
   {
     "name": "lxml",
     "version": "6.1.3",
-    "filename": "lxml-6.1.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.whl",
-    "sha256": "f683dc6300317700025e41d89a43e0276692ded16113a3c43eab704d605c58e5",
+    "filename": "lxml-6.1.3-cp315-cp315-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "73fc05988ed20809450474ba760a87c8ad4e455fc09783c02195e56ec634b41a",
     "license": "BSD-3-Clause"
   },
   {
     "name": "multidict",
     "version": "6.9.0",
-    "filename": "multidict-6.9.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
-    "sha256": "2ea72901860ccbe94517421681c60b13533ce03ba2f7bd96293c3a4d16ac4ccb",
+    "filename": "multidict-6.9.0-cp315-cp315-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "a5f04bbfb064b87455a8012f5829b20201d608cf4b3a1a0e50c7a14173a75109",
     "license": "Apache License 2.0"
   },
   {
@@ -121,15 +121,15 @@
   {
     "name": "propcache",
     "version": "0.5.4",
-    "filename": "propcache-0.5.4-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
-    "sha256": "60a64cbccaa11b7760ce705a14ada17ba459e7ca9f23ba587eb013821032d7ef",
+    "filename": "propcache-0.5.4-cp315-cp315-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "23278f808cd81d5ada7184a76606b925fb3389c60e1077b2cd7da7b1fcf0553c",
     "license": "Apache-2.0"
   },
   {
     "name": "pycryptodomex",
     "version": "3.23.0",
-    "filename": "pycryptodomex-3.23.0-cp37-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl",
-    "sha256": "43c446e2ba8df8889e0e16f02211c25b4934898384c1ec1ec04d7889c0333587",
+    "filename": "pycryptodomex-3.23.0-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+    "sha256": "f489c4765093fb60e2edafdf223397bc716491b2b69fe74367b70d6999257a5c",
     "license": "BSD, Public Domain"
   },
   {
@@ -177,8 +177,8 @@
   {
     "name": "websockets",
     "version": "17.1",
-    "filename": "websockets-17.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
-    "sha256": "d41ef69d5416fbc1d98cf96c37be6192d10fd101c3e0f8b3ddc36e09432b3c08",
+    "filename": "websockets-17.1-cp315-cp315-manylinux1_x86_64.manylinux_2_28_x86_64.manylinux_2_5_x86_64.whl",
+    "sha256": "d7b349265fad6244013eecd99df8d83c12bf3013943e431f4fadd5bffc37db42",
     "license": "BSD-3-Clause"
   },
   {
@@ -191,8 +191,8 @@
   {
     "name": "yarl",
     "version": "1.25.1",
-    "filename": "yarl-1.25.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
-    "sha256": "4d781294bb815ecb5ea57ff6bbf8038e0a31a95fdf3e1788f66e0dc100d64b58",
+    "filename": "yarl-1.25.1-cp315-cp315-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "23bf5b403c879a54964e0feac7285688e04bb220074878d737d331522da0a5bf",
     "license": "Apache-2.0"
   },
   {
@@ -212,8 +212,8 @@
   {
     "name": "zeroconf",
     "version": "0.151.3",
-    "filename": "zeroconf-0.151.3-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl",
-    "sha256": "f8193a17d718ae5a9059c4fbbaefbf937c9bb5eeccb9dd66f9aafcacfec4cefc",
+    "filename": "zeroconf-0.151.3-cp315-cp315-manylinux2014_x86_64.manylinux_2_17_x86_64.manylinux_2_28_x86_64.whl",
+    "sha256": "702f94d6d1a61c01ab68dd3a6e7a0ee9128302d1f79683707e92e9dab46a8e21",
     "license": "LGPL-2.1-or-later"
   }
 ]

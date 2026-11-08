@@ -1,5 +1,1290 @@
 # Working plan
 
+## Upstream review and source publication — 2026-11-08
+
+The verified dev3 frontend is committed and published as source prerelease
+`cast-audio-0.7.0-dev3` (`1a040ed`), with no main/latest/image promotion.
+[Product PR #20](https://github.com/Allcrafter1/cast-audio-receiver-lab/pull/20)
+contains the isolated AirPlay 0.5.9 candidate, Python ABI gate and watcher-review
+correction; it does not silently include the pending dev3 product integration.
+The same maintenance changes are present in this development working tree.
+The installed laptop remains on the previously verified dev3 runtime.
+[Review details and acceptance limits](upstream-review-20261108.md).
+
+## Current: EOF Replay and endpoint names — 2026-11-08
+
+`0.7.0-dev3` builds on the complete dev2 candidate below. It fixes the normal
+YouTube app's Replay button after natural EOF, clears stale queue waits on
+replay, and appends ` (YT)` to every video endpoint. No session/reconnect or
+Music loop-mode policy changes. Both added regressions fail before the fix;
+306 affected Rust tests and 431 Python tests pass. The candidate is installed
+and hash-verified on the test laptop; both enabled routes are ready and LAN
+checks confirm both endpoint names and shared state. The Android replay retest
+remains pending because the USB phone is disconnected. See [validation](TESTING.md).
+The isolated unexpected disconnect cannot be assigned to a specific logged
+CLOSE; no speculative ownership change is made.
+
+## Previous: production dual-identity candidate — 2026-11-08
+
+The owner authorized the product implementation after the successful isolated
+lab. `0.7.0-dev2` gives every desktop output a stable YouTube video alias while
+retaining the original speaker UUID and one shared player/session/volume runtime.
+Discovery and explicit-launch policies are separate so existing browser routes
+remain usable. ADB product tests now verify real YouTube and Music decoding on
+Audio Lab Laptop; the original lab only acknowledged silent LOADs.
+
+The candidate includes the previously integrated volume policy, Sonos events,
+metadata and common relay/transcoding work, TuneIn (including native autostart),
+and accepted YouTube controls/reconnect fixes. Those are present code, not a
+future feature list. Direct Sonos hardware acceptance, the latest stock TuneIn
+autostart retest, broader devices and multiarchitecture publication remain
+separate gates. The optional browser userscript is not silently installed, and
+HA repeat/queue expansion remains outside the accepted standard-Cast scope.
+
+See [dual identity architecture](dual-cast-identities.md) and
+[current validation](TESTING.md). The entries below are chronological evidence;
+their old "not deployed" and "keep mdnsapps unchanged" instructions are
+superseded by this explicitly authorized product candidate.
+
+## Historical scope: Android app discovery and YouTube cast abort
+
+**Capability lab completed: no stable single identity, successful lab-only
+dual-identity separation.**
+The owner authorized autonomous ADB/capability experiments in a separate silent
+lab, preserving the working Music/web deployment. The earlier phone lock and
+Xiaomi input-injection restriction were resolved by the owner. The lab measured
+25 profiles across all four PR #18 layers, including actual native
+picker icons, selection, app LAUNCH and silent media LOAD. Historical builds
+and the installed public GMS/YouTube/Music APKs were audited independently.
+
+The owner also accepts TV presentation in ordinary YouTube if Music retains a
+speaker. Four paired single-identity runs still found no stable combination: the
+promising mismatch changed with session order, and full PR #18 was a TV in both
+apps. A later isolated split used two UUIDs/ports with app-specific discovery and
+inverse Availability responses. In both app orders Music saw/launched only the
+speaker while ordinary YouTube saw/launched only the TV; matching silent LOADs
+reached only the intended endpoint. Rapid UUID churn briefly left an old route
+cached and the new one dimmed, then stable discovery converged and both paths
+worked. Real audio, reconnect and shared backend/volume arbitration were not
+verified, and no product option was implemented. Final audit confirms the lab
+removed, phone USB stay-awake restored, original binary and all 28 runtime files
+intact, and both enabled outputs ready. Keep the frozen mdnsapps receiver and its
+identities unchanged. Do not implement a TV option without an explicit product
+decision. See the [capability lab record](youtube-capability-lab.md) for measured
+results and limits.
+
+Earlier incident evidence leading to the isolated lab:
+
+- Owner accepts ordinary YouTube web behavior as good enough and confirms Music
+  still works. Do not pursue remaining web stale-session/reconnect issues now.
+- After the subtype correction, the phone now lists both speakers in YouTube
+  and Music; Music connects and plays audio as before. Ordinary YouTube produces
+  no recognizable connection or audio on selection, temporarily loses the
+  speaker entries, then shows them again after a wait. Earlier visibility changes
+  remain unattributed; reliable YouTube discovery/casting is still open.
+- Two user attempts reproduced the failure, including after explicit Music
+  STOP. No ordinary YouTube LAUNCH/MDX was captured. The queue requests used
+  Play Services transport; that does not prove passive/background intent or
+  identify the originating app. The weak-ownership guard remains unchanged.
+- Target confirmed: Audio Lab Laptop. Ordinary YouTube listing disappeared
+  after diagnostic restart, while Music remained working. Force-stop did not
+  restore it; bounded old/new-port observation found no matching connection SYNs.
+- Diagnostic-only candidate is stopped/retained. Exact owner-accepted ytcontrols
+  candidate restored and verified (2/2 routes, binary and 28 Python files).
+  The subsequent visibility comparison did not restore either app's listing;
+  no claim that diagnostics caused the issue. Speaker identity and all previous
+  playback fixes remain intact.
+- USB inventory: Android 15/SDK35, YouTube 21.40.162 (1561301422), Music 9.44.52
+  (94452240), Play Services 26.43.30 (260400-1006944126; 264330035).
+  Actual phone DNS capture includes nine ordinary-YouTube app-subtype questions
+  and 25 Music app-subtype questions. A separate LAN probe receives two owned
+  base PTR answers but zero YouTube and zero Music subtype PTR answers.
+- Generic correction in `mdns-app-discovery-20261108-1`: derive all supported
+  app subtype PTRs from AppRegistry, sharing one mDNS daemon and service identity;
+  answer/suppress each requested PTR and announce/withdraw all aliases together.
+  Keep ca=199428 and all playback/queue/reconnect behavior. Private candidate
+  `0.7.0.dev1+local.20261108.mdnsapps` is installed; loaded `/proc` executable
+  matches SHA-256 `02d1494745094f9df3e61df3b25a5e557ebcb7c2c3a1251e073e1e353feb847b`,
+  all 28 Python files match, both routes are ready, and Eureka display remains
+  false. LAN probe changes from 2/0/0 to 2/2/2 base/YouTube/Music PTR answers.
+  This verifies the previously missing network replies. The subsequent phone
+  test confirms listing in both apps and Music playback, but ordinary YouTube
+  still fails before any recorded app launch; full acceptance is not achieved.
+  Rollback: `cast-audio-receiver-before-mdns-app-discovery-20261108-1`.
+  Receiver logs for the test contain one Music 2DB7CC49 LAUNCH and no ordinary
+  YouTube 233637DE LAUNCH. Investigate the remaining app abort without changing
+  working Music, web/reconnect behavior or speaker identity.
+- Public YouTube and Music APKs contain additional audio-only filters. Ordinary
+  YouTube's static opt-in default is false; Music uses a separate configuration/
+  account-metadata condition whose obfuscated field does not establish a
+  subscription requirement. Effective phone settings are unknown. A corrected
+  subtype response may not resolve every app filter or launch failure. Keep the
+  speaker identity and verify listing, launch/authentication and audio separately.
+  Detailed evidence and scope: [PR #18 investigation](youtube-discovery-pr18.md).
+- Public fragment evidence identifies active anhv (mState7, added=true,
+  hidden=false; YouTube resumed). Its actual RecyclerView binding is traced
+  anic/anil -> anhx.f -> anhw -> anhk.onClick, with injected nA=false. The earlier
+  anjo/anjn chooser is not needed as runtime evidence. This selection guard is
+  separate from the configurable list filter: audio-only CastDevice rejects
+  locally with ange, then the row can dismiss the picker, without a log phrase.
+  The owner confirms normal signed-in use; account-dialog exceptions are not
+  receiver-controlled. Actual row extras/branch remain uninstrumented and
+  additional row/session guards exist.
+- Only Music connections from the phone reached the test laptop in the observed
+  interval; no ordinary YouTube TCP/LAUNCH. Two null-provider warnings came from
+  the GMS persistent Cast provider and do not establish causality. Public PM
+  reports MediaTransferReceiver disabled; this concerns the later conditional
+  onRouteSelected guard, not the earlier UI guard, and does not reveal cached
+  app configuration. The selection guard is a strong explanation, not a universal
+  impossibility proof. Google's current [speaker guidance](https://support.google.com/googlehome/answer/7181830?hl=en)
+  directs YouTube content through Music. Preserve the speaker identity and
+  working behavior; no further code change or TV emulation.
+- Public router metadata shows the owned receivers under GMS PersistentProvider
+  and one deviceType2, consistent with the owner's speaker icons. The inspected
+  standard MDX route builder uses deviceType1 (TV) for DIAL/cloud screens.
+  This supports a native speaker route but does not expose app CastDevice extras
+  or capabilities; missing extras in the public dump do not mean no CastDevice.
+- No concrete missing receiver field found: existing MDX association fields
+  arrive after LAUNCH, matching DIAL UUIDs are deduplicated against native Cast,
+  and cloud pairing would be a separate unverified lifecycle/ownership path
+  with TV presentation in the inspected builder. Keep these limits scoped to
+  the inspected implementation; no general MDX impossibility claim.
+
+
+## Active: ordinary YouTube selection and audio tracks — 2026-11-08
+
+- User confirms better ordinary youtube.com startup, but selecting another video
+  leaves the previous video playing until page reload. Wrong audio track on
+  public video uMtsPAEEavE despite English Original being selected.
+- Correct attribution: the observed Android GMS probes may originate from
+  YouTube Music. They cannot establish discovery by the ordinary YouTube app.
+- Receiver trace: setPlaylist/VIDEO_ADDED reaches the receiver for the new video;
+  existing normalization suppresses selection. After reload VIDEO_SELECTED
+  causes playback. Isolated ordinary Lounge probe confirms sender setPlaylist
+  becomes setPlaylist/VIDEO_ADDED, while addVideo becomes updatePlaylist.
+- The same video has English Original/default at 131407 bps, but e.g. Indonesian
+  at 163104 bps. Native resolver ranked all tracks solely by bitrate.
+  setAudioTrack commands also reach the receiver but are not implemented.
+- User explicitly requires additive ordinary-YouTube changes, preserving all
+  existing Music behavior. Keep Music's established queue guard and audio
+  resolver defaults; scope the new selection/audio profile to ordinary YouTube.
+  Do not change core ownership, reconnect, volume, output backends or discovery.
+- New selection and original-track regressions failed before their fixes.
+  Six additive regressions now pass; total 338 libraries + SDK doctest pass.
+  Frozen six-patch reconstruction matches 114 inputs, only three YouTube files
+  differ from the lifecycle candidate. Release build and 14 silent binary checks
+  pass. Candidate 0.7.0.dev1+local.20261108.ytcontrols is active on the test laptop;
+  loaded binary, 28 Python files, 2/2 routes and speaker profiles verified.
+  Rollback: cast-audio-receiver-before-youtube-controls-20261108-1. HA unchanged.
+  Physical title/audio retest requested; Android listing and legacy cache remain open.
+
+## Reopened: ordinary YouTube discovery and handoff — 2026-11-07
+
+- User clarifies explicitly: all YouTube Music paths work. Scope is ordinary
+  YouTube Android listing and youtube.com signed-in/incognito reconnect.
+- The deployed continuity candidate improves one same-owner case but does not
+  resolve the complete incident. Two ordinary-YouTube sessions received
+  playlists, followed by another no-op-only session. The persisted screen was
+  unchanged across those relaunches, so repeated screen rotation alone does not
+  explain every current failure; the normal browser still has earlier cache state.
+- New allowlisted transport evidence shows Android gms_cast_prober reaching both
+  laptop receivers and requesting Eureka, app availability, status and device
+  information. These probes may be from Music; ordinary YouTube attribution
+  and its discovery/filter stage remain unverified.
+- Recheck current and historical advertisements, actual sender filtering and
+  native YouTube identity/session lifecycle. Preserve speaker identity, all YTM
+  behavior, established reconnect and true-controller takeover semantics.
+
+## Lifecycle follow-up deployed — 2026-11-07
+
+- User requested an explanation and continued investigation. Goal: reliable
+  ordinary YouTube with speaker identity; all Music paths are a working baseline.
+  Android listing and browser Cast-to-Lounge handoff are separate boundaries.
+- Confirmed a general Core defect: every virtual receiver used the same app
+  storage directory. Scope state by stable receiver ID for all providers;
+  preserve across relaunch/restart. Do not replicate ambiguous legacy identities.
+  Existing Cast IDs/settings/routes remain; old shared files remain intact.
+- Public native YouTube receiver source and a separate real-service exchange
+  confirm getDiscoveryDeviceId is a request and onSetDiscoveryDeviceId is its
+  acknowledgement. Correct the reversed handler and announce on bind/rebind.
+- Explicitly terminate the bound BrowserChannel on final Stop/takeover with a
+  500 ms limit. Existing active reconnect/grace/ownership and Music behavior are
+  retained. Separate probes show termination is not instant screen-offline or
+  old-controller revocation; do not replace ownership rotation with global reuse.
+- The new regressions fail before and pass after; 332 library tests pass, three
+  pre-existing probes ignored, SDK doctest passes. Release binary passes 14
+  silent Cast/bridge checks. No real YouTube acceptance is inferred from them.
+- Candidate 0.7.0.dev1+local.20261107.ytlifecycle built locally with Rust 1.98/Zig,
+  target GLIBC 2.36, highest required 2.34. Binary SHA-256:
+  66def8aefbd873101fd26c47eaa6583f97633a94776f4f4059ba46d050e51399.
+  Five ordered patches reconstruct all 114 source inputs. Records and frozen
+  source: .state/youtube-lifecycle-20261107-1/. All 28 Python files are identical
+  to the preceding candidate except its private version label.
+- Activated on existing test laptop after ABI/import/hash preflight; readiness
+  2/2, loaded /proc executable and all installed hashes pass. Both Eureka routes
+  retain display=false and owned mDNS records ca=199428. Rollback container:
+  cast-audio-receiver-before-youtube-lifecycle-20261107-1. HA unchanged.
+- Still open: ordinary Android's final filtering decision and Chrome legacy
+  cached-screen compatibility across genuine owner changes/process restarts.
+  The preceding candidate did not pass acceptance. No TV capability, universal
+  YouTube fix, public release, PR merge or publication is claimed.
+
+## Continuity candidate implementation/deployment record — 2026-11-07
+
+- User explicitly requires retaining existing YTM, mobile/iPad, reconnect and
+  takeover behavior. No speculative token-mode or unconditional screen reuse.
+- Browser evidence now confirms effective enableCastLoungeToken=false and a
+  cached legacy screen different from the current receiver screen. Incognito
+  first connect works, second connect in the same window fails. Retained vendor
+  code reproduces exactly that stale-cache/repeated-screen-rotation conflict.
+- Two reviewers agree on a narrow fix under the existing physical-controller
+  policy: a Core-owned opaque continuity key survives app Stop/CLOSE/relaunch
+  only for the last still-connected current owner and exact Cast app ID.
+  Takeover or another app replaces the key; disconnected sockets lose their grant.
+  No history of previous owners and no IP/UA guesses. Existing active grace and
+  multisocket ownership decisions remain the authority and are not rewritten.
+- Core/SDK and YouTube integration are implemented and independently reviewed.
+  Stored identity reuse requires matching present keys; legacy files/missing
+  keys remain fresh. Real takeover carries a new key before MDX. Invalid-screen
+  replacement is bounded; transient failures preserve the saved screen. Stop
+  drains the old Lounge worker, with abort guards for interrupted teardown.
+- All 313 scoped Rust tests pass, with three existing ignored probes. The
+  actual release binary passes 14 Cast/bridge smoke checks for TuneIn/DMR,
+  controls and bidirectional volume with emulated output and no audio.
+- Candidate 0.7.0.dev1+local.20261107.pr18 is active on the existing test laptop.
+  Loaded /proc executable SHA-256 matches:
+  bb129cbe110ea1f9dddc135bbfaf0ed7b43f76fa42212849b3b8ea73007a043b.
+  All 28 live Python files/assets match the frozen package; only the version
+  label differs from the preceding candidate. Imports and readiness 2/2 pass.
+- Post-deployment readback confirms both Eureka routes have display=false and
+  multizone=true; both owned mDNS services retain ca=199428. HA remains dev20.
+  Four-patch recipe, source hashes, build/test and deployment records are in
+  .state/pr18-continuity-20261107-1/. Reversible rollback container:
+  cast-audio-receiver-before-speaker-continuity-20261107-1.
+- Physical first and repeated ordinary-YouTube playback acceptance is pending;
+  Android listing and cross-client acceptance remain unverified on this build.
+  An already stale browser cache is not silently repaired. No universal fix,
+  PR merge or publication is claimed.
+
+## PR #18: installed-state audit and speaker identity — 2026-11-07
+
+- Preserve speaker identity: mDNS and Cast DEVICE_INFO stay 199428, no VIDEO_OUT
+  or TV option added. Historical v0.4.2 speaker-icon confirmation and PR author's
+  Android YouTube -> Sonos Era100/AirPlay test with 199429 are documented in
+  docs/youtube-discovery-pr18.md. That hardware result does not verify our
+  speaker-only mode or every Android client.
+- This section records the initial pre-fix audit; the active deployment above
+  supersedes its laptop executable and default-capability readings.
+- Audited actual installations, not only working source. At that initial audit,
+  laptop loaded process SHA was exactly
+  16dcdc7aba9a504c2fcce314cc508f30eaace80fb695539bddcea7b1d55c7cc1;
+  all 28 installed Python files/assets matched. The preceding combined container
+  retains binary 7a4d9c859784cbec61cfc236df156c0c144fed9d845a30994c4b7468ab84f4d6
+  and the same 28/28 Python files. Only one laptop container is running.
+- Rebuilt frozen frontend source from base plus the recorded full snapshot and
+  autostart delta: all 114 input hashes match. Only TuneIn provider/tests changed
+  since combined; 112 files, including discovery/config/core/YouTube, unchanged.
+  Both Python package archives and manifests are byte-identical. No evidence of
+  accidental last-patch source changes or a mixed active laptop installation.
+- Separate HA inventory: active 0c012509 App is 0.6.0-dev20 (runtime 0.6.0.dev20),
+  healthy with 2 routes and about six days uptime. Duplicate 0b4634bd dev18 is
+  stopped. Latest local TuneIn deployment did not update HA. HA executable
+  equality was not verified; Supervisor/API version agreement is a separate check.
+- Live read-only Cast probes on all four receivers (two laptop, two HA) confirm
+  DEVICE_INFO199428 and receiver availability replies. Fixed the inspection
+  tool to accept the actual GET_APP_AVAILABILITY reply type as well as its legacy
+  alternate. No app LAUNCH/playback or volume commands were sent by these probes.
+- Concrete pre-existing installation/default bug: neither audited laptop variant
+  had frontend config.toml, and Eureka reported display=true despite speaker
+  mDNS. Both Eureka and streaming-header defaults are now false across the
+  frontend, including missing/partial config; no per-backend workaround.
+- Also correct general app availability to registry support and remove optional
+  screen-online HTTP diagnostic from MDX's critical startup path. New regression
+  tests reproduce the old failures; the initial discovery iteration passed
+  discovery11/platform21/core115/YouTube137 (284 total, 3 explicitly ignored).
+  Three existing Python probe tests and live availability reads pass. Scoped
+  formatting and diff checks pass.
+- Ordinary YouTube browser sessions at 21:02 and 21:11 UTC reach LAUNCH and MDX
+  response in <0.6s, then only Lounge noop: no remoteConnected/setPlaylist.
+  Therefore these attempts fail before resolution/decoder/output; the optional
+  diagnostic's timeout did not cause these particular fast failures.
+- Vendor remote.js reproduction initially suggested an old-screen cache conflict
+  with fresh Lounge screen IDs and a stable Cast ID. Later effective player
+  configuration and sanitized cache checks confirmed token mode false and a
+  cached/current screen mismatch. The user confirmed normal-profile YTM works;
+  ordinary YouTube worked on the first Incognito connection but failed on the
+  second. The 21:25:20 UTC session received remoteConnected/setPlaylist, unlike
+  the earlier failed attempts. The bounded continuity fix above addresses this
+  confirmed handoff conflict while retaining ownership rotation. Physical
+  repeated-connect acceptance and Android compatibility remain open.
+- LAN-only IPv4 resolution and a raw multicast probe (90 packets/zero parse
+  errors) show only the correct LAN A-records for both owned receivers. The
+  earlier all-interface loopback/hotspot list was local aggregation. No mDNS
+  filtering patch is justified by these observations; physical phone capture
+  and Android discovery filtering remain unverified.
+- Initial discovery candidate remains frozen under .state/pr18-review-20261107-1/.
+  Its additive delta:
+  patches/vibecast-speaker-discovery-review-20261107.patch, SHA-256
+  79361f203dc91da0ecbca59ddeeaea6c0157f95dc47d590b58ec49e73b2219c5.
+  Applies after full TuneIn review + autostart delta; forward/reverse checks and
+  all 114 candidate input hashes pass. This delta is included in the active
+  four-patch continuity candidate above. No commit or publication.
+
+## TuneIn native Cast autostart fixed and deployed — 2026-11-07
+
+- User confirmed artwork, playback and Web control handover, then reported
+  needing two Play presses at initial Cast startup. TuneIn-only scope retained.
+- Live traces show initial native LOAD rejected as LIVE_SEEK_UNSUPPORTED for
+  elapsed sender time; retry resolves but stays PAUSED with autoplay=false.
+  Official receiver ignores those external handoff fields, starts at time zero,
+  preloads internally, then plays after load. Independent protocol review agrees.
+- Narrow provider fix normalizes native guideId LOAD to live edge/autoplay.
+  No core or output changes. Explicit Pause/Stop, including during resolution,
+  retain priority; direct URL loads preserve their original autoplay/offset.
+- Regression reproduced before the fix. All 15 TuneIn tests and existing core
+  controls_during_resolution_apply_to_the_new_load pass. Formatting and scoped
+  TuneIn Clippy with --no-deps/-D warnings pass. An unscoped Clippy attempt hit
+  the existing async_trait double_must_use lint in settings under Rust 1.99.
+- Built locally from an immutable copy using Rust 1.98.0/Zig, GLIBC target 2.36;
+  highest required symbol remains 2.34. All other 112 recorded frontend files
+  and all 28 combined Python runtime files are unchanged. No laptop compilation.
+- Native Cast TLS/bridge smoke: 15 checks pass, including autoplay=false with
+  currentTime37.25 and currentTime0 both starting without a PLAY command,
+  explicit Pause/Play, volume, failed-load recovery and station replacement.
+  Public stations s80044/s24861, emulated output, no speaker/audio access.
+- Build tunein-autostart-20261107-1 is active on the existing test laptop;
+  binary SHA-256:
+  16dcdc7aba9a504c2fcce314cc508f30eaace80fb695539bddcea7b1d55c7cc1.
+  ABI/import preflight, live binary/28-file hashes and readiness 2/2 pass.
+  Route IDs, existing image/environment and state retained. Rollback container:
+  cast-audio-receiver-before-tunein-autostart-20261107-1.
+- Manifests: .state/tunein-autostart-20261107-1/. Additive source delta:
+  patches/vibecast-tunein-autostart-20261107.patch, applied after the complete
+  TuneIn review snapshot; forward/reverse checks pass. Previous artifacts stay
+  intact. No commit/publication. User's stock-app autostart retest pending.
+
+## Decision: standard HA Cast controls, repeat requested upstream — 2026-11-07
+
+- User chooses the standard Google Cast integration for HA controls. Goal:
+  repeat Off/One/All for the active session. Receiver Lounge repeat exists, but
+  generic Cast repeatMode mapping and upstream HA/PyChromecast support remain
+  necessary; no universal device/app compatibility claim or completed feature.
+- Deliberately exclude active YTM playlist/queue display and browsing in HA
+  from current scope. Do not add a receiver-specific HA integration for it.
+- User reviewed the simplified draft and explicitly approved publication.
+  Published as Allcrafter1 in Integration enhancements:
+  https://github.com/orgs/home-assistant/discussions/5464
+  Title: Add repeat controls to the Google Cast integration.
+  GitHub creation response confirms the approved body and discussion number.
+- Correct destination: home-assistant/feature-requests GitHub Discussions,
+  Integration enhancements, using its current discussion template rather than
+  a Core bug issue. GitHub discussion searches for cast repeat and chromecast
+  repeat returned zero matches; older forum media-loop requests are related
+  but broader than active-session standard repeat control.
+- Documentation/draft only; no runtime changes, tests or deployment required.
+
+## Home Assistant Cast repeat / current queue feasibility — 2026-11-07
+
+- Read-only source audit: stock HA Cast has no REPEAT_SET feature, repeat
+  property or repeat setter. Its media browser delegates to media sources / Cast
+  platforms; it does not expose the running YouTube Music queue. Advertising
+  additional receiver capability bits alone cannot enable either feature.
+- Maintained frontend already implements Lounge Off/One/All loop modes and
+  queue video IDs. Its generic Cast QueueUpdateRequest currently requires jump
+  and has no repeatMode field; the Cast path therefore needs an explicit bridge
+  to Lounge repeat state as well as HA/PyChromecast support for standard Cast
+  repeat control. Queue display additionally needs metadata and a HA-facing API.
+- Live HA entity media_player.audio_lab_laptop_3 was playing TuneIn during this
+  audit, with no repeat attribute / REPEAT_SET bit. This is not a live YTM test.
+- Feasible follow-up choices: extend standard Cast support across the relevant
+  layers, or add a receiver-specific HA integration for active-session repeat
+  and queue access. Neither implemented, deployed or functionally tested here;
+  no playback commands, runtime changes or new dependencies.
+- Sources: HA core components/cast/media_player.py and PyChromecast
+  controllers/media.py (current upstream); Google Cast Web Receiver queueing
+  documentation (QUEUE_UPDATE repeatMode).
+
+## Combined local candidate deployed for TuneIn testing — 2026-11-07
+
+- User authorized combining all current unpublished work, compiling on this
+  machine and transferring the result to the existing test laptop. Subsequent
+  user clarification limits functional acceptance to TuneIn; Sonos and other
+  services are included but are not part of this listening test.
+- Candidate version: `0.7.0.dev1+local.20261107.tunein`, applied only in the frozen
+  Python source copy. Shared source versions, release locks, App store metadata
+  and public images remain unchanged. No commit or public release.
+- Frontend source still exactly matches the complete TuneIn review snapshot
+  `6556f01e6dcfc13ce67ef1ca491f7f52551faeb204ca64e0a919ff8160c27c49`,
+  including concurrent playback, volume and TuneIn changes. Built locally with
+  Rust 1.98.0 / Zig for `x86_64-unknown-linux-gnu.2.36`; highest required GLIBC
+  symbol is 2.34. No compilation took place on the laptop.
+- Deployed frontend SHA-256:
+  `7a4d9c859784cbec61cfc236df156c0c144fed9d845a30994c4b7468ab84f4d6`.
+- Froze the complete current Python runtime, including the final Sonos/DLNA
+  cleanup/metadata changes, startup-volume policy, settings IPC and all assets.
+  All 28 runtime files match the wheel byte-for-byte; compileall and wheel
+  inventory passed. Wheel SHA-256:
+  `bf48c336b083ef3fe52ef7920de05c71cdb5ca3ea737ef944a674e07fd3ced0f`.
+- Verified binary startup and complete Python imports in the laptop's existing
+  immutable image with network disabled, before stopping the running service.
+  Activated a new container with the full candidate package and binary mounted
+  read-only; preserved image, environment, output access and persistent state.
+  Old file mounts were left untouched, and stopped-state data was backed up.
+- Active container remains `cast-audio-receiver`; immediate rollback container
+  is `cast-audio-receiver-before-combined-20261107-1`. Activation completed at
+  20:37 UTC. Both enabled outputs report ready/responsive (2/2), original route
+  IDs are unchanged, all 28 live Python/asset hashes and the binary match local
+  artifacts, and restart count is zero.
+- Local TuneIn-only smoke: 12 checks passed using public stations `s80044` and
+  `s24861`, with metadata, replacement, controls and failure recovery, without
+  audio output. `tools/test_tunein.py --tunein-only` omits the later DMR check.
+- All build/source/deployment manifests are retained locally under
+  `.state/combined-review-20261107-1/`. Stock TuneIn Android/Pro casting to
+  `Audio Lab Laptop` and audible acceptance remain pending with the user.
+- Future default: compile on this local host using the compatibility toolchain;
+  use the laptop for staging, runtime validation and playback, not Rust builds.
+
+## PR #16 / #17 remainder audit — 2026-11-07 (local, not deployed)
+
+- Rechecked every original diff hunk. Added the complete disposition table to
+  `docs/network-outputs.md`, including the intentionally omitted configurable
+  cap: the requested policy has a fixed 25% fallback, not a configurable ceiling.
+  Relay selection/direct radio, actual relay MIME/URL in DIDL, artist/album/
+  artwork, title-only fallback, early SoCo import and cleanup are all accounted
+  for; no additional unrelated feature exists in these two PR diffs.
+- Corrected a remaining metadata fallback gap: SoCo's DIDLMetadataError is
+  normalized to the existing title-only path. A failed playback command is not
+  retried, avoiding duplicate playback. Added an actual SoCo-error regression
+  and a supported-radio test that forbids constructing the bounded relay.
+- Hardened common relay cleanup and both Sonos/DLNA Stop paths: cleanup failure
+  cannot leave local state PLAYING or retain temporary media. Failed HTTP cleanup
+  keeps an owned runner for retry; subsequent start finishes that cleanup before
+  publishing a fresh URL. Added failure/retry/next-start tests for both backends.
+- Correction to the previous validation claim: the two real conversion tests
+  were skipped without FFmpeg/ffprobe; the previous summary overstated local
+  conversion verification. Supplied FFmpeg/ffprobe 7.0.2 only in a temporary
+  test directory and reran the affected suite with that directory on PATH.
+- Final result: 71 passed, zero skipped, 14 subtests. This includes actual
+  Opus/WebM -> MP3 via HTTP relay and ffprobe checks for codec, stereo, 44.1kHz
+  and duration, plus range serving, metadata, lifecycle and volume regressions.
+  Compileall and diff checks pass. No project dependency/version changed.
+- No GitHub merge, deployment or physical Sonos test. The earlier unrelated
+  private-marker failure in full source export remains a separate known issue.
+
+## Desktop web controls after background tab — 2026-11-07 (reload restores controls)
+
+- Decision confirmed by user: classify the demonstrated UI and synchronous
+  Cast-error/fallback defects as upstream YTM Web limitations, not receiver
+  fixes. Closed for receiver workaround development absent new contrary
+  evidence. See `TESTING.md` known-web-limitations section before investigating
+  these symptoms again. Original Chrome detach trigger remains unknown.
+- User reports delayed resynchronization after returning to YTM Web, then no
+  Pause response while HA still controls playback. Audio changes are out of scope.
+- Live `.110`: at19:58:05UTC remoteDisconnected, at19:58:11.94 remoteConnected
+  and getNowPlaying/getVolume/getLoopMode. Feedback HTTP completes in284ms,
+  followed by58/61/57ms posts; routine state posts ~50–80ms. Browser trace
+  confirms onStateChange arriving every second and proxyState1/playerState1.
+- Browser screen suffix a18965 matches current receiver music identity. At
+  20:08:02.276 browser sends next; receiver receives it at20:08:02.522UTC.
+  Pause does not reach either receiver Cast or Lounge command path.
+- Expanded browser exception identifies the immediate failure:
+  InvalidStateError in PresentationConnection.send, connection disconnected,
+  cast_sender.js -> media.pause -> remote.js -> player.pauseVideo. The YTM
+  remote script calls Cast media.pause when a Cast media object exists;
+  its MDX fallback is an error callback, which a synchronous throw bypasses.
+  Thus live Lounge feedback and broken Cast controls can coexist. This is not
+  evidence that the new feedback queue blocks commands.
+- Original desktop TCP peer `.91:61250` remains ESTABLISHED on `.110:37181`;
+  no corresponding close/takeover observed in the incident interval. A Chrome
+  page PresentationConnection is distinct from the browser-to-receiver socket.
+  Why Chrome detached that page connection remains unknown; do not claim a
+  proven background-tab suspension cause or receiver regression.
+- Verified latest published pre-release through GitHub: v0.7.0-dev1, matching
+  local frontend base85918111ac68cbf837bf58835b5fd066615963ad. Reviewed local
+  Lounge feedback changes against that base. 46 Lounge tests pass (local mock
+  ports require execution outside sandbox); this does not reproduce Chrome.
+- User confirms full page reload restores controls. Reports separate missing
+  current-title display until selecting a song. At20:11:17.639UTC the returning
+  browser explicitly requests getNowPlaying; the next feedback POST completes
+  at20:11:17.904 (264ms). Thus this instance is not simply a missing status query.
+  Subsequent browser snapshot confirms valid remote videoId, state1, position,
+  duration188 and matching seekable end, but index null. A direct getNowPlaying
+  query did not repair the UI. Comparison of local player video_id and remote
+  videoId returns [null, validRemoteId]: no locally selected video after reload.
+- remoteConnected is currently ignored; periodic onStateChange omits videoId,
+  while getNowPlaying returns identity plus state. Proactive reconnect snapshots
+  could cover a missing query, but cannot yet be claimed to fix this observed
+  case where the query did arrive. Do not implement a speculative timer/push loop.
+- Inspected the exact public YTM app build from the user's exception:
+  `yt_music_web.en_US.I6PQRHpqgd8.es5.O`, remote player `a5c2aafe`.
+  App line15978 remoteQueueChangeDebouncer dispatches SET_REMOTE_WATCH_ENDPOINT
+  only when remote videoId AND N_(store state) exist. N_ selects a preloaded
+  endpoint or selected local queue item's navigationEndpoint (lines10476,
+  15916–15922). With neither, remote title updates cannot initialize the UI.
+  This is a concrete source-level explanation consistent with the user's
+  empty-local/valid-remote observation; store internals were not live inspected.
+  The branch does not use currentIndex. Repeated status pushes cannot satisfy
+  the missing-local-endpoint guard. No browser injection or fake playback.
+- Independently reproduced missing currentIndex in temporary Google Lounge
+  receiver/sender sessions (no user account or live receiver identity reused).
+  Sending currentIndex0 and4 in nowPlaying yields received messages without the
+  key. Alternative unknown index keys pass through but are not consumed by YTM;
+  playlistModified also does not preserve currentIndex. Do not rename fields
+  speculatively. The live binary SHA matches the19:16 deployed artifact and
+  contains the expected outgoing currentIndex field. Protocol test secrets
+  remained in memory and were not printed. Probe: /tmp/lounge-status-probe.py.
+- Exact historical cause of Chrome's page PresentationConnection detachment
+  remains undetermined after reload; receiver logs contain no matching closure.
+  Distinguish confirmed browser exception/missing fallback from attribution of
+  the original detach. Receiver has no direct way to repair Chrome's page object.
+  No receiver patch/deployment/release for this incident. Do not add unsolicited
+  server disconnects, weaken sender takeover, or inject browser code as a fix.
+
+## PR #16 / #17 output integration — 2026-11-07 (local, not deployed)
+
+- Reviewed zero00zero's PR bodies, comments and diffs: #16 head
+  `24eaab5456843ed3c5f1ba51983b06d0c484875a`, #17 head
+  `afc574abbe2bd3544c3815e979be9a08ff3b62c2`. Integrated their intent rather
+  than stacking the conflicting launch cap and Sonos-only adoption policies.
+- Shared startup rule reads actual backend volume/mute; positive unmuted values
+  (including >25%) are adopted without writing. Zero, mute, unavailable/invalid
+  readings use 25% unmuted. Query timeout/cancellation and failed fallback writes
+  are covered; failed writes prevent audio. Default backend/mpv startup gain is
+  25%. New-session setup does not reset volume on ordinary track changes.
+- Bridge Volume has an explicit initialize flag on launch versus sender writes.
+  The Python adapter handles LOAD without a launch, conservative older-frontends,
+  Stop/reconnect and takeover, while preserving existing volume revisions and
+  deliberate pre-load user adjustments. The old frontend zero-to-10% hint is
+  now 25% and includes muted startup. Actual output reads remain authoritative.
+- Sonos/DLNA read physical output state; mpv reads its live player properties.
+  AirPlay's existing adapter has no pre-start query, so uses the fallback;
+  DACP/remote feedback remains intact and device-dependent. Free-form command
+  output cannot control volume and now fails initialization/volume commands
+  instead of claiming a physically safe level. Null remains simulated.
+- Sonos now reuses the existing bounded DLNA relay for unsupported/loopback
+  formats and sends escaped music-track DIDL with artist/album/artwork plus the
+  actual play URL/MIME. Supported remote media/radio remains direct. Whole-file
+  conversion latency, finite-size/time bounds and device codec limits remain.
+- Sonos RenderingControl subscriptions use a thread-safe queue handoff, renewal,
+  old-generation rejection and ordered unsubscribe after cancelled subscribe.
+  Five-second polling is fallback until actual NOTIFY delivery or on failure;
+  a 60-second silence watchdog reconciles/re-subscribes. Volume-only read errors
+  do not terminate playback. Sonos and DLNA retain monitoring after natural EOF
+  until Cast Stop. Existing DLNA polling, mpv events and AirPlay callbacks remain.
+- Evidence: author confirms daily Sonos AirPlay use (Era 100 and “Play”) and the
+  physical 100% Era 100 incident, but explicitly not direct Sonos hardware tests
+  or physical acceptance of either PR fix. README/network-output docs/testing/
+  packaging/changelog now distinguish those facts. No speaker was accessed here.
+- Validation: full Python run 412 passed, 13 skipped, 81 subtests; one pre-existing
+  source-export failure rejects private machine markers in the already-dirty
+  working plan. Existing work/rollback notes are preserved, not silently removed
+  to make export green. Final scoped output/player regression after refinements:
+  151 passed, 2 skipped, 32 subtests. Additional final natural-EOF monitoring test:
+  volume-policy suite 15 passed, 10 subtests. Metadata escaping/fallback,
+  cancellation, feedback and safety cases pass. The real FFmpeg conversion
+  cases were skipped in this first run; see the remainder-audit correction and
+  successful real conversion run above. Compileall/diff checks pass.
+- Rust core/player-api tests: 135 passed, 2 existing live probes ignored. Scoped
+  Rust 2021 format checks pass. Other concurrent workspace work is preserved.
+- Frontend delta is `patches/vibecast-output-volume-integration-20261107.patch`,
+  SHA-256 `23d18dda663e8793ed80eb7a0eee48ef333b1b335bf2e9562d52d0ae5d0518b9`.
+  Apply AFTER the playback-coordination review snapshot above base
+  `85918111ac68cbf837bf58835b5fd066615963ad`; exact forward reconstruction and
+  reverse-apply check passed. It contains only the three affected Rust files,
+  not unrelated work. Release locks/version are deliberately unchanged.
+- Status: implemented and automatically tested locally; no GitHub merge, release,
+  deployment, or new physical acceptance. Remaining hardware checklist and
+  known protocol/format limits are in `docs/network-outputs.md`.
+
+## TuneIn Radio / issue 8 — 2026-11-07 (built and locally tested)
+
+- User requested a dedicated receiver for casting from the TuneIn Android app,
+  preserving all concurrent unpublished work. Work is in the maintained product
+  and frontend checkouts; the historical research checkout is unchanged.
+- Implemented an SDK app provider for `12F05308`, using the current official
+  receiver's standard media LOAD and top-level TuneIn customData. Resolve live
+  station IDs through TuneIn, retain initial metadata, and reuse shared controls.
+- Retained the existing release pin and other agents' review snapshots. The
+  final source includes concurrent output-volume integration without overwriting
+  it. A frozen review source produced the separately stored local executable
+  `.state/tunein-review-20261107/vibecast`, SHA-256
+  `5ae7431d57586430dd5cf8f2d2a8167d582afbe19a2ecbe107f72b1cc1e91f98`.
+- Validation: 402 Rust tests passed, 3 existing live probes ignored; TuneIn
+  15/15, scoped Clippy and formatting passed. Real isolated Cast/bridge smoke
+  passed all 14 checks, with public station resolution/switching, controls,
+  invalid-load recovery and DMR takeover. A short real stream decoded through
+  FFmpeg to null without opening an audio device.
+- Python: 429 run, 13 skipped, 415 passed, one pre-existing source-export failure
+  from private machine markers in older notes. New TuneIn source/export text
+  checks pass; unrelated notes are preserved.
+- Feature delta `patches/vibecast-tunein-receiver.patch` SHA-256
+  `5a2134c30763fd25ddef510e4665fca3a0e6f16017077ee90e6694ca2fc92847`;
+  full candidate `patches/vibecast-tunein-review-20261107.patch` SHA-256
+  `6556f01e6dcfc13ce67ef1ca491f7f52551faeb204ca64e0a919ff8160c27c49`,
+  over `85918111ac68cbf837bf58835b5fd066615963ad`; apply checks passed.
+- No publication, production restart or issue closure. Stock TuneIn Android/Pro
+  acceptance remains pending; Premium, on-demand, preroll sequences and periodic
+  metadata refresh are outside this first live-radio implementation.
+- Detailed protocol evidence, automated results and acceptance limits:
+  [TuneIn receiver](tunein-receiver.md).
+
+## Google CDN / native playback research — 2026-11-07 (no runtime changes)
+
+- Google documents GGC caches inside ISP networks, with cache fill from other
+  caches/core. Cache placement and per-playback delivery pacing are separate.
+  Source: https://support.google.com/interconnect/answer/9058809
+- Google's 2012 Trickle paper explicitly describes fast initial buffering then
+  delivery near encoding rate, to avoid unused downloads and network bursts.
+  This establishes the design principle, NOT today's exact server algorithm or
+  the cause of our measured slow URLs. Historical buffer/rate constants must not
+  become current receiver defaults.
+  https://developers.google.com/speed/protocols/trickle-tech-report.pdf
+- Current reverse-engineered SABR request schemas carry player time, time since
+  seek, bandwidth estimate, buffered time ranges and prefetch state; server policy
+  carries target/minimum readahead, backoff and playback cookie. Our progressive
+  GET/range path does not exchange this SABR feedback. Lounge state reporting is
+  a separate control path, not equivalent media-server buffer feedback.
+  https://github.com/LuanRT/googlevideo/tree/c0e73b283310c771cddc5af8993f0e6b55a7578e/protos/video_streaming
+- Do not assume the user's successful native YTM playback uses SABR without a
+  client trace. Different formats, prebuffered targets, authentication and host
+  selection remain alternatives. CTT authorization is not a fast-delivery flag.
+- SABR supports audio-only but requires a transport/segment adapter and session
+  bootstrap/reload integration. googlevideo has no demonstrated CTT integration;
+  its mpv example limits VOD seeking to already buffered segments. Adopting it
+  alone would not establish arbitrary fast seeks. No SABR rewrite authorized.
+- Next evidence: compare native start and seek into an unbuffered region against
+  receiver on the same title, recording protocol/request shape, format, timing
+  and buffer reserve without persisting credentials. Audit resolver-to-download
+  client/header consistency before controlled A/B changes. Do not infer bandwidth
+  capacity from server-paced average throughput or trigger reload solely because
+  a well-buffered source is slower than the access line. Keep prompt draining of
+  open responses; avoid another artificial slow-reader implementation.
+
+## Slow Googlevideo delivery investigation — 2026-11-07 (read-only probes)
+
+- User reports gigabit access and asks for the cause rather than more playback
+  workarounds. Do not equate access-line capacity with one CDN connection, or
+  call this incident a proven HTTP429/rate-limit event.
+- Independent `.110` probes bypassed Rust cache, receiver and mpv. yt-dlp
+  resolved public `1yEfeQr4zOw`, itag251, 3,241,987 bytes; URL and request headers
+  stayed only in probe memory. No tokens/cookies/signed URLs were printed/saved.
+  These probes were separately resolved without the live sender CTT, so are
+  evidence of independent slow delivery, not exact replay of the original URL.
+- Same-URL comparison with extractor headers: Range header0–8MiB returned206,
+  1,081,344 bytes after22.225s, successive5s windows ~80,364/64,556/39,468/17,777B/s.
+  Query range0–8MiB returned200,1,605,632 bytes after22.388s, windows
+  ~117,606/91,437/50,093/34,489B/s. Merely using query range did not remove decay.
+  A1MiB header request completed in4.509s.
+- Reversed-order comparison on another single fresh URL: initial1MiB8.222s;
+  large request1,556,480 bytes after23.286s with windows
+  ~136,299/86,621/42,413/22,328B/s; subsequent1MiB at offset1MiB took15.457s.
+  Smaller requests are NOT established as a reliable cure; latency variation
+  prevents attributing the difference solely to request size.
+- Raw anonymous Android metadata URLs were separately rejected403 on direct
+  tests; IPv4-pinned resolution/download also rejected403. Those are different
+  authorization cases and cannot explain successful slow live206 responses.
+  Do not infer IPv6 causality from these incomparable probes.
+- Primary comparison: yt-dlp HTTP downloader uses bounded Range headers;
+  YouTube.js uses range query. yt-dlp issue17612 describes throttling above a
+  much larger response threshold, so it is not direct proof for our1.5–3MiB
+  objects. Sources: https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/downloader/http.py
+  https://github.com/LuanRT/YouTube.js/blob/main/src/utils/FormatUtils.ts
+  https://github.com/yt-dlp/yt-dlp/issues/17612
+- Conclusion: source-delivery slowdown reproduced independently of our playback
+  implementation, with burst then decay resembling pacing. Exact server/client/
+  route condition remains unproven. No production settings/code/deployment changed
+  in this investigation; do not replace this uncertainty with a speculative fix.
+
+## Playback coordination follow-up — 2026-11-07 (deployed, acceptance pending)
+
+- User confirms immediate start after the preceding cache change, but reports
+  intermittent poor seeking and delayed desktop position feedback. This is not
+  acceptance of the complete playback behavior. Review spans cache scheduling,
+  decoder state, shared recovery and Lounge feedback, preserving other outputs.
+- Live evidence: 19:01:21 seek to 79s creates reader at byte 1,228,576, but the
+  reported position remains 79s until 19:01:33. During the wait, the adapter
+  incorrectly reports PLAYING. At 19:00:32 Lounge reports an HTTP interruption
+  while local position reports continue normally. These are distinct paths.
+- Confirmed cache regression: symmetric adjacent-block exclusion also excludes
+  a missing block behind the current download. Correct to directional handling.
+  Investigate blocked origin-header wait and coarse 128KiB internal blocks;
+  retain 8MiB HTTP requests, not tiny origin downloads. Actual decoder range
+  requests remain necessary; the cache cannot observe seeks inside mpv.
+- Confirmed status defects: mpv acknowledges a seek before playback restarts,
+  but our state omitted the seeking flag. Initial file-loaded also precedes
+  decoder restart. Keep active seeks/startup BUFFERING until playback-restart;
+  explicit Pause still wins. Reassess old source-speed evidence at explicit
+  seek so the corrected BUFFERING cannot trigger stale-source recovery.
+- Lounge currently awaits feedback POSTs while playback reports queue in a
+  bounded FIFO; try_send silently drops newest states on overflow. Fix by
+  polling one in-flight POST alongside the existing event loop, coalescing
+  outgoing snapshots while applying transitions locally without loss; keep
+  consuming reports/worker events during reconnect. Preserve cancellation,
+  real sender takeovers, volume quiet period, queue advance and retry budget.
+- Implemented: directional missing-block priority, interruptible origin-header
+  wait (original 15s deadline retained), internal 16KiB blocks / unchanged 8MiB
+  origin requests. `begin_seek()` starts a new rate-measurement epoch, including
+  atomic rejection of stale samples. Hard cache failures remain actionable.
+- Real mpv 0.35.1 probe on `.110`, separate localhost origin/IPC and null audio:
+  native seek ACK occurs immediately while execute-seek waits for blocked packet
+  read. Reopening the same cache URL interrupts that read. Added one cancellable
+  fallback after 1s without playback-restart, only for owned local cache URLs;
+  preserve latest target, pause intent and volume. LOAD/Seek/Stop/shutdown cancel
+  the fallback, including an in-flight reopen. No YouTube resolution, cache
+  eviction or extra source-retry round. Actual modified adapter restarted near
+  61s after ~1.24s while the old origin read remained blocked. Initial paused
+  LOAD also emits playback-restart, validating the readiness gate.
+- Lounge now polls one feedback POST concurrently with the existing event loop;
+  at most one pending snapshot per six feedback kinds. Playback transitions are
+  processed before coalescing outgoing snapshots. Lossless bounded ingress and
+  report/worker draining during reconnect prevent the former silent BUFFERING
+  loss. Safe POST stage/duration diagnostics do not log URL/body/credentials.
+- Validation: combined Rust core/YouTube 252 passed, 3 existing probes ignored;
+  cache subset 46 passed / 2 ignored. Combined Python playback/output regression
+  128 passed, 1 skipped, 42 subtests. Scoped Clippy passes with existing baseline
+  allowances; format/diff checks pass. Native null-audio reproduction and modified
+  adapter test passed; this is not an audible acceptance test of every output.
+- Locally compiled binary deployed on `.110` ~19:16 UTC, health 2/2 ready:
+  `69812e1b849ef0f0745098a1eb1a4ab27462e1bf2b165b92d1e7ce754e15a3c7`.
+  Updated mpv adapter SHA-256:
+  `3b609dea09bb19678cbf3b904671bc3a31b7f1b6e83c473e86f984cf7d7e4a1f`.
+  Rollbacks: `/home/test laptop/vibecast-round3-review.rollback-before-playback-coordination-20261107`
+  and `/home/test laptop/mpv_backend.rollback-before-playback-coordination-20261107.py`.
+  Other Python adapters unchanged; shared Rust fixes apply wherever used.
+- Full frontend snapshot `patches/vibecast-playback-coordination-review-20261107.patch`
+  over `85918111ac68cbf837bf58835b5fd066615963ad`, SHA-256
+  `138c993cf70dba91cd40b8c6cd0335d8f16ca013e015e08f992058704d93834c`;
+  reverse-apply validated. This supersedes the prior seek review snapshot as the
+  current candidate, not a release lock. User asked to test reconnect, repeated
+  forward/back seeking, timely position feedback and Pause during loading.
+- First live logs after deployment: feedback POSTs in the sampled 19:17:39–44
+  window complete in 55–249ms; a seek to 87s at 19:17:52.808 reports BUFFERING
+  then PLAYING at 52.824 with subsequent advancing position. A seek during next
+  title startup at 19:17:57.396 remains BUFFERING until 19:18:00.184, then advances.
+  Do not turn these samples into a latency guarantee or audible user acceptance.
+- Remaining scope: original YouTube source slowness is still unexplained; do not
+  label it rate limiting. Active range prioritization does not solve every
+  theoretical multi-reader scheduling case, and final response-tail validation
+  retains its timeout. No decoder-wide/network-wide aggressive timeout or full
+  yt-dlp streaming redesign. No publication; live acceptance still pending.
+
+## Slow cold resume — 2026-11-07 evening (deployed, acceptance pending)
+
+- User reports delayed playback after connecting, then renewed buffering.
+  `.110` logs for 18:45–18:49 UTC show `1yEfeQr4zOw`, initial position 121s,
+  3,241,987 bytes / 188s. Direct CTT resolution succeeds (1480ms), proactive
+  refresh succeeds (229ms), then final fresh playback resolves in 147ms at
+  position 138.2145s. This is not an absent retry or failed authorization.
+- Both original and refreshed sources deliver approximately 14.7–16.4 KB/s
+  during measured ten-second windows. No 403/429 is evidenced in this incident.
+  The underlying slow-source cause is unresolved; do not attribute it to IPv6,
+  rate limiting, a missing PO token or an untransformed `n` without evidence.
+- Confirmed local scheduling weakness: a fresh cache starts at byte zero and
+  drains an open 8MiB range before considering distant reader demand. A cold
+  recovery near the end can therefore wait for redundant prefix downloading.
+  Implemented prioritization of actual nonsequential reader demand while
+  preserving ordinary eager sequential draining and the two-recovery budget.
+  One initial missing-data priority per HTTP reader; newer demand supersedes
+  older priority, adjacent blocks retain the open response, partial bytes stay
+  cached. Drop/Cancel clears priority; cancellation races are guarded. A new
+  target range gets its own throughput window instead of inheriting slow-prefix
+  health. This needs an actual decoder range request, not an estimated byte
+  position from playback time.
+- ffindog's inspected main output passes the resolved URL directly to mpv, so
+  its player controls range reads; it has no equivalent Rust prefix queue.
+  It validates streams and uses YouTube.js decipher; later playback failures
+  may skip/stop rather than perform our same-title recovery. Android client
+  identity alone does not prove a JS challenge. Add only safe URL-characteristic
+  booleans/format diagnostics pending actual evidence; no signed URL or tokens.
+- Reproduced slow-prefix/distant-reader timeout before the fix. Afterward,
+  cache suite 42 passed / 2 existing real-mpv probes ignored; broad core/YouTube
+  suite 245 passed / 3 ignored. Scoped Clippy passes with the existing baseline
+  allowances; formatting/diff checks pass. Tests cover partial backfill integrity,
+  normal sequential requests, competing readers, cancellation and recovery.
+- Locally built candidate deployed on `.110` at approximately 18:59 UTC;
+  health confirms 2/2 outputs ready. Binary SHA-256:
+  `9a7101484d8dde3dac84147e88a1e0760e01d7a0d37f714cb7caa074bd31c92a`.
+  Rollback is `/home/test laptop/vibecast-round3-review.rollback-before-seek-priority-20261107`
+  (previous volume candidate `85efe0af...`). No Python/output adapter changes.
+- Full frontend review snapshot `patches/vibecast-seek-priority-review-20261107.patch`
+  over `85918111ac68cbf837bf58835b5fd066615963ad`, SHA-256
+  `a5806a0caec192f8ac8998875dc54b3d0e81a4dda5af2df8bf0558146bb3da0a`;
+  reverse-apply check passed. Supersedes the earlier volume-only review snapshot
+  as the current candidate; neither is a release source lock.
+- User test requested: reconnect, same affected track and seek to about 120s.
+  Live logs at 19:00:12 UTC already show the same affected title's decoder
+  requesting byte 2,423,375; cache immediately prioritizes block byte 2,359,296.
+  Cache completes at 19:00:48 (3,241,987 bytes). No renewed slow-source/recovery
+  message in that observed window. Selected title and next-item URLs both have
+  `has_n=false`, excluding an untransformed n for these new resolutions (not
+  retroactively proving the original URL's properties). Audible user acceptance
+  remains pending. Original source-slowness cause is unresolved; do not claim
+  all playback failures solved. No release.
+
+## Volume slider: final live findings and scope — 2026-11-07
+
+- User confirmed: without Cast and without the console workaround, the YTM Web
+  slider works normally. During Cast, the temporary browser drag guard eliminates
+  the jumping. This confirms the tested workaround, not a receiver-only cure.
+- User also reproduced the same fundamental slider jumping on an original Cast
+  receiver, usually but not every time. Frequency/timing may differ; no controlled
+  performance comparison was made. Here "skipping" refers to the volume slider
+  jumping, not playlist navigation or skipped tracks.
+- Together with the inspected connected-only slider feedback path, this supports
+  classifying the remaining symptom as a YouTube Music Web UI defect rather than
+  a bug specific to this receiver. User accepts documenting this limitation;
+  stop further speculative receiver changes to work around the website.
+- Receiver-side volume scaling is live-confirmed. Existing acknowledgement
+  ordering and Lounge coalescing changes remain in the unreleased candidate;
+  do not describe them as fixing the website's drag behavior on their own.
+- A Cast receiver cannot inject JavaScript into the sender's YouTube HTTPS page
+  through the Cast protocol. Google/YouTube can fix its own website; a user can
+  optionally run page-local code or install an appropriate browser userscript.
+  The console test is temporary and disappears on reload. The prepared helper
+  is optional and not automatically installed; no permanent browser installation
+  or additional deployment was requested or performed.
+- No publication authorized by this acceptance of the diagnosis. Current `.110`
+  candidate and review snapshot remain as recorded below. This section supersedes
+  the earlier pending-test statements.
+
+## YouTube Music Web volume correction — 2026-11-07 (unreleased)
+
+- User authorized both web-only curve compensation and the separate feedback
+  ordering fix, including a default-enabled, per-output Web UI switch. No release
+  before the user's laptop test. First candidate deployed on `.110` at
+  2026-11-07 10:22:24 UTC; health 2/2. User confirmed volume scaling feels correct
+  but the slider still jumps. Later live findings above close the investigation
+  as a website limitation with a confirmed browser workaround; do not claim a
+  receiver-only fix or publish without separate authorization.
+- Keep canonical receiver/output volume unchanged. App-owned SDK hooks decode
+  incoming YTM Web volume and project Cast receiver/media feedback per recipient.
+  Eligibility requires a desktop Chromium owner connection plus exactly one
+  positively identified `youtube.m-desktop` Lounge controller. Unknown/mixed
+  controllers, regular YouTube, HA and mobile retain ordinary volume. Retired
+  Lounge epochs cannot re-enable a profile after takeover.
+- Lounge volume feedback applies the matching forward curve. Typed YouTube
+  `web_volume_compatibility` defaults true, is player-scoped and uses the existing
+  settings service as sole persistence. Management relays settings through the
+  owned adapter process; changing the option does not restart playback.
+- Opt-in `volumeRevisions` orders output-wide volume commands and their reports.
+  Python advances the applied revision after backend level/mute writes complete.
+  Core rejects stale volume/mute acknowledgements while retaining playback data;
+  legacy players keep their original protocol behavior. Genuine device changes
+  following the latest command remain accepted. This does not claim to identify
+  uncorrelated hardware echoes arriving after a backend acknowledges completion.
+- Management/UI checks passed: 80 focused tests covering route/process lifecycle,
+  settings HTTP/stdio round trips and conflict handling, adapter behavior, browser
+  toggle revisions, and source/wheel inventory. The settings control reads live
+  receiver snapshots; disabled/disconnected outputs cannot be edited. No duplicate
+  settings configuration is written to route storage.
+- Output audit: mpv applies cubic amplitude gain; native AirPlay maps positive
+  percentages to -30 + 0.3*percent dB (zero is mute). Sonos/DLNA use the device's
+  own curve. No output curve or audio cache transformation is changed. The
+  generic Command backend's existing status-only volume limitation remains.
+- Regular YouTube uses a different slider mapping from YTM; never apply YTM's
+  exponential inverse to all Chrome senders. Research was a behavioral reference,
+  not copied third-party implementation code.
+- First candidate receiver SHA-256:
+  `16eeb9b8d895b91544ffba4428836161e8aced683f8c920ec4a0137b799ddafe`;
+  Python player `b89b768bbdaf1729033e3ef52e383f7213d46009ddf2f9c644cb7274f2dc7ed3`.
+  Both enabled outputs ready, settings API reports the default-enabled option,
+  live Lounge classification positively identified YTM Web at 10:23:07 UTC.
+  Rollback: `/home/test laptop/web-volume-20261107-rollback`.
+  New `settings_ipc.py` and UI CSS are installed into the test container as well
+  as staged on the host; the existing Python file mounts remain in use.
+- Broad Rust regression: 371 tests passed, three existing ignored; additional
+  SDK and actual YouTube takeover-hook tests passed. Python settings/player/web
+  follow-up: 37 passed, two subtests. Clippy passes with existing resolver
+  dead-code/unused-variable and existing style allowances; formatting/diff checks
+  pass. Build performed locally using the existing glibc-compatible Zig toolchain.
+- Reproducible current frontend diff, including earlier unreleased fixes,
+  is `patches/vibecast-web-volume-review-20261107.patch` over
+  `85918111ac68cbf837bf58835b5fd066615963ad`, SHA-256
+  `614027cc680fe1e3e98c8d29e944da7394465ff97c247fb09d848567d5010b66`.
+  This is a review snapshot, not the release source lock. Includes the second
+  candidate below; validate/freeze the full source set before a future image.
+- Follow-up: ordering revisions solve stale player acknowledgements, but Lounge
+  still posts intermediate volume values over its separate HTTP feedback path.
+  Added a nonblocking web-only 330 ms quiet-period coalescing step. Playback and
+  controls remain immediate; only the latest volume/mute is posted after dragging
+  settles. `getVolume` cannot bypass an active quiet period. This feedback fix is
+  independent of the curve toggle, since the user also reproduced jumping with
+  the browser's exponential flag disabled. Safe debug logging records only
+  canonical/wire volume percentages and mute, never credentials.
+- Second candidate active on `.110` since 2026-11-07 10:27:53 UTC; health 2/2,
+  receiver `85efe0afbbc031422cd765192fb1aec7ee905529a45eacff2cbb316f458bc0fb`.
+  Python files unchanged from candidate one. First candidate binary additionally
+  backed up as `web-volume-20261107-rollback/vibecast-r1`. Full YouTube suite:
+  135 passed, one existing ignored; temporal regression proves latest-only volume
+  feedback while Pause/playback status stay immediate and non-web feedback keeps
+  its previous timing. Clippy (same baseline allowances), formatting and patch
+  reverse-application checks pass. User's second slider test still shows pronounced
+  jumping while holding the mouse button; no release. Curve correction remains
+  accepted.
+- Investigation after second test: inspected Google remote module ignores media
+  status volume, but receiver-status volume updates its remote context. The
+  one-second guard restarts only if rounded local volume differs from that
+  context. Its timer then writes the context back to the player/UI. Do not remove
+  Cast acknowledgements or indefinitely delay them: sender requests can time out.
+  Requested a volume-only browser trace to distinguish direct Cast feedback,
+  backend echoes and UI quantization before another behavioral change.
+- Browser trace received: Cast confirmations match the requested wire levels
+  (floating-point differences are insignificant). The same-millisecond `5,4`
+  player events are explained by Google's remote timer: it removes its outgoing
+  volume listener, calls unMute (minimum volume 5), then setVolume(4), and restores
+  the listener. Likewise `22,22` is not evidence of duplicate receiver commands.
+  Debug logging has a buffered replay mechanism; clustered log callbacks and
+  different module-relative time origins do not prove receiver/network backlog.
+- Website mechanism verified in public YTM source: disconnected updateVolume
+  retains the requested UI value, while connected onVolumeChange inverse-maps
+  the player's integer volume into the bound slider value. `_updateKnob` then
+  rewrites immediateValue and the drag anchor even while dragging. This happens
+  locally and cannot be removed by delaying receiver acknowledgements.
+- Requested disconnected comparison and a temporary page-local `_updateKnob`
+  guard while dragging. No further receiver deployment. A reversible optional
+  helper is prepared in `tools/ytmusic-volume-drag-guard.js`; it only targets YTM
+  volume sliders, preserves pointer/audio commands and feedback outside dragging,
+  and is NOT injected/installed automatically. Syntax and Node harness checks
+  for drag/release, repeat installation and restoration passed. User subsequently
+  confirmed that the temporary guard fixes the jumping during Cast; no persistent
+  browser installation was performed.
+
+## Web-only volume scaling and feedback investigation — 2026-11-07
+
+- Investigation only; no runtime, volume mapping or protocol changes deployed.
+  `.110` still runs receiver `618191e9d33a9ecbcf73ef10995ab951c1a3511cbace9d6beb13b398dd3eee9a`
+  and mpv adapter `6960d4418c9ff7b02a464a715dfa39e269ad377b81a25baf25da7f67ca866f27`.
+  Runtime mpv is 0.35.1. User observes nonlinear control and slider jumps only
+  on YTM Web, with HA and mobile app working satisfactorily.
+- Current receiver passes Cast volume 0..1 unchanged to the output; mpv adapter
+  multiplies it by 100 and divides observed properties by 100. mpv itself uses
+  cubic amplitude gain, `(volume/100)^3`, verified in its exact v0.35.1 source:
+  https://github.com/mpv-player/mpv/blob/v0.35.1/player/audio.c#L150
+  This is signal amplitude, not perceived loudness. HA's Cast integration forwards
+  the requested normalized value directly to PyChromecast, without this web
+  transformation. Mobile logs show ordinary Cast SET_VOLUME too; its exact
+  slider-position-to-wire mapping has NOT been measured and must not be claimed
+  identical to HA solely from the user's satisfactory experience.
+- User confirmed `ytcfg.get("EXPERIMENT_FLAGS").music_web_enable_exponential_volume_control`
+  is true. Current public YTM application build 366b12ee maps a UI position s
+  to `clamp(2^(0.03917*s+2.82823)-7.13431,0,100)` before calling setVolume.
+  The remote module rounds that percentage and sends normalized Cast level.
+  Web positions 25/50/75/90 consequently send about .07/.20/.47/.75. At .20,
+  the receiver requests mpv20 and obtains .008 relative signal amplitude;
+  HA50 instead requests mpv50 and obtains .125. The confirmed extra web curve
+  combined with mpv's curve explains the strongly compressed low range.
+  Incoming Cast and Lounge percentages are converted back by the web inverse
+  curve. Integer percentage rounding is particularly visible near the low end.
+- Primary public research references (behavior/format reference, no copied
+  implementation introduced into the product):
+  https://music.youtube.com/s/366b12ee/music_polymer_inlined_html.js
+  https://www.youtube.com/s/player/a5c2aafe/player_es6.vflset/en_US/remote.js
+  https://github.com/home-assistant/core/blob/dev/homeassistant/components/cast/media_player.py#L542
+  https://developers.google.com/cast/docs/reference/web_sender/chrome.cast.Volume
+  Research snapshots are in `/tmp/ytmusic-volume-review.{html,js}` and
+  `/tmp/youtube-volume-remote.js`; JS hashes respectively
+  `658174644890a3a5310110d9e4f157c36d8e30beda50eca742d3477228e55a92` and
+  `f9ff31fa15bb863960687675a2efca37a996f2ed31423bc1f6cf5647d18e4fd5`.
+- Feedback audit: core immediately publishes each requested volume, then accepts
+  any player State volume/mute as authoritative, before the media-staleness gate.
+  A delayed .4 report after a newer .6 request therefore republishes .4 to Cast
+  and Lounge; a later .6 report restores .6. Python's FIFO command execution
+  does not order already in-flight reports in the reverse direction. Periodic
+  reporting and separate mpv volume/mute notifications create intermediate
+  snapshots. Existing core regression
+  `correlated_old_reports_and_controls_cannot_finish_or_stop_a_replacement`
+  passes and explicitly permits output-wide volume from old media reports.
+  This establishes the ordering gap, not yet a captured live cause of every
+  web drag jump. Do not incorrectly filter volume by mediaSessionId.
+- Web remote code already suppresses volume synchronization during a restarted
+  one-second interaction guard. ffindog separately debounces confirmations by
+  330 ms after changes; its comments describe stale-confirmation jumping:
+  https://github.com/ffindog/ytm-cast-receiver/blob/992cb673ccb94fc121d202772960c050a3928d65/ytcr-player/MpvPlayer.mjs#L545
+  A debounce alone cannot distinguish a delayed command echo from a fresh
+  physical volume change. Recommended ordering fix: optional output-wide volume
+  command revisions, applied revision in reports, opt-in/legacy fallback;
+  ignore only older volume/mute acknowledgements while preserving playback and
+  genuine external controls. This is a proposed follow-up, not implemented.
+- Do not globally linearize mpv or invert all incoming levels: that changes HA,
+  the working app and other outputs. A web-specific compensation requires a
+  reliable sender/curve selection AND matching outgoing feedback projection.
+  Cast's 0..1 value does not encode the web experiment flag; controlType does
+  not negotiate this curve in the inspected YTM implementation.
+  A temporary browser-only comparison was offered by setting that flag false
+  in the current tab (reload restores it). User confirmed that volume adjustment
+  then feels more appropriate, but the slider still jumps. This isolates the
+  scaling problem from the separate feedback/interaction problem without changing
+  HA, the app, or the receiver's volume contract.
+- Follow-up feasibility: inverse curve arithmetic is small; a correct integration
+  must retain the existing logical receiver volume, decode only explicitly
+  identified curve-enabled web input, and encode that same curve for web feedback
+  while HA/mobile retain ordinary values. Current Cast profiles retain SDK and
+  observer facts, not the YTM experiment flag; raw volume cannot identify it.
+  A browser user-agent alone also cannot establish which tab/experiment/toolbar
+  initiated a receiver-level change. Avoid claiming fully automatic universal
+  detection. A selectable web compatibility profile or client-side removal of
+  the extra curve is more honest than unconditional compensation. Include mute,
+  endpoints/rounding, concurrent HA control and ownership transfer in verification.
+  No implementation or runtime change made for this feasibility discussion.
+
+## Android GMS queue requests displacing desktop — 2026-11-06 (unreleased)
+
+- User reports that playback stalls seem resolved, but desktop Cast is repeatedly
+  disconnected, especially when saying "Okay Google" (several devices respond).
+  `.110` logs show three receiver-initiated takeovers without LAUNCH/MDX at 21:17:35,
+  21:29:09 and 21:30:39 UTC: phone `.79` opens `com.google.android.gms-7/-8/-9`
+  with Android CastSDK metadata, then sends only `QUEUE_GET_ITEM_IDS`. Core
+  claims ownership from desktop `.91`, closes its app channels on both owner sockets and
+  rotates the YouTube Lounge identity. This is not reconnect-grace expiry or
+  a playback/HTTP failure. Voice-trigger causality awaits the controlled retest;
+  the offending protocol sequence itself is captured three times.
+- The iOS queue-bootstrap compatibility rule treated SDK metadata as sufficient
+  evidence for a weak takeover. Play Services supplies this metadata for its
+  transport, including discovery and potentially an active user selection;
+  `com.google.android.gms` does not establish passive/background intent.
+  The narrow guard excludes exactly `com.google.android.gms` and its
+  hyphen-suffixed channel IDs from weak queue-based claims only. Preserve explicit
+  LAUNCH and app/MDX handshakes, same-device companion attachment/reconnection,
+  iOS queue-bootstrap takeover and revocation of displaced controllers. Do not
+  classify every Android SDK connection as an observer or increase reconnect
+  grace to conceal this ownership error. Rejected weak joins now log source ID.
+- Protocol regression reproduced the defect before the change. It covers base
+  and changing GMS suffixes, repeated fresh sockets, readable status, retained
+  desktop control/playback, harmless observer CLOSE, and a subsequent deliberate
+  strong claim on the same GMS socket. Existing multi-socket takeover coverage
+  now uses a real GMS companion source. Full core result: 103 passed, two silent
+  mpv probes ignored (already executed for the unchanged cache in the preceding
+  task). Independent review found no additional defect in this narrow change.
+- Scope limitation: queue bootstrap is still a compatibility heuristic for
+  other SDK senders. No evidence here establishes a general network instability
+  or the precise role of these GMS requests in the sender UI. It remains
+  unverified whether an active sender flow expects a queue-only handoff. Verify
+  ordinary Android takeover and Assistant activation before declaring acceptance;
+  do not infer that rejecting this sequence is harmless solely from its source ID.
+- Candidate receiver SHA-256:
+  `618191e9d33a9ecbcf73ef10995ab951c1a3511cbace9d6beb13b398dd3eee9a`.
+  Built locally for GLIBC 2.36; runtime-image smoke test, formatting/diff checks
+  and focused Clippy (existing allowances) pass. Activated on `.110` at
+  2026-11-06 21:37:19 UTC; verified container hash and 2/2 responsive routes,
+  zero restarts. Python/audio adapters unchanged. Rollback:
+  `/home/test laptop/vibecast-round3-review.rollback-before-system-probe-20261106`
+  (previous receiver `c12b4d0e573bd1efac6f0f6f8be4730fd388f61b7906139c91da1c416b8b0dff`).
+  Full frontend patch: `/tmp/vibecast-system-probe-20261106.patch`, SHA-256
+  `7e5c381d95abec2f6434c0a7360b02ff6b7f4257dd3335909df1efb5adcd9e00`.
+  User live test passed: desktop remains connected after Assistant activation,
+  and intentionally casting from the phone still takes ownership correctly.
+  Logs independently confirm the distinction: at 21:38:35 UTC the GMS-10 queue
+  probe is rejected without rotation; at 21:38:38 the actual YouTube Music
+  app's `getMdxSessionStatus` deliberately claims ownership and rotates Lounge.
+  Further GMS queue probes at 21:38:41 remain harmless.
+  This confirms the targeted scenario; not a claim that every network-related
+  disconnect is eliminated. No release or GitHub push.
+
+## Buffer-aware source recovery across outputs — 2026-11-06 (unreleased)
+
+- The subsequent `.110` incident was genuine starvation, not an explicit pause:
+  mpv reported `pause=false`, `paused-for-cache=true`, position 155.59/188.84 s
+  and only 0.82 s of forward audio. There was no corresponding sender Pause.
+  Video `RWBwDmeOhHY` started at 20:43:38 UTC; the first refresh resumed at
+  byte 2,179,056 of 3,120,891. A second low-rate window then discarded that
+  useful cache, producing decoder EOF at 77 s and the final reload. Monitoring
+  was disabled on that last attempt, allowing a slow but live response to
+  buffer indefinitely. These were our coordination bugs. The reason that the
+  CDN delivered so slowly remains unproven; an anonymous diagnostic 403 does
+  not establish that the actual CTT-authorized playback response returned 403.
+- Supersedes the destructive handoff described below: retain valid bytes and
+  continue downloading after a slow refreshed source. First exact-object
+  refresh remains proactive. Later recovery requires BOTH unhealthy cache and
+  actual output Buffering, handled in the shared receiver hub, independent of
+  the output implementation. Final-attempt health stays monitored; no third
+  retry is introduced. Healthy windows/new responses/completion clear health;
+  refresh-in-progress suppresses competing recovery. Periodic rate checks must
+  not extend the separate 30-second no-data timeout. Stop late reports are
+  fenced until a new media load commits; consumed recovery rounds survive
+  eviction. A slow transfer with playable audio or explicit Pause is not itself
+  a reason to stop the decoder.
+- mpv: track `paused-for-cache` independently so pause=false, file-loaded and
+  playback-restart cannot erase a real buffering state. Explicit Pause wins.
+- AirPlay uses this same cache but previously reported synthetic PLAYING
+  throughout PCM starvation. Native source commit `431c5c5` confirms elapsed
+  counts sent PCM minus transport lag, so a frozen native clock alone is not
+  yet an underrun. The adapter requires a pending PCM input read, frozen native
+  progress, exhausted decoded runway and two seconds of reserve before
+  reporting Buffering. Downstream write backpressure, explicit Pause, startup
+  and completed input are excluded. Fresh native progress restores Playing.
+  Evidence resets per track/control lifecycle. This is a conservative inference,
+  not proof of acoustic output at a speaker.
+- Other-path audit: DLNA and Sonos do not advertise localAudioCache and thus do
+  not use this Rust cache. DLNA normally prepares finite local media through a
+  bounded relay; Sonos pulls its URL directly. Both map device TRANSITIONING to
+  Buffering and report polling/transport failures. A device falsely claiming
+  PLAYING with a frozen position remains a telemetry limitation; the opaque
+  Command backend has no decoder-progress protocol at all. Do not add a global
+  timeout based on their interpolated clocks or claim those devices were
+  acoustically tested. Their control and failure regressions are included.
+- ffindog comparison, reviewed at `992cb673ccb94fc121d202772960c050a3928d65`:
+  main speakers pass the resolved URL directly to mpv with its own cache;
+  optional HouseStream uses a separate PCM pipeline. Its error policy skips
+  tracks rather than implementing our two same-title recovery attempts.
+  Retain our current-title cache, seeking/repeat and request recipes, but make
+  download health and decoder demand agree. Do not add the declined full
+  yt-dlp streaming path or copy its track-skipping policy.
+  Reference: https://github.com/ffindog/ytm-cast-receiver/tree/992cb673ccb94fc121d202772960c050a3928d65/ytcr-player
+- Validation: 241 Rust tests passed, three explicit probes ignored locally.
+  Both silent real-mpv tests
+  passed in the actual `.110` runtime image using a locally cross-compiled
+  executable: (1) paused decoder still allows full source draining; (2) ninety
+  seconds of cached PCM remain playable while the origin stalls. No YouTube
+  calls or physical audio output are needed for these regressions. Independent
+  review caught two additional AirPlay state traps (clean EOF and invalid clock
+  samples while already buffering); both are fixed and regression-covered.
+  All AirPlay and mpv unit suites: 112 passed, 28 subtests. Other output/shared
+  bridge suites: 48 passed, three unavailable local FFmpeg/mpv cases skipped.
+  Runtime-image adapter verification: 46 passed, including both real mpv IPC
+  cases and the deployed AirPlay variant. Final rate/cache/hub tests, format,
+  diff checks and focused Clippy pass; Clippy retains inherited allowances
+  (argument/type complexity, enum size, double-must-use, question-mark,
+  unnecessary-unwrap, collapsible-if and nonminimal-bool).
+- Activated at 2026-11-06 21:07:47 UTC on `.110`, ready/responsive 2/2 routes,
+  zero container restarts. Verified container SHA-256:
+  - receiver: `c12b4d0e573bd1efac6f0f6f8be4730fd388f61b7906139c91da1c416b8b0dff`
+  - mpv adapter: `6960d4418c9ff7b02a464a715dfa39e269ad377b81a25baf25da7f67ca866f27`
+  - deployed AirPlay: `e4989763be8cecc6f011fa1c01937029548573f415e3934488938ba24950f8c3`
+  The laptop has an older AirPlay adapter than product HEAD. Apply only this
+  starvation fix to that runtime baseline; do not silently deploy HEAD's
+  unrelated DACP/startup changes. Canonical source changes are in this repo;
+  the tested runtime backport is `/home/test laptop/airplay-buffercoord-20261106.py`.
+  Binary rollback: `/home/test laptop/vibecast-round3-review.rollback-before-buffercoord-20261106`.
+  Python rollbacks: `/home/test laptop/cast-buffercoord-20261106/{mpv_backend,airplay}.rollback.py`.
+  Full frontend patch against `85918111ac68cbf837bf58835b5fd066615963ad`:
+  `/tmp/vibecast-buffercoord-20261106.patch`, SHA-256
+  `aa71be447f8c4b1a1e15c95ddc1aa037c6abc4cf9e75f610bf6f7c53c8543bee`.
+  User subsequently reports the playback failure seems resolved. Extended
+  all-output acceptance is not established by readiness alone. No GitHub push
+  or release.
+
+## Cold-start watch-page rate limit — 2026-11-06 (unreleased)
+
+- After the slow-source candidate restart, all tested selections failed before
+  audio loading: `watch_bootstrap` returned HTTP 429. No slow-source recovery
+  event ran in this new session. Restart discarded the in-memory bootstrap,
+  exposing the pre-existing mandatory watch-page dependency. Route readiness
+  alone did not validate playback; the previous deployment acceptance was
+  insufficient. Why YouTube limited the watch page is not established.
+- A direct diagnostic on `.110` using the existing ANDROID client and a selected
+  video returned HTTP 200, playability OK and 25 adaptive formats from the
+  native player API without an API key or watch-page visitor data. This supports
+  a narrow fallback when the watch bootstrap returns 429: omit these optional
+  web bootstrap fields, preserve video-bound CTT and all existing player/MDX
+  context, and cache that decision in memory so sibling requests do not hit the
+  blocked page again. Actual player denials and API 429 remain failures. The
+  optional key is also consistent with yt-dlp's native API implementation:
+  https://github.com/yt-dlp/yt-dlp/blob/master/yt_dlp/extractor/youtube/_base.py
+- HTTP429 was already excluded from the worker's immediate request retry, but
+  the subsequent Stop still triggered two immediate Lounge reloads. Classify
+  it separately and acknowledge the failure before Stop to suppress these
+  reloads; later explicit Play re-enables recovery. Abort current speculative
+  work after this failure. A navigation 429 does not start an anonymous player
+  request or label the following title failed. A real prefetched player 429 is
+  propagated only for unchanged credentials; a fresh sender CTT can resolve.
+- Regressions cover concurrent cold-start player/navigation with exactly one
+  rejected watch request and intact CTT, retained API denial/status, no automatic
+  429 reloads, later manual Play, new selections, late events, speculative task
+  cancellation, and all navigation/player-429 versus fresh-CTT combinations.
+  Final affected-suite result: 237 passed, two explicit live probes ignored.
+  Formatting/diff checks pass; focused strict Clippy passes with existing
+  unused-video-code, argument/type-complexity and inherited core lint allowances.
+- Built locally using Rust 1.98.0 and Zig targeting GLIBC 2.36; the resulting
+  binary's highest required symbol version is GLIBC 2.34. Runtime-image smoke
+  test passed. Activated at 2026-11-06 20:36:56 UTC on `.110`, verified host and
+  container SHA-256:
+  `59783dc380637293ebdf3174f2098ab238e617c614dde43e7233e4a255d06b8d`.
+  Both enabled routes are ready/responsive, container restart count zero.
+  Rollback: `/home/test laptop/vibecast-round3-review.rollback-before-bootstrap429-20261106`
+  (SHA-256 `17cd4668c9763f83128c15cca9eb2c2a0b39aa7353e0b39c9eb11fe6b9db7aaf`).
+  Full uncommitted frontend diff over `85918111ac68cbf837bf58835b5fd066615963ad`
+  captured locally at `/tmp/vibecast-bootstrap429-20261106.patch`, SHA-256
+  `5fada5a1c30e513ceeccf81da59cf885c6cd2dbf7c23ed81f3339d44ccfab922`.
+  User confirmed audible playback after reconnecting with this candidate.
+  Live decoder reports also show Playing with advancing position. CTT player
+  resolution took 1,171 ms; CTT next-prefetch took 136 ms. Navigation returned
+  both neighbors, and the 3,161,970-byte current cache completed. The successful
+  session did not log watch429, so the live check confirms recovered playback
+  but does not prove that the bootstrap fallback was exercised against YouTube;
+  its CTT behavior under watch429 is covered by the regression fixtures.
+  No release
+  has been published; this confirms restored startup, not a long-duration
+  acceptance of every slow-CDN recovery scenario.
+
+## Slow-source handoff follow-up — 2026-11-06 (unreleased)
+
+- Live evidence on `.110` makes the recurring automatic-advance stall
+  deterministic: video `3jGEko1z420` delivered only 9,829 B/s against an
+  18,259 B/s continuity threshold. The first exact-object refresh correctly
+  changed CDN (`rr5` to `rr4`) and resumed at byte 393,216, but that replacement
+  also remained slow. Rate monitoring was disabled after the first recovery
+  attempt, so mpv repeatedly exhausted its buffer. Explicitly selecting the
+  title appeared to fix the problem only because it created a fresh media,
+  cache and retry context. This was not a queue, CTT, prefetch-poisoning,
+  HTTP 403/429 or dead-socket failure.
+- Continue monitoring the refreshed connection within the existing bounded
+  two-round recovery budget. Use at most one in-place exact-object refresh;
+  if its replacement is still too slow, fail the cache into the already
+  reserved clean decoder/media reload. If refresh is temporarily unavailable,
+  allow exactly one same-URL range reconnect before that handoff. Fast sources
+  consume no recovery round, and ordinary fetch failures cannot enter the
+  slow-source reconnect branch.
+- Regression coverage includes slow source to fast refresh, still-slow refresh
+  to clean reload, unavailable refresh with a successful single reconnect,
+  unavailable refresh still slow without a reconnect loop, byte/range
+  integrity, fast sources and the shared two-round budget. Final relevant Rust
+  run: 346 tests, 344 passed and two explicit live/mpv probes ignored; strict
+  focused Clippy, format and diff checks pass. An independent final review found
+  no retry loop, budget error or fast-path regression.
+- Activated the exact tested Bookworm-compatible candidate on `.110`, SHA-256
+  `17cd4668c9763f83128c15cca9eb2c2a0b39aa7353e0b39c9eb11fe6b9db7aaf`.
+  It executes in the actual runtime image and requires at most GLIBC 2.34.
+  Management and frontend bridge are ready; both enabled routes are running and
+  responsive with zero restarts. Rollback binary:
+  `/home/test laptop/vibecast-round3-review.rollback-before-slow-handoff-20261106`
+  (SHA-256 `dc02143c21df0cf55e1c35c4284f8602ded8105db4e7a0085303640a8f8719d7`).
+  Live acceptance must use automatic queue advance because explicit selection
+  bypasses the reproduced path. No GitHub push or release.
+
+## Slow progressive-source recovery — 2026-10-27 (unreleased)
+
+- The live James Blake incident was not a queue, decoder-output, HTTP 403/429 or
+  dead-socket failure. The selected 3,734,300-byte audio object took about
+  278.4 seconds to arrive for 223.83 seconds of media: roughly 13.4 KB/s against
+  about 16.7 KB/s consumption. mpv consequently entered repeated buffering from
+  approximately 97.4 seconds. Small continuing reads kept the existing 30-second
+  body-idle timeout from firing.
+- For retained current-title audio with a known finite duration and an exact-
+  object refresh contract, measure bounded ten-second origin-response windows.
+  If throughput is below 110% of the representation's average bitrate, spend
+  the existing first recovery round on a fresh same-object recipe and resume at
+  the retained byte boundary. Do not monitor deliberate gaps between response
+  ranges, do not loop after the first round, and leave the final decoder reload
+  available. If refresh is temporarily unavailable, reconnect the same URL and
+  continue rather than turning a merely slow source into a terminal failure.
+- Added regressions for actual slow drip chunks arriving faster than the idle
+  timeout, exact byte-preserving refresh/resume, unavailable refresh fallback,
+  fast sources not spending recovery budget, and invalid/extreme duration
+  metadata disabling the rate detector. Final broad Rust run: 342 passed, two
+  explicit live/mpv probes ignored. Focused strict Clippy passes after allowing
+  the repository's four pre-existing lint findings; format and diff checks pass.
+- Activated the Bookworm-compatible candidate on `.110`, SHA-256
+  `dc02143c21df0cf55e1c35c4284f8602ded8105db4e7a0085303640a8f8719d7`.
+  The source archive was verified byte-for-byte against the locally tested tree;
+  the binary was executed in the actual runtime image before activation. Both
+  enabled routes are running and responsive. Rollback binary:
+  `/home/test laptop/vibecast-round3-review.rollback-before-slow-source-20261027`
+  (SHA-256 `def6ceb689e54ab855cc0a347cd7e85591fbbd2509739482d8c7e94581de55d1`).
+- A first local-host build required GLIBC 2.38/2.39 and was rejected by the
+  older runtime image. It was immediately rolled back before rebuilding in the
+  Bookworm ABI environment; no code/runtime failure was hidden by that event.
+  Live audible James Blake acceptance is pending. No GitHub push or release.
+
 ## 0.7.0.dev1 YouTube/session/HA-controls release — 2026-10-27
 
 - User completed live acceptance on the `.110` laptop receiver and explicitly

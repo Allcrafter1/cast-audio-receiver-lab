@@ -65,6 +65,10 @@ class ReviewPackagingTests(unittest.TestCase):
             hashlib.sha256(snapshot.read_bytes()).hexdigest(),
             current["development_snapshot_sha256"],
         )
+        self.assertIn(
+            "!" + current["development_snapshot"],
+            (ROOT / ".dockerignore").read_text().splitlines(),
+        )
         for path in ["Containerfile", ".github/workflows/ci.yml"]:
             text = (ROOT / path).read_text()
             self.assertIn(current["commit"], text)
@@ -82,8 +86,8 @@ class ReviewPackagingTests(unittest.TestCase):
 
     def test_arm64_uses_the_same_versions_with_its_own_artifacts(self):
         config = ROOT / "config"
-        x86 = json.loads((config / "container-linux-x86_64-cp312.wheels.json").read_text())
-        arm = json.loads((config / "container-linux-aarch64-cp312.wheels.json").read_text())
+        x86 = json.loads((config / "container-linux-x86_64-cp315.wheels.json").read_text())
+        arm = json.loads((config / "container-linux-aarch64-cp315.wheels.json").read_text())
         self.assertEqual({p["name"]: p["version"] for p in x86},
                          {p["name"]: p["version"] for p in arm})
         for wheel in arm:

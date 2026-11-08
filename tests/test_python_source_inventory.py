@@ -14,7 +14,7 @@ from tools.python_source_inventory import inventory, source_archive
 class PythonSourceInventoryTests(unittest.TestCase):
     def test_checked_inventory_matches_current_container_wheels(self):
         root = Path(__file__).resolve().parents[1]
-        wheels = json.loads((root / "config/container-linux-x86_64-cp312.wheels.json").read_text())
+        wheels = json.loads((root / "config/container-linux-x86_64-cp315.wheels.json").read_text())
         record = json.loads((root / "config/container-python-source-references.json").read_text())
         self.assertEqual({(p["name"], p["version"], p["sha256"]) for p in wheels},
                          {(p["name"], p["version"], p["wheel_sha256"]) for p in record["packages"]})

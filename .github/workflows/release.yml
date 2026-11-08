@@ -4,11 +4,11 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Exact candidate image version, e.g. 0.6.0-dev21'
+        description: 'Exact image version, e.g. 0.8.0 or 0.8.0-dev1'
         required: true
         type: string
       publish:
-        description: 'Publish images, promote App metadata and create prerelease'
+        description: 'Publish images, promote App metadata and create the GitHub release'
         type: boolean
         default: false
 

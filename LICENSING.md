@@ -20,7 +20,8 @@ root license does not withdraw those earlier grants.
 | Paths or component | License/status |
 | --- | --- |
 | Original Python product code, historical Python research code, tests, project tools, packaging, workflows, project documentation and project artwork | `MPL-2.0`, unless a more specific notice is present |
-| `patches/vibecast-*.patch` and the maintained [Vibecast fork](https://github.com/Allcrafter1/vibecast) | Upstream **MIT** license, including our fork modifications; preserve `licenses/Vibecast-MIT.txt` |
+| `patches/vibecast-*.patch` and the maintained [Vibecast fork](https://github.com/Allcrafter1/vibecast) | Upstream **MIT** license for Vibecast and our fork modifications; preserve `licenses/Vibecast-MIT.txt`. Vendored third-party files inside cumulative patches retain their own notices. |
+| Frontend `vendor/mdns-sd` | **Apache-2.0 OR MIT**, including the local subtype changes; original notices also copied to `licenses/mdns-sd-APACHE.txt` and `licenses/mdns-sd-MIT.txt` |
 | Chromium `cast_channel.proto` carried by the Vibecast fork | **BSD-3-Clause** with Chromium's copyright and notice; preserve `licenses/Chromium-BSD.txt` |
 | Files under `licenses/` | The license/notice they reproduce; they are evidence for the named third-party work, not MPL relicensing declarations |
 | Music Assistant `airplay-cli` executable and corresponding source archive | **GPL version 3** combined binary with separately recorded incorporated-component terms; preserve `licenses/airplay-cli-GPL.txt` and `licenses/airplay-cli-THIRD_PARTY_NOTICES.md` |

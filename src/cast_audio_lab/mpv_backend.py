@@ -25,8 +25,11 @@ class MpvAudioBackend(NullAudioBackend):
         self._pending = {}
         self._serial = 0
         self._autoplay = True
+        self._paused_for_cache = False
         self._loading = False
         self._seeking = False
+        self._seek_generation = 0
+        self._seek_fallback = None
         self._closing = False
         self._cleanup_task = None
         self._preparing_load = False
@@ -35,6 +38,11 @@ class MpvAudioBackend(NullAudioBackend):
 
     def _current_position(self):
         return self._position_at_change
+
+    def _active_state(self):
+        if not self._autoplay:
+            return "PAUSED"
+        return "BUFFERING" if self._loading or self._seeking or self._paused_for_cache else "PLAYING"
 
     async def _start(self):
         if self._cleanup_task is not None and not self._cleanup_task.done():
@@ -56,7 +64,7 @@ class MpvAudioBackend(NullAudioBackend):
         socket = str(Path(self._temp.name) / "ipc")
         self._process = await asyncio.create_subprocess_exec(
             "mpv", "--idle=yes", "--no-video", "--audio-display=no",
-            "--ytdl=no", "--no-terminal", "--volume=100",
+            "--ytdl=no", "--no-terminal", f"--volume={volume * 100}",
             "--input-ipc-server=" + socket,
             stdin=asyncio.subprocess.DEVNULL,
             stdout=asyncio.subprocess.DEVNULL,
@@ -132,6 +140,12 @@ class MpvAudioBackend(NullAudioBackend):
             name, value = message.get("name"), message.get("data")
             if value is None:
                 return
+            if name == "paused-for-cache":
+                if not isinstance(value, bool) or self._status.state == "IDLE":
+                    return
+                # Retain the latest decoder flag during load/seek, but leave
+                # publication to file-loaded/playback-restart below.
+                self._paused_for_cache = value
             if (self._loading or self._seeking) and name in {"time-pos", "pause", "paused-for-cache"}:
                 return
             if name in {"time-pos", "volume"}:
@@ -153,25 +167,23 @@ class MpvAudioBackend(NullAudioBackend):
                 self._status.muted = bool(value)
             elif name == "pause" and self._status.state != "IDLE":
                 self._autoplay = not bool(value)
-                self._status.state = "PAUSED" if value else "PLAYING"
-            elif name == "paused-for-cache" and self._status.state == "PLAYING" and value:
-                self._status.state = "BUFFERING"
-            elif name == "paused-for-cache" and self._status.state == "BUFFERING" and not value:
-                self._status.state = "PLAYING" if self._autoplay else "PAUSED"
+                self._status.state = self._active_state()
+            elif name == "paused-for-cache":
+                self._status.state = self._active_state()
         elif event == "file-loaded":
             if (not self._loading and self._status.state == "IDLE"
                     or self._entry_id is not None and self._entry_id == self._replaced_entry_id):
                 return
             LOGGER.info("mpv file-loaded")
             self._loading = False
-            self._status.state = "PLAYING" if self._autoplay else "PAUSED"
+            self._status.state = self._active_state()
             self._status.idle_reason = None
         elif event == "playback-restart":
             if self._loading:
                 return
             self._seeking = False
             if self._status.state != "IDLE":
-                self._status.state = "PLAYING" if self._autoplay else "PAUSED"
+                self._status.state = self._active_state()
         elif event == "end-file":
             reason = message.get("reason")
             entry = message.get("playlist_entry_id")
@@ -189,13 +201,43 @@ class MpvAudioBackend(NullAudioBackend):
                 return
             self._loading = False
             self._seeking = False
+            self._paused_for_cache = False
             self._status.state = "IDLE"
             self._status.idle_reason = "FINISHED" if reason == "eof" else "ERROR"
         else:
             return
         self._emit_status()
 
+    async def _cancel_seek_fallback(self):
+        self._seek_generation += 1
+        task = self._seek_fallback
+        if task is asyncio.current_task():
+            return
+        self._seek_fallback = None
+        if task is not None:
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+
+    async def _recover_pending_seek(self, generation, url, content_type, position):
+        try:
+            await asyncio.sleep(1)
+            if (generation != self._seek_generation or not self._seeking
+                    or self._status.state == "IDLE" or self._status.url != url):
+                return
+            # A successful IPC seek can still wait behind a blocked demux read.
+            # Reopening interrupts that read and reuses the same retained object.
+            # No resolver call or retry loop; a newer command cancels this task.
+            LOGGER.info("mpv pending cached seek reopen position=%.3f", position)
+            await self.load(url, content_type, self._autoplay, position)
+        except (OSError, ValueError, TimeoutError):
+            # load() has already published its terminal decoder error.
+            LOGGER.warning("mpv pending seek reopen failed")
+        finally:
+            if self._seek_fallback is asyncio.current_task():
+                self._seek_fallback = None
+
     async def load(self, url, content_type, autoplay, start_time):
+        await self._cancel_seek_fallback()
         try:
             self._preparing_load = True
             try:
@@ -205,9 +247,12 @@ class MpvAudioBackend(NullAudioBackend):
             # Old IPC teardown may publish ERROR while _start waits for it.
             # Initialize the new selection only after that reader has exited.
             self._autoplay = autoplay
+            self._paused_for_cache = False
             self._loading = True
             self._replaced_entry_id = self._entry_id
-            self._seeking = False
+            # Opening the file is not decoder readiness. The restart event
+            # confirms that initial-position decoding can actually continue.
+            self._seeking = True
             self._status.url, self._status.content_type = url, content_type
             self._status.idle_reason = None
             self._status.state = "BUFFERING"
@@ -229,6 +274,7 @@ class MpvAudioBackend(NullAudioBackend):
                 await self._command("loadfile", url, "replace", options)
         except (OSError, ValueError, TimeoutError):
             self._loading = self._seeking = False
+            self._paused_for_cache = False
             self._status.state = "IDLE"
             self._status.idle_reason = "ERROR"
             self._emit_status()
@@ -241,7 +287,7 @@ class MpvAudioBackend(NullAudioBackend):
             return
         await self._command("set_property", "pause", False)
         self._autoplay = True
-        self._status.state = "BUFFERING" if self._loading else "PLAYING"
+        self._status.state = self._active_state()
 
     async def pause(self):
         if self._status.state == "IDLE":
@@ -251,24 +297,44 @@ class MpvAudioBackend(NullAudioBackend):
         self._status.state = "PAUSED"
 
     async def seek(self, position):
+        await self._cancel_seek_fallback()
+        generation = self._seek_generation
         old_position = self._current_position()
         self._seeking = True
         self._set_position(max(0, position))
+        self._status.state = self._active_state()
+        self._emit_status()
         try:
             await self._command("seek", max(0, position), "absolute+exact")
+            source = urlsplit(self._status.url or "")
+            if (self._seeking and source.hostname == "127.0.0.1"
+                    and source.path.startswith("/manifest/") and "/cache-" in source.path):
+                self._seek_fallback = asyncio.create_task(self._recover_pending_seek(
+                    generation, self._status.url, self._status.content_type, max(0, position)))
         except ValueError:
             self._seeking = False
             # Some network demuxers reject in-place seeks. Reopen the same
             # media with a start offset, preserving paused state and volume.
             if not self._status.url:
                 self._set_position(old_position)
+                if self._status.state != "IDLE":
+                    self._status.state = self._active_state()
                 raise
             await self.load(self._status.url, self._status.content_type,
-                            self._status.state != "PAUSED", max(0, position))
+                            self._autoplay, max(0, position))
         except (OSError, asyncio.CancelledError):
             self._seeking = False
             self._set_position(old_position)
+            if self._status.state != "IDLE":
+                self._status.state = self._active_state()
             raise
+
+    async def read_volume(self):
+        if self._writer is None:
+            return None
+        level = await self._command("get_property", "volume")
+        muted = await self._command("get_property", "mute")
+        return float(level) / 100, muted
 
     async def set_volume(self, level, muted):
         await self._start()
@@ -278,6 +344,7 @@ class MpvAudioBackend(NullAudioBackend):
         self._status.muted = bool(muted)
 
     async def stop(self):
+        await self._cancel_seek_fallback()
         self._loading = False
         self._seeking = False
         self._replaced_entry_id = self._entry_id
@@ -287,9 +354,11 @@ class MpvAudioBackend(NullAudioBackend):
         except (OSError, ValueError):
             await self._dispose()
         finally:
+            self._paused_for_cache = False
             await super().stop()
 
     async def shutdown(self):
+        await self._cancel_seek_fallback()
         await self._dispose()
 
     async def _dispose(self):
@@ -301,6 +370,7 @@ class MpvAudioBackend(NullAudioBackend):
 
     async def _dispose_resources(self, initiator):
         self._closing = True
+        self._paused_for_cache = False
         task = self._reader_task
         writer, self._writer = self._writer, None
         process, self._process = self._process, None

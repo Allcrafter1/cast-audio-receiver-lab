@@ -1,0 +1,3552 @@
+diff --git a/crates/vibecast-apps-primevideo/src/lib.rs b/crates/vibecast-apps-primevideo/src/lib.rs
+index 591ce24..64a8fd3 100644
+--- a/crates/vibecast-apps-primevideo/src/lib.rs
++++ b/crates/vibecast-apps-primevideo/src/lib.rs
+@@ -753,6 +753,7 @@ mod tests {
+         // A 1080p SDR player with hardware Widevine L1 (the SHIELD-on-1080p case).
+         let caps = PlayerCapabilities {
+             local_audio_cache: false,
++            volume_revisions: false,
+             platform: Platform::Android,
+             drm: vec![DrmCapability::new(
+                 DrmSystem::Widevine,
+diff --git a/crates/vibecast-apps-youtube/src/lib.rs b/crates/vibecast-apps-youtube/src/lib.rs
+index dbf3a6a..bec1b71 100644
+--- a/crates/vibecast-apps-youtube/src/lib.rs
++++ b/crates/vibecast-apps-youtube/src/lib.rs
+@@ -4,6 +4,7 @@
+ 
+ mod lounge;
+ mod resolver;
++mod volume;
+ 
+ use std::sync::{
+     atomic::{AtomicBool, Ordering},
+@@ -24,6 +25,7 @@ use resolver::{
+     NavigationItem, NavigationRequest, PreferredVideoCodec, ResolveError, Resolver,
+     PREFERRED_VIDEO_CODEC_KEY,
+ };
++use volume::WebVolumeCompatibility;
+ 
+ const APP_IDS: &[&str] = &["233637DE", "2DB7CC49"];
+ const YOUTUBE_MUSIC_APP_ID: &str = "2DB7CC49";
+@@ -63,6 +65,7 @@ impl std::fmt::Debug for PlaylistParams {
+ enum ResolutionFailureClass {
+     CredentialsRequired,
+     Permanent,
++    RateLimited,
+     Transient,
+ }
+ 
+@@ -141,6 +144,12 @@ impl AppProvider for YouTube {
+                     ChoiceOption::new("vp9", "VP9"),
+                     ChoiceOption::new("h264", "H.264"),
+                 ],
++            }, SettingDescriptor::Boolean {
++                key: volume::WEB_VOLUME_COMPATIBILITY.as_str().to_owned(),
++                label: "YouTube Music web volume compatibility".to_owned(),
++                description: Some("Compensate the YouTube Music website volume curve for a uniquely identified browser controller. Other senders keep their existing volume behavior.".to_owned()),
++                scope: SettingScope::AppPlayer,
++                default: true,
+             }],
+         )
+         .expect("static YouTube settings must be valid");
+@@ -169,6 +178,7 @@ impl AppProvider for YouTube {
+         let mdx_requested = Arc::new(AtomicBool::new(false));
+         let legacy_status_scheduled = Arc::new(AtomicBool::new(false));
+         let (cancel, _) = watch::channel(false);
++        let volume_compatibility = Arc::new(WebVolumeCompatibility::new(ctx.settings.clone()));
+         tokio::spawn(run_commands_with_events(
+             command_rx,
+             resolver,
+@@ -190,6 +200,7 @@ impl AppProvider for YouTube {
+             worker_event_rx,
+             cancel.subscribe(),
+             takeover_rx,
++            volume_compatibility.clone(),
+         ));
+ 
+         Ok(Arc::new(YouTubeSession {
+@@ -203,6 +214,7 @@ impl AppProvider for YouTube {
+             playback_tx,
+             output_control_tx,
+             volume_tx,
++            volume_compatibility,
+             cancel,
+         }))
+     }
+@@ -219,6 +231,7 @@ struct YouTubeSession {
+     playback_tx: mpsc::Sender<PlaybackState>,
+     output_control_tx: mpsc::Sender<OutputControl>,
+     volume_tx: watch::Sender<(f64, bool)>,
++    volume_compatibility: Arc<WebVolumeCompatibility>,
+     cancel: watch::Sender<bool>,
+ }
+ 
+@@ -300,6 +313,7 @@ impl AppSession for YouTubeSession {
+             self.legacy_status_scheduled.store(false, Ordering::Release);
+         }
+         if attachment == SenderAttachment::Takeover {
++            self.volume_compatibility.reset();
+             self.ownership_generation_tx
+                 .send_modify(|value| *value += 1);
+             let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
+@@ -373,6 +387,14 @@ impl AppSession for YouTubeSession {
+         });
+     }
+ 
++    fn volume_from_sender(&self, level: f64, browser: bool) -> f64 {
++        self.volume_compatibility.decode_sender(level, browser)
++    }
++
++    fn volume_to_sender(&self, level: f64, browser: bool) -> f64 {
++        self.volume_compatibility.to_sender(level, browser)
++    }
++
+     fn handles_play_requests(&self) -> bool {
+         true
+     }
+@@ -479,6 +501,7 @@ async fn run_lounge(
+     mut worker_event_rx: mpsc::Receiver<WorkerEvent>,
+     mut cancel: watch::Receiver<bool>,
+     mut takeover_rx: mpsc::Receiver<tokio::sync::oneshot::Sender<()>>,
++    volume_compatibility: Arc<WebVolumeCompatibility>,
+ ) {
+     let mut playback_rx = playback_rx;
+     let mut output_control_rx = output_control_rx;
+@@ -486,6 +509,7 @@ async fn run_lounge(
+     let mut ownership_epoch = 0_u64;
+ 
+     loop {
++        volume_compatibility.reset();
+         let mut lounge = loop {
+             let establish = LoungeConnection::establish(http.clone(), &receiver, youtube_music);
+             let result = tokio::select! {
+@@ -532,6 +556,7 @@ async fn run_lounge(
+             let _ = ready.send(());
+         }
+         match lounge
++            .with_volume_compatibility(volume_compatibility.clone())
+             .with_volume(volume_rx.clone())
+             .run(
+                 &command_tx,
+@@ -660,7 +685,8 @@ struct NextResolution {
+ }
+ 
+ struct PreparedNext {
+-    media: Result<PlaybackMedia, ResolveError>,
++    // None when navigation was rate limited before any media request.
++    media: Option<Result<PlaybackMedia, ResolveError>>,
+     completed: std::time::Instant,
+     context: NavigationItem,
+ }
+@@ -1245,8 +1271,11 @@ async fn run_commands_with_events(
+             }
+             LoungeCommand::Play => {
+                 if let Some(failed) = failed_resolution.take() {
+-                    if failed.class != ResolutionFailureClass::Transient
+-                        && failed.credential == queue.credential
++                    if matches!(
++                        failed.class,
++                        ResolutionFailureClass::CredentialsRequired
++                            | ResolutionFailureClass::Permanent
++                    ) && failed.credential == queue.credential
+                     {
+                         tracing::info!(
+                             video_id = %failed.video_id,
+@@ -1337,6 +1366,7 @@ async fn run_commands_with_events(
+                                 // speculative navigation result. Preserve it and
+                                 // fill only missing fields (most importantly the
+                                 // CTT) from the prepared next item.
++                                let prefetched_credential = next.context.credential.clone();
+                                 effective_context = NavigationItem {
+                                     video_id: video_id.clone(),
+                                     list_id: effective_context
+@@ -1351,14 +1381,25 @@ async fn run_commands_with_events(
+                                         .or(next.context.credential),
+                                 };
+                                 if use_prefetch && prefetched_is_fresh(next.completed) {
+-                                    if let Ok(mut media) = next.media {
+-                                        media.start_time = start_time.max(0.0);
+-                                        prepared = Some((
+-                                            media,
+-                                            next.completed,
+-                                            effective_context.clone(),
+-                                        ));
+-                                        tracing::info!(%video_id, "using prefetched YouTube media");
++                                    match next.media {
++                                        Some(Err(error))
++                                            if effective_context.credential
++                                                == prefetched_credential
++                                                && resolution_failure_class(&error)
++                                                    == ResolutionFailureClass::RateLimited =>
++                                        {
++                                            return Err((error, effective_context));
++                                        }
++                                        Some(Ok(mut media)) => {
++                                            media.start_time = start_time.max(0.0);
++                                            prepared = Some((
++                                                media,
++                                                next.completed,
++                                                effective_context.clone(),
++                                            ));
++                                            tracing::info!(%video_id, "using prefetched YouTube media");
++                                        }
++                                        _ => {}
+                                     }
+                                 }
+                             }
+@@ -1583,7 +1624,13 @@ async fn run_commands_with_events(
+             }
+         }
+ 
+-        let candidate = (!stopped).then(|| queue.next_prefetch_key()).flatten();
++        let rate_limited = failed_resolution.as_ref().is_some_and(|failed| {
++            failed.class == ResolutionFailureClass::RateLimited
++                && queue.video_ids.get(queue.current_index) == Some(&failed.video_id)
++        });
++        let candidate = (!stopped && !rate_limited)
++            .then(|| queue.next_prefetch_key())
++            .flatten();
+         if next_resolution.as_ref().map(|p| &p.key) != candidate.as_ref() {
+             next_resolution = None;
+             if let Some(key) = candidate {
+@@ -1656,6 +1703,16 @@ async fn run_commands_with_events(
+                                         }
+                                     }
+                                 }
++                                Err(error)
++                                    if resolution_failure_class(&error)
++                                        == ResolutionFailureClass::RateLimited =>
++                                {
++                                    return PreparedNext {
++                                        media: None,
++                                        completed: std::time::Instant::now(),
++                                        context,
++                                    };
++                                }
+                                 Err(error) => tracing::warn!(
+                                     %error,
+                                     "YouTube navigation lookup failed; using anonymous prefetch fallback"
+@@ -1672,7 +1729,7 @@ async fn run_commands_with_events(
+                             )
+                             .await;
+                         PreparedNext {
+-                            media,
++                            media: Some(media),
+                             completed: std::time::Instant::now(),
+                             context,
+                         }
+@@ -1727,6 +1784,9 @@ fn resolution_failure_class(error: &ResolveError) -> ResolutionFailureClass {
+         ResolveError::Unplayable { .. } | ResolveError::NoCompatibleStream => {
+             ResolutionFailureClass::Permanent
+         }
++        ResolveError::Http(error) if error.status().map(|status| status.as_u16()) == Some(429) => {
++            ResolutionFailureClass::RateLimited
++        }
+         ResolveError::Http(_) | ResolveError::Protocol(_) => ResolutionFailureClass::Transient,
+     }
+ }
+@@ -2081,7 +2141,7 @@ mod tests {
+         let task = tokio::spawn(async {
+             std::future::pending::<()>().await;
+             PreparedNext {
+-                media: Err(ResolveError::Protocol("unused")),
++                media: None,
+                 completed: std::time::Instant::now(),
+                 context: NavigationItem {
+                     video_id: "unused".into(),
+@@ -2190,6 +2250,7 @@ mod tests {
+                 playback_tx,
+                 output_control_tx,
+                 volume_tx,
++                volume_compatibility: Arc::new(WebVolumeCompatibility::new(ctx.settings.clone())),
+                 cancel,
+             },
+             ctx,
+@@ -2197,6 +2258,25 @@ mod tests {
+         )
+     }
+ 
++    #[tokio::test]
++    async fn web_volume_hooks_preserve_mobile_and_clear_profile_on_takeover() {
++        let (session, ctx, _) = mdx_test_session();
++        let profile = &session.volume_compatibility;
++        let epoch = profile.epoch();
++        profile.observe(epoch, true);
++        let canonical = session.volume_from_sender(0.2, true);
++        assert!((canonical - 0.5).abs() < 0.01);
++        assert!((session.volume_to_sender(canonical, true) - 0.2).abs() < 0.0001);
++        assert_eq!(session.volume_from_sender(0.2, false), 0.2);
++        assert_eq!(session.volume_to_sender(0.5, false), 0.5);
++        session
++            .on_sender_connected(&ctx, "new-owner", SenderAttachment::Takeover)
++            .await;
++        assert!(!profile.observe(epoch, true));
++        assert_eq!(session.volume_from_sender(0.2, true), 0.2);
++        assert_eq!(session.volume_to_sender(0.5, true), 0.5);
++    }
++
+     #[tokio::test]
+     async fn explicit_mdx_status_request_receives_one_lounge_identity() {
+         let (session, ctx, sender) = mdx_test_session();
+@@ -2314,7 +2394,10 @@ mod tests {
+         assert_eq!(manifest.icon_url, Some(ICON_URL));
+         assert!(manifest.namespaces.contains(&MDX_NAMESPACE));
+         assert!(manifest.namespaces.contains(&CUSTOM_DATA_NAMESPACE));
+-        assert_eq!(manifest.settings.settings().len(), 1);
++        assert_eq!(manifest.settings.settings().len(), 2);
++        assert!(matches!(&manifest.settings.settings()[1],
++            SettingDescriptor::Boolean { key, scope: SettingScope::AppPlayer, default: true, .. }
++                if key == "web_volume_compatibility"));
+         assert_eq!(
+             manifest.settings.settings()[0],
+             SettingDescriptor::Choice {
+@@ -2374,7 +2457,7 @@ mod tests {
+         );
+     }
+ 
+-    fn test_settings() -> AppSettingsReader {
++    pub(super) fn test_settings() -> AppSettingsReader {
+         vibecast_sdk::AppContext::new(
+             "session",
+             "transport",
+@@ -2843,6 +2926,226 @@ mod tests {
+         worker.await.unwrap();
+     }
+ 
++    async fn rate_limit_error() -> ResolveError {
++        let server = wiremock::MockServer::start().await;
++        wiremock::Mock::given(wiremock::matchers::method("GET"))
++            .respond_with(wiremock::ResponseTemplate::new(429))
++            .mount(&server)
++            .await;
++        ResolveError::Http(
++            reqwest::get(server.uri())
++                .await
++                .unwrap()
++                .error_for_status()
++                .unwrap_err(),
++        )
++    }
++
++    #[tokio::test]
++    async fn rate_limit_stops_without_prefetch_and_manual_play_keeps_context() {
++        let (resolver, mut requests, mut contexts, mut navigation) =
++            Resolver::controlled_with_navigation();
++        let player = Arc::new(RecordingPlayback::default());
++        let (tx, rx) = mpsc::channel(16);
++        let (events, mut event_rx) = mpsc::channel(16);
++        let (cancel, cancelled) = watch::channel(false);
++        let worker = tokio::spawn(run_commands_with_events(
++            rx,
++            resolver,
++            player.clone(),
++            vibecast_sdk::PlayerCapabilities::default(),
++            test_settings(),
++            events,
++            cancelled,
++        ));
++        tx.send(credential_selection(&["A", "B"], 0, "token-A"))
++            .await
++            .unwrap();
++        let original_context = contexts.recv().await.unwrap();
++        requests
++            .recv()
++            .await
++            .unwrap()
++            .1
++            .send(Err(rate_limit_error().await))
++            .unwrap();
++        let WorkerEvent::ResolutionFailed {
++            class,
++            acknowledged,
++            ..
++        } = event_rx.recv().await.unwrap()
++        else {
++            panic!("expected failure");
++        };
++        assert_eq!(class, ResolutionFailureClass::RateLimited);
++        assert!(
++            player.operations.lock().unwrap().is_empty(),
++            "failure must be acknowledged before Stop"
++        );
++        acknowledged.send(()).unwrap();
++        tokio::time::timeout(std::time::Duration::from_secs(2), async {
++            while !player.operations.lock().unwrap().contains(&"stop".into()) {
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .unwrap();
++        assert!(
++            tokio::time::timeout(std::time::Duration::from_millis(300), requests.recv())
++                .await
++                .is_err()
++        );
++        assert!(navigation.try_recv().is_err());
++        tx.send(LoungeCommand::Play).await.unwrap();
++        assert_eq!(contexts.recv().await.unwrap(), original_context);
++        requests
++            .recv()
++            .await
++            .unwrap()
++            .1
++            .send(Ok(test_media("A-recovered")))
++            .unwrap();
++        wait_loads(&player, 1).await;
++        tx.send(selection(&["C"], 0)).await.unwrap();
++        let (id, response) = requests.recv().await.unwrap();
++        assert_eq!(id, "C");
++        response.send(Ok(test_media("C"))).unwrap();
++        wait_loads(&player, 2).await;
++        cancel.send(true).unwrap();
++        worker.await.unwrap();
++    }
++
++    #[tokio::test]
++    async fn rate_limit_on_reload_cancels_existing_prefetch() {
++        let (resolver, mut requests, _contexts, mut navigation) =
++            Resolver::controlled_with_navigation();
++        let player = Arc::new(RecordingPlayback::default());
++        let (tx, rx) = mpsc::channel(16);
++        let (cancel, cancelled) = watch::channel(false);
++        let worker = tokio::spawn(run_commands(
++            rx,
++            resolver,
++            player.clone(),
++            vibecast_sdk::PlayerCapabilities::default(),
++            test_settings(),
++            cancelled,
++        ));
++        tx.send(selection(&["A", "B"], 0)).await.unwrap();
++        requests
++            .recv()
++            .await
++            .unwrap()
++            .1
++            .send(Ok(test_media("A")))
++            .unwrap();
++        wait_loads(&player, 1).await;
++        let (_, mut pending_navigation) = navigation.recv().await.unwrap();
++        tx.send(LoungeCommand::ReloadCurrent {
++            video_id: "A".into(),
++            current_time: 66.0,
++            autoplay: true,
++            retries_used: 1,
++            credential: None,
++        })
++        .await
++        .unwrap();
++        requests
++            .recv()
++            .await
++            .unwrap()
++            .1
++            .send(Err(rate_limit_error().await))
++            .unwrap();
++        tokio::time::timeout(
++            std::time::Duration::from_secs(2),
++            pending_navigation.closed(),
++        )
++        .await
++        .unwrap();
++        assert!(requests.try_recv().is_err());
++        tx.send(LoungeCommand::Play).await.unwrap();
++        let (id, response) = requests.recv().await.unwrap();
++        assert_eq!(id, "A");
++        response.send(Ok(test_media("A-fresh"))).unwrap();
++        wait_loads(&player, 2).await;
++        assert_eq!(player.loaded.lock().unwrap()[1].start_time, 66.0);
++        cancel.send(true).unwrap();
++        worker.await.unwrap();
++    }
++
++    #[tokio::test]
++    async fn rate_limited_prefetch_is_not_immediately_resolved_again() {
++        for (navigation_failure, fresh_credential) in
++            [(false, false), (false, true), (true, false), (true, true)]
++        {
++            let (resolver, mut requests, _contexts, mut navigation) =
++                Resolver::controlled_with_navigation();
++            let player = Arc::new(RecordingPlayback::default());
++            let (tx, rx) = mpsc::channel(16);
++            let (cancel, cancelled) = watch::channel(false);
++            let worker = tokio::spawn(run_commands(
++                rx,
++                resolver,
++                player.clone(),
++                vibecast_sdk::PlayerCapabilities::default(),
++                test_settings(),
++                cancelled,
++            ));
++            tx.send(selection(&["A", "B"], 0)).await.unwrap();
++            requests
++                .recv()
++                .await
++                .unwrap()
++                .1
++                .send(Ok(test_media("A")))
++                .unwrap();
++            wait_loads(&player, 1).await;
++            let (_, response) = navigation.recv().await.unwrap();
++            if navigation_failure {
++                response.send(Err(rate_limit_error().await)).unwrap();
++            } else {
++                response
++                    .send(Ok(resolver::NavigationNeighbors {
++                        previous: None,
++                        next: None,
++                    }))
++                    .unwrap();
++                let (id, response) = requests.recv().await.unwrap();
++                assert_eq!(id, "B");
++                response.send(Err(rate_limit_error().await)).unwrap();
++            }
++            assert!(
++                tokio::time::timeout(std::time::Duration::from_millis(50), requests.recv())
++                    .await
++                    .is_err()
++            );
++            if fresh_credential {
++                tx.send(credential_selection(&["A", "B"], 1, "fresh-B"))
++                    .await
++                    .unwrap();
++            } else {
++                tx.send(LoungeCommand::Next).await.unwrap();
++            }
++            if !fresh_credential && !navigation_failure {
++                tokio::time::timeout(std::time::Duration::from_secs(2), async {
++                    while !player.operations.lock().unwrap().contains(&"stop".into()) {
++                        tokio::task::yield_now().await;
++                    }
++                })
++                .await
++                .unwrap();
++                assert!(requests.try_recv().is_err());
++                tx.send(LoungeCommand::Play).await.unwrap();
++            }
++            let (id, response) = requests.recv().await.unwrap();
++            assert_eq!(id, "B");
++            response.send(Ok(test_media("B"))).unwrap();
++            wait_loads(&player, 2).await;
++            cancel.send(true).unwrap();
++            worker.await.unwrap();
++        }
++    }
++
+     #[tokio::test]
+     async fn credentials_required_does_not_retry_until_context_changes() {
+         let (resolver, mut requests, mut contexts) = Resolver::controlled_with_contexts();
+diff --git a/crates/vibecast-apps-youtube/src/lounge.rs b/crates/vibecast-apps-youtube/src/lounge.rs
+index 8e36209..ffe4d67 100644
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -135,6 +135,7 @@ struct BoundSession {
+ 
+ #[derive(Default)]
+ struct CurrentMedia {
++    volume_compatibility: Option<(Arc<crate::volume::WebVolumeCompatibility>, u64)>,
+     recovery: LoadRecovery,
+     loop_mode: LoopMode,
+     volume: Option<(f64, bool)>,
+@@ -162,6 +163,7 @@ struct LoadRecovery {
+     failed: bool,
+     paused: bool,
+     resolution_terminal: bool,
++    resolution_rate_limited: bool,
+ }
+ 
+ impl CurrentMedia {
+@@ -213,6 +215,7 @@ impl CurrentMedia {
+         self.recovery.failed = true;
+         self.recovery.reloading = false;
+         self.recovery.resolution_terminal = true;
++        self.recovery.resolution_rate_limited = class == ResolutionFailureClass::RateLimited;
+     }
+ 
+     fn reload_command(&self, autoplay: bool) -> Option<LoungeCommand> {
+@@ -419,6 +422,16 @@ async fn volume_change(rx: &mut Option<watch::Receiver<(f64, bool)>>) -> (f64, b
+     std::future::pending().await
+ }
+ 
++const WEB_VOLUME_QUIET_PERIOD: Duration = Duration::from_millis(330);
++
++async fn volume_feedback_due(deadline: Option<tokio::time::Instant>) {
++    if let Some(deadline) = deadline {
++        tokio::time::sleep_until(deadline).await;
++    } else {
++        std::future::pending::<()>().await;
++    }
++}
++
+ #[derive(Debug, Error)]
+ pub(crate) enum LoungeError {
+     #[error("YouTube Lounge HTTP request failed")]
+@@ -430,6 +443,15 @@ pub(crate) enum LoungeError {
+ }
+ 
+ impl LoungeConnection {
++    pub(crate) fn with_volume_compatibility(
++        mut self,
++        profile: Arc<crate::volume::WebVolumeCompatibility>,
++    ) -> Self {
++        let epoch = profile.epoch();
++        self.current.volume_compatibility = Some((profile, epoch));
++        self
++    }
++
+     pub(crate) fn set_ownership_epoch(&mut self, epoch: u64) {
+         self.current.ownership_epoch = epoch;
+         self.ownership_epoch.store(epoch, Ordering::Release);
+@@ -653,6 +675,7 @@ impl LoungeConnection {
+             return Ok(());
+         }
+ 
++        let mut volume_deadline = None;
+         loop {
+             // Keep the long poll alive while playback reports arrive. Dropping
+             // it on every position update starves incoming controls.
+@@ -692,6 +715,21 @@ impl LoungeConnection {
+                     }
+                     volume = volume_change(&mut self.volume_rx) => {
+                         self.current.volume = Some(volume);
++                        if self.debounce_volume_feedback() {
++                            volume_deadline = Some(tokio::time::Instant::now() + WEB_VOLUME_QUIET_PERIOD);
++                            continue;
++                        }
++                        volume_deadline = None;
++                        if !self.post_while_accepting_controls(
++                            Outbound::Volume,
++                            command_tx,
++                            output_control_rx,
++                        ).await? {
++                            return Ok(());
++                        }
++                    }
++                    _ = volume_feedback_due(volume_deadline) => {
++                        volume_deadline = None;
+                         if !self.post_while_accepting_controls(
+                             Outbound::Volume,
+                             command_tx,
+@@ -779,6 +817,15 @@ impl LoungeConnection {
+                         // The whole batch is acknowledged: deliver all commands
+                         // before a feedback failure can interrupt the connection.
+                         for outbound in feedback {
++                            if matches!(outbound, Outbound::Volume) {
++                                if self.debounce_volume_feedback() {
++                                    // Explicit queries cannot bypass a drag's quiet
++                                    // period, nor keep extending it themselves.
++                                    volume_deadline.get_or_insert(tokio::time::Instant::now() + WEB_VOLUME_QUIET_PERIOD);
++                                    continue;
++                                }
++                                volume_deadline = None;
++                            }
+                             if !self.post_while_accepting_controls(
+                                 outbound,
+                                 command_tx,
+@@ -794,6 +841,13 @@ impl LoungeConnection {
+         }
+     }
+ 
++    fn debounce_volume_feedback(&self) -> bool {
++        self.current
++            .volume_compatibility
++            .as_ref()
++            .is_some_and(|(profile, epoch)| profile.music_web_at_epoch(*epoch))
++    }
++
+     /// Deliver a local/Cast control to the queue worker and update the Lounge
+     /// model without depending on a healthy Lounge HTTP connection. Network
+     /// feedback is deliberately left to the caller.
+@@ -886,6 +940,14 @@ impl LoungeConnection {
+             return None;
+         }
+         match incoming {
++            Incoming::RemoteVolumeProfile(music_web) => {
++                let changed = self
++                    .current
++                    .volume_compatibility
++                    .as_ref()
++                    .is_some_and(|(profile, epoch)| profile.observe(*epoch, *music_web));
++                return changed.then_some(Outbound::Volume);
++            }
+             Incoming::Command(
+                 LoungeCommand::SetPlaylist { .. }
+                 | LoungeCommand::Next
+@@ -902,6 +964,13 @@ impl LoungeConnection {
+             Incoming::Command(LoungeCommand::Play) => {
+                 self.current.stopped = false;
+                 self.current.recovery.paused = false;
++                if self.current.recovery.resolution_rate_limited {
++                    self.current.recovery = LoadRecovery {
++                        enabled: true,
++                        ..Default::default()
++                    };
++                    self.current.awaiting_load = true;
++                }
+             }
+             Incoming::Command(LoungeCommand::Stop) => {
+                 self.current.stopped = true;
+@@ -1086,7 +1155,10 @@ impl LoungeConnection {
+             Incoming::GetPlaybackSpeed => Some(Outbound::PlaybackSpeed),
+             Incoming::GetVolume => Some(Outbound::Volume),
+             Incoming::SetDiscoveryDeviceId => Some(Outbound::DiscoveryDeviceId),
+-            Incoming::Command(_) | Incoming::QueueAddition(_) | Incoming::Ignored => None,
++            Incoming::Command(_)
++            | Incoming::QueueAddition(_)
++            | Incoming::Ignored
++            | Incoming::RemoteVolumeProfile(_) => None,
+         }
+     }
+ 
+@@ -1323,6 +1395,17 @@ impl Outbound {
+             }
+             Self::Volume => {
+                 let (level, muted) = current.volume.unwrap_or((1.0, false));
++                let canonical_level = level;
++                let level = current
++                    .volume_compatibility
++                    .as_ref()
++                    .map_or(level, |(profile, _)| profile.to_sender(level, true));
++                tracing::debug!(
++                    canonical_percent = canonical_level * 100.0,
++                    wire_percent = (level.clamp(0.0, 1.0) * 100.0).round(),
++                    muted,
++                    "YouTube Lounge volume feedback"
++                );
+                 form.append_pair("req0__sc", "onVolumeChanged")
+                     .append_pair(
+                         "req0_volume",
+@@ -1465,6 +1548,7 @@ struct IncomingBatch {
+ }
+ 
+ enum Incoming {
++    RemoteVolumeProfile(bool),
+     SetLoopMode(LoopMode),
+     GetLoopMode,
+     QueueAddition(LoungeCommand),
+@@ -1497,6 +1581,13 @@ fn parse_incoming(bytes: &[u8]) -> Result<IncomingBatch, LoungeError> {
+                 "Lounge incoming command"
+             );
+             let incoming = parse_message(message);
++            if message.first().and_then(Value::as_str) == Some("loungeStatus") {
++                // Retain classification before queue ownership sees the IDs.
++                // Malformed/mixed snapshots explicitly retire a prior profile.
++                messages.push(Incoming::RemoteVolumeProfile(
++                    crate::volume::music_web_controller(message.get(1)),
++                ));
++            }
+             // The sender can carry its existing repeat mode into a new cast.
+             if message.first().and_then(Value::as_str) == Some("setPlaylist")
+                 && matches!(&incoming, Incoming::Command(_) | Incoming::QueueAddition(_))
+@@ -2874,6 +2965,49 @@ mod tests {
+         assert!(body.contains("req0_muted=true"));
+     }
+ 
++    #[test]
++    fn web_volume_feedback_projects_without_mutating_output_volume() {
++        let profile = Arc::new(crate::volume::WebVolumeCompatibility::new(
++            crate::tests::test_settings(),
++        ));
++        let epoch = profile.epoch();
++        profile.observe(epoch, true);
++        let current = CurrentMedia {
++            volume: Some((0.5, true)),
++            volume_compatibility: Some((profile.clone(), epoch)),
++            ..Default::default()
++        };
++        let body = Outbound::Volume.form_body(0, &current, "device", "lounge");
++        assert!(body.contains("req0_volume=20"));
++        assert!(body.contains("req0_muted=true"));
++        assert_eq!(current.volume, Some((0.5, true)));
++        profile.reset();
++        let body = Outbound::Volume.form_body(0, &current, "device", "lounge");
++        assert!(body.contains("req0_volume=50"));
++    }
++
++    #[test]
++    fn lounge_profile_precedes_unchanged_queue_owner_ids() {
++        let devices = serde_json::json!([
++            {"id":"screen", "type":"LOUNGE_SCREEN"},
++            {"id":"web", "type":"REMOTE_CONTROL", "app":"youtube.m-desktop", "theme":"m"}
++        ]);
++        let payload = serde_json::json!([[1, ["loungeStatus", {"devices": devices.to_string()}]]]);
++        let batch = parse_incoming(frame(&payload.to_string()).as_bytes()).unwrap();
++        assert!(matches!(
++            batch.messages[0],
++            Incoming::RemoteVolumeProfile(true)
++        ));
++        assert!(matches!(&batch.messages[1],
++            Incoming::Command(LoungeCommand::RemoteDevices(ids)) if ids == &["web"]));
++        let payload = serde_json::json!([[2, ["loungeStatus", {"devices":"malformed"}]]]);
++        let batch = parse_incoming(frame(&payload.to_string()).as_bytes()).unwrap();
++        assert!(matches!(
++            batch.messages[0],
++            Incoming::RemoteVolumeProfile(false)
++        ));
++    }
++
+     #[test]
+     fn pending_selection_updates_queue_without_second_load() {
+         let mut current = CurrentMedia {
+@@ -3136,6 +3270,182 @@ mod tests {
+         }
+     }
+ 
++    #[tokio::test]
++    async fn web_volume_feedback_waits_for_quiet_without_delaying_pause_or_state() {
++        let server = MockServer::start().await;
++        Mock::given(method("POST"))
++            .respond_with(ResponseTemplate::new(200))
++            .mount(&server)
++            .await;
++        Mock::given(method("GET"))
++            .respond_with(
++                ResponseTemplate::new(200)
++                    .set_body_string(frame("[]"))
++                    .set_delay(Duration::from_secs(2)),
++            )
++            .mount(&server)
++            .await;
++        let profile = Arc::new(crate::volume::WebVolumeCompatibility::new(
++            crate::tests::test_settings(),
++        ));
++        profile.observe(profile.epoch(), true);
++        let (volume_tx, volume_rx) = watch::channel((1.0, false));
++        let mut connection = regression_connection(&server)
++            .with_volume_compatibility(profile.clone())
++            .with_volume(volume_rx);
++        let (command_tx, mut command_rx) = mpsc::channel(8);
++        let (playback_tx, mut playback_rx) = mpsc::channel(8);
++        let (control_tx, mut control_rx) = mpsc::channel(8);
++        let (cancel_tx, mut cancel_rx) = watch::channel(false);
++        let task = tokio::spawn(async move {
++            connection
++                .run_bound(
++                    &command_tx,
++                    &mut playback_rx,
++                    &mut control_rx,
++                    &mut cancel_rx,
++                )
++                .await
++        });
++        let volume_replies = || async {
++            server
++                .received_requests()
++                .await
++                .unwrap()
++                .into_iter()
++                .filter(|request| {
++                    String::from_utf8_lossy(&request.body).contains("req0__sc=onVolumeChanged")
++                })
++                .collect::<Vec<_>>()
++        };
++        volume_tx.send((0.2, false)).unwrap();
++        tokio::time::sleep(Duration::from_millis(100)).await;
++        volume_tx.send((0.5, false)).unwrap();
++        control_tx.send(OutputControl::Pause).await.unwrap();
++        assert_eq!(
++            tokio::time::timeout(Duration::from_millis(150), command_rx.recv())
++                .await
++                .expect("volume debounce delayed Pause")
++                .unwrap(),
++            LoungeCommand::Pause
++        );
++        playback_tx
++            .send(PlaybackState {
++                player_state: PlayerState::Paused,
++                current_time: 42.0,
++                duration: Some(100.0),
++                idle_reason: None,
++                media_recovery_attempts: 0,
++            })
++            .await
++            .unwrap();
++        tokio::time::timeout(Duration::from_millis(150), async {
++            loop {
++                if server
++                    .received_requests()
++                    .await
++                    .unwrap()
++                    .iter()
++                    .any(|request| {
++                        let body = String::from_utf8_lossy(&request.body);
++                        body.contains("req0__sc=onStateChange")
++                            && body.contains("req0_currentTime=42")
++                    })
++                {
++                    break;
++                }
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .expect("volume debounce delayed playback feedback");
++        assert!(volume_replies().await.is_empty());
++        volume_tx.send((0.8, true)).unwrap();
++        tokio::time::sleep(Duration::from_millis(200)).await;
++        assert!(volume_replies().await.is_empty());
++        let replies = tokio::time::timeout(Duration::from_secs(1), async {
++            loop {
++                let replies = volume_replies().await;
++                if !replies.is_empty() {
++                    break replies;
++                }
++                tokio::time::sleep(Duration::from_millis(10)).await;
++            }
++        })
++        .await
++        .unwrap();
++        assert_eq!(replies.len(), 1);
++        let expected = (profile.to_sender(0.8, true) * 100.0).round();
++        let body = String::from_utf8_lossy(&replies[0].body);
++        assert!(body.contains(&format!("req0_volume={expected}")));
++        assert!(body.contains("req0_muted=true"));
++        cancel_tx.send(true).unwrap();
++        tokio::time::timeout(Duration::from_secs(1), task)
++            .await
++            .unwrap()
++            .unwrap()
++            .unwrap();
++    }
++
++    #[tokio::test]
++    async fn unclassified_volume_feedback_is_immediate() {
++        let server = MockServer::start().await;
++        Mock::given(method("POST"))
++            .respond_with(ResponseTemplate::new(200))
++            .mount(&server)
++            .await;
++        Mock::given(method("GET"))
++            .respond_with(
++                ResponseTemplate::new(200)
++                    .set_body_string(frame("[]"))
++                    .set_delay(Duration::from_secs(2)),
++            )
++            .mount(&server)
++            .await;
++        let (volume_tx, volume_rx) = watch::channel((1.0, false));
++        let mut connection = regression_connection(&server).with_volume(volume_rx);
++        let (command_tx, _command_rx) = mpsc::channel(8);
++        let (_playback_tx, mut playback_rx) = mpsc::channel(8);
++        let (_control_tx, mut control_rx) = mpsc::channel(8);
++        let (cancel_tx, mut cancel_rx) = watch::channel(false);
++        let task = tokio::spawn(async move {
++            connection
++                .run_bound(
++                    &command_tx,
++                    &mut playback_rx,
++                    &mut control_rx,
++                    &mut cancel_rx,
++                )
++                .await
++        });
++        volume_tx.send((0.4, false)).unwrap();
++        tokio::time::timeout(Duration::from_millis(200), async {
++            loop {
++                if server
++                    .received_requests()
++                    .await
++                    .unwrap()
++                    .iter()
++                    .any(|request| {
++                        let body = String::from_utf8_lossy(&request.body);
++                        body.contains("req0__sc=onVolumeChanged") && body.contains("req0_volume=40")
++                    })
++                {
++                    break;
++                }
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .expect("non-web volume was delayed by web quiet period");
++        cancel_tx.send(true).unwrap();
++        tokio::time::timeout(Duration::from_secs(1), task)
++            .await
++            .unwrap()
++            .unwrap()
++            .unwrap();
++    }
++
+     #[tokio::test]
+     async fn eof_advances_even_when_state_feedback_fails() {
+         let server = MockServer::start().await;
+@@ -3505,6 +3815,82 @@ mod tests {
+         assert_eq!(connection.bound.aid, 4, "forward ACK must not advance AID");
+     }
+ 
++    #[tokio::test]
++    async fn rate_limit_disables_reload_until_manual_play_and_does_not_poison_selection() {
++        let server = MockServer::start().await;
++        let mut connection = LoungeConnection {
++            volume_rx: None,
++            http: reqwest::Client::new(),
++            bind_url: Url::parse(&format!("{}/bind", server.uri())).unwrap(),
++            bound: BoundSession {
++                sid: "SID".into(),
++                gsession_id: "GSID".into(),
++                aid: 0,
++                rid: 1,
++                ofs: 0,
++            },
++            screen_id: "screen".into(),
++            device_id: "device".into(),
++            discovery_device_id: "cast".into(),
++            ownership_epoch: Arc::new(AtomicU64::new(0)),
++            current: retryable_media(),
++        };
++        connection.current.state = Some(failed_start());
++        connection.current.awaiting_load = true;
++        connection
++            .current
++            .mark_resolution_failed(0, 0, "A", ResolutionFailureClass::RateLimited);
++        let (state, retry) = connection
++            .current
++            .accept_state(PlaybackState {
++                idle_reason: Some(IdleReason::Cancelled),
++                ..failed_start()
++            })
++            .unwrap();
++        assert!(retry.is_none());
++        assert_eq!(state.idle_reason, Some(IdleReason::Error));
++        connection.current.state = Some(state);
++        let (tx, mut rx) = mpsc::channel(8);
++        connection
++            .apply_output_control(OutputControl::Play, &tx)
++            .await
++            .unwrap();
++        assert!(matches!(rx.recv().await, Some(LoungeCommand::Play)));
++        assert!(connection.current.recovery.enabled);
++        assert!(!connection.current.recovery.resolution_terminal);
++        connection
++            .current
++            .accept_state(PlaybackState {
++                player_state: PlayerState::Buffering,
++                idle_reason: None,
++                ..failed_start()
++            })
++            .unwrap();
++        assert!(matches!(
++            connection.current.accept_state(failed_start()).unwrap().1,
++            Some(LoungeCommand::ReloadCurrent {
++                retries_used: 1,
++                ..
++            })
++        ));
++        connection
++            .current
++            .mark_resolution_failed(0, 0, "A", ResolutionFailureClass::RateLimited);
++        connection.handle_internal(&Incoming::Command(LoungeCommand::SetPlaylist {
++            video_ids: vec!["B".into()],
++            current_index: 0,
++            current_time: 0.0,
++            list_id: None,
++            params: None,
++            credential: None,
++        }));
++        connection
++            .current
++            .mark_resolution_failed(0, 0, "A", ResolutionFailureClass::RateLimited);
++        assert!(connection.current.recovery.enabled);
++        assert!(!connection.current.recovery.resolution_rate_limited);
++    }
++
+     #[tokio::test]
+     async fn load_recovery_round_trips_feedback_and_manual_play() {
+         let server = MockServer::start().await;
+diff --git a/crates/vibecast-apps-youtube/src/resolver.rs b/crates/vibecast-apps-youtube/src/resolver.rs
+index 5ade555..2e4f111 100644
+--- a/crates/vibecast-apps-youtube/src/resolver.rs
++++ b/crates/vibecast-apps-youtube/src/resolver.rs
+@@ -75,9 +75,9 @@ pub(crate) struct NavigationRequest<'a> {
+     pub(crate) remote_device_ids: &'a [String],
+ }
+ 
+-#[derive(Clone)]
++#[derive(Clone, Default)]
+ struct InnertubeBootstrap {
+-    api_key: String,
++    api_key: Option<String>,
+     visitor_data: Option<String>,
+ }
+ 
+@@ -336,11 +336,29 @@ impl Resolver {
+                 .await
+         }
+         .await
+-        .map_err(|error| diagnose_http("watch_bootstrap", error))?;
++        .map_err(|error| diagnose_http("watch_bootstrap", error));
++        let html = match html {
++            Ok(html) => html,
++            Err(error) if error.status() == Some(reqwest::StatusCode::TOO_MANY_REQUESTS) => {
++                // The web page and native InnerTube endpoints can have separate
++                // limits. The API key and anonymous visitor bootstrap are not
++                // required by these clients. Retain the sender's CTT in the
++                // normal player/next body; do not downgrade to anonymous audio.
++                // Cache this decision so navigation and retries do not hammer
++                // the rate-limited page again during this resolver's lifetime.
++                tracing::warn!(
++                    "YouTube watch bootstrap rate limited; using native API without web bootstrap"
++                );
++                let bootstrap = InnertubeBootstrap::default();
++                *cached = Some(bootstrap.clone());
++                return Ok(bootstrap);
++            }
++            Err(error) => return Err(error.into()),
++        };
+         let bootstrap = InnertubeBootstrap {
+-            api_key: extract_config_string(&html, "INNERTUBE_API_KEY").ok_or(
++            api_key: Some(extract_config_string(&html, "INNERTUBE_API_KEY").ok_or(
+                 ResolveError::Protocol("watch page omitted InnerTube API key"),
+-            )?,
++            )?),
+             visitor_data: extract_config_string(&html, "VISITOR_DATA")
+                 .or_else(|| extract_config_string(&html, "visitorData")),
+         };
+@@ -368,9 +386,9 @@ impl Resolver {
+         let bootstrap = self.innertube_bootstrap(request.video_id).await?;
+         let mut next_url = Url::parse(&self.endpoints.next)
+             .map_err(|_| ResolveError::Protocol("invalid next endpoint"))?;
+-        next_url
+-            .query_pairs_mut()
+-            .append_pair("key", &bootstrap.api_key);
++        if let Some(key) = &bootstrap.api_key {
++            next_url.query_pairs_mut().append_pair("key", key);
++        }
+         let body = next_request_body(&request, bootstrap.visitor_data.as_deref());
+         let response: serde_json::Value = async {
+             self.http
+@@ -408,9 +426,9 @@ impl Resolver {
+ 
+         let mut player_url = Url::parse(&self.endpoints.player)
+             .map_err(|_| ResolveError::Protocol("invalid player endpoint"))?;
+-        player_url
+-            .query_pairs_mut()
+-            .append_pair("key", &bootstrap.api_key);
++        if let Some(key) = &bootstrap.api_key {
++            player_url.query_pairs_mut().append_pair("key", key);
++        }
+         let response: PlayerResponse = async {
+             self.http
+                 .post(player_url)
+@@ -2904,7 +2922,15 @@ mod tests {
+         for status in [429, 503] {
+             let server = MockServer::start().await;
+             Mock::given(method("GET"))
++                .respond_with(
++                    ResponseTemplate::new(200)
++                        .set_body_string(r#"ytcfg.set({"INNERTUBE_API_KEY":"test-key"});"#),
++                )
++                .mount(&server)
++                .await;
++            Mock::given(method("POST"))
+                 .respond_with(ResponseTemplate::new(status))
++                .expect(1)
+                 .mount(&server)
+                 .await;
+             let resolver = Resolver::with_endpoints(reqwest::Client::new(), &server.uri());
+@@ -2925,6 +2951,128 @@ mod tests {
+         }
+     }
+ 
++    #[tokio::test]
++    async fn rate_limited_watch_does_not_block_ctt_player_or_navigation() {
++        let server = MockServer::start().await;
++        Mock::given(method("GET"))
++            .and(path("/watch"))
++            .respond_with(ResponseTemplate::new(429))
++            .expect(1)
++            .mount(&server)
++            .await;
++        Mock::given(method("POST"))
++            .and(path("/youtubei/v1/player"))
++            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
++                "playabilityStatus": {"status": "OK"},
++                "streamingData": {"adaptiveFormats": adaptive_formats()},
++                "videoDetails": {
++                    "videoId": "dQw4w9WgXcQ", "title": "CTT fallback", "lengthSeconds": "213"
++                }
++            })))
++            .expect(2)
++            .mount(&server)
++            .await;
++        Mock::given(method("POST"))
++            .and(path("/youtubei/v1/next"))
++            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({})))
++            .expect(1)
++            .mount(&server)
++            .await;
++        let resolver = Resolver::with_endpoints(reqwest::Client::new(), &server.uri());
++        let clone = resolver.clone();
++        let credential =
++            CredentialTransferToken::new("dQw4w9WgXcQ".into(), "synthetic-credential".into());
++        let capabilities = caps(&["h264"], &["opus", "aac"], &[], (1920, 1080));
++        let (media, navigation) = tokio::join!(
++            resolver.resolve(
++                "dQw4w9WgXcQ",
++                12.0,
++                &capabilities,
++                PreferredVideoCodec::Auto,
++                Some(&credential)
++            ),
++            clone.resolve_neighbors(NavigationRequest {
++                video_id: "dQw4w9WgXcQ",
++                list_id: None,
++                index: 0,
++                params: None,
++                credential: Some(&credential),
++                remote_device_ids: &[],
++            }),
++        );
++        let media = media.unwrap();
++        assert_eq!(media.title.as_deref(), Some("CTT fallback"));
++        assert_eq!(media.start_time, 12.0);
++        assert!(!media.streams.is_empty());
++        assert!(navigation.is_ok());
++        clone
++            .resolve(
++                "dQw4w9WgXcQ",
++                0.0,
++                &capabilities,
++                PreferredVideoCodec::Auto,
++                Some(&credential),
++            )
++            .await
++            .unwrap();
++        for request in server
++            .received_requests()
++            .await
++            .unwrap()
++            .iter()
++            .filter(|r| r.method == "POST")
++        {
++            assert!(request.url.query().is_none());
++            let body: serde_json::Value = request.body_json().unwrap();
++            assert_eq!(
++                body["context"]["user"]["credentialTransferTokens"][0]["token"],
++                "synthetic-credential"
++            );
++            assert!(body["context"]["client"].get("visitorData").is_none());
++        }
++    }
++
++    #[tokio::test]
++    async fn keyless_bootstrap_still_respects_player_denial_and_rate_limit() {
++        for status in [200, 429] {
++            let server = MockServer::start().await;
++            Mock::given(method("GET"))
++                .respond_with(ResponseTemplate::new(429))
++                .expect(1)
++                .mount(&server)
++                .await;
++            Mock::given(method("POST"))
++                .respond_with(
++                    ResponseTemplate::new(status).set_body_json(serde_json::json!({
++                        "playabilityStatus": {"status": "LOGIN_REQUIRED", "reason": "Access denied"}
++                    })),
++                )
++                .expect(1)
++                .mount(&server)
++                .await;
++            let resolver = Resolver::with_endpoints(reqwest::Client::new(), &server.uri());
++            let credential = CredentialTransferToken::new("example".into(), "synthetic".into());
++            let error = resolver
++                .resolve(
++                    "example",
++                    0.0,
++                    &Default::default(),
++                    PreferredVideoCodec::Auto,
++                    Some(&credential),
++                )
++                .await
++                .unwrap_err();
++            if status == 200 {
++                assert!(matches!(error, ResolveError::Unplayable { .. }));
++            } else {
++                assert!(
++                    matches!(&error, ResolveError::Http(e) if e.status().unwrap().as_u16() == 429)
++                );
++                assert!(!crate::retryable_resolution_error(&error));
++            }
++        }
++    }
++
+     #[tokio::test]
+     async fn metadata_fixture_returns_audio_and_metadata_without_external_extraction() {
+         let server = MockServer::start().await;
+diff --git a/crates/vibecast-core/src/audio_cache.rs b/crates/vibecast-core/src/audio_cache.rs
+index da43484..de176e2 100644
+--- a/crates/vibecast-core/src/audio_cache.rs
++++ b/crates/vibecast-core/src/audio_cache.rs
+@@ -14,6 +14,8 @@ pub(crate) const MAX_AUDIO_BYTES: usize = 32 * 1024 * 1024;
+ const CHUNK: usize = 64 * 1024;
+ const BLOCK: usize = 128 * 1024;
+ const UPSTREAM_RANGE: usize = 8 * 1024 * 1024;
++const SLOW_SOURCE_WINDOW: Duration = Duration::from_secs(10);
++const REALTIME_RATE_MARGIN: f64 = 1.10;
+ 
+ #[derive(Clone, Copy, PartialEq, Eq)]
+ enum Phase {
+@@ -25,6 +27,18 @@ enum Phase {
+     Cancelled,
+ }
+ 
++#[derive(Clone, Copy, PartialEq, Eq)]
++enum DownloadFailure {
++    Fetch,
++    SlowSource,
++}
++
++impl From<()> for DownloadFailure {
++    fn from(_: ()) -> Self {
++        Self::Fetch
++    }
++}
++
+ struct Data {
+     phase: Phase,
+     blocks: Vec<Vec<u8>>,
+@@ -34,6 +48,8 @@ struct Data {
+     resume_index: usize,
+     bypass_url: Option<String>,
+     integrity_failed: bool,
++    source_slow: bool,
++    refreshing: bool,
+ }
+ 
+ struct Shared {
+@@ -52,6 +68,8 @@ pub(crate) struct AudioCache {
+     readers: Arc<Semaphore>,
+     limit: usize,
+     idle_timeout: Duration,
++    expected_duration: Option<Duration>,
++    slow_source_window: Duration,
+ }
+ 
+ impl AudioCache {
+@@ -71,6 +89,8 @@ impl AudioCache {
+                     resume_index: 0,
+                     bypass_url: None,
+                     integrity_failed: false,
++                    source_slow: false,
++                    refreshing: false,
+                 }),
+                 changed: watch::channel(()).0,
+                 hint,
+@@ -79,9 +99,18 @@ impl AudioCache {
+             readers: Arc::new(Semaphore::new(8)),
+             limit: MAX_AUDIO_BYTES,
+             idle_timeout: Duration::from_secs(30),
++            expected_duration: None,
++            slow_source_window: SLOW_SOURCE_WINDOW,
+         }
+     }
+ 
++    pub(crate) fn with_expected_duration(mut self, duration: Option<f64>) -> Self {
++        self.expected_duration = duration
++            .filter(|seconds| *seconds > 0.0)
++            .and_then(|seconds| Duration::try_from_secs_f64(seconds).ok());
++        self
++    }
++
+     pub fn cancel(&self) {
+         if let Some(task) = self.task.lock().unwrap().take() {
+             task.abort();
+@@ -98,6 +127,12 @@ impl AudioCache {
+         self.shared.data.lock().unwrap().phase == Phase::Failed
+     }
+ 
++    /// Low throughput is actionable only when the decoder is also buffering.
++    pub(crate) fn needs_recovery_when_buffering(&self) -> bool {
++        let data = self.shared.data.lock().unwrap();
++        data.phase == Phase::Streaming && data.source_slow && !data.refreshing
++    }
++
+     fn start(&self) {
+         let mut task = self.task.lock().unwrap();
+         if task.is_some() || self.shared.data.lock().unwrap().phase != Phase::Pending {
+@@ -108,14 +143,24 @@ impl AudioCache {
+         let mut url = self.url.clone();
+         let limit = self.limit;
+         let idle_timeout = self.idle_timeout;
++        let expected_duration = self.expected_duration;
++        let slow_source_window = self.slow_source_window;
+         *task = Some(tokio::spawn(async move {
+             loop {
+-                if download(&http, &url, &shared, limit, idle_timeout)
+-                    .await
+-                    .is_ok()
++                let failure = match download(
++                    &http,
++                    &url,
++                    &shared,
++                    limit,
++                    idle_timeout,
++                    expected_duration,
++                    slow_source_window,
++                )
++                .await
+                 {
+-                    return;
+-                }
++                    Ok(()) => return,
++                    Err(failure) => failure,
++                };
+                 // Repair the same object while the decoder can still play its
+                 // buffered audio. Keep partial blocks and pending HTTP readers;
+                 // closing them here would defer recovery until decoder EOF.
+@@ -123,18 +168,20 @@ impl AudioCache {
+                     return;
+                 }
+                 let mut refreshed = None;
++                let mut refresh_attempted = false;
+                 // Conflicting cached bytes or an invalid response tail must
+                 // never be promoted to a complete object on another attempt.
+-                // Leave clean decoder reloads to the app's remaining budget.
++                // Keep the final round for a clean decoder reload. A different
++                // representation cannot be spliced into existing bytes, but may
++                // still play successfully as a new load.
+                 if let Some(refresh) = shared
+                     .hint
+                     .source_refresh()
+                     .filter(|_| !shared.data.lock().unwrap().integrity_failed)
+                 {
+-                    // Keep the final round for a clean decoder reload. A
+-                    // different representation cannot be spliced into existing
+-                    // bytes, but may still play successfully as a new load.
+                     if shared.hint.recovery_attempts() == 0 && shared.hint.try_recovery() {
++                        refresh_attempted = true;
++                        shared.data.lock().unwrap().refreshing = true;
+                         tracing::warn!(
+                             attempt = shared.hint.recovery_attempts(),
+                             "refreshing failed audio source before decoder buffer drains"
+@@ -147,6 +194,11 @@ impl AudioCache {
+                         {
+                             refreshed = Some(next);
+                         }
++                        {
++                            let mut data = shared.data.lock().unwrap();
++                            data.refreshing = false;
++                            data.source_slow = false;
++                        }
+                     }
+                 }
+                 if let Some(next) = refreshed {
+@@ -175,6 +227,19 @@ impl AudioCache {
+                     url = next.url;
+                     continue;
+                 }
++                if failure == DownloadFailure::SlowSource && refresh_attempted {
++                    // Refresh can be temporarily unavailable even though the
++                    // original connection is merely too slow, not corrupt.
++                    // Reconnect the same immutable URL at the cached offset and
++                    // retain the consumed attempt. Further slow windows keep
++                    // downloading and let decoder buffering decide whether the
++                    // remaining clean reload is needed.
++                    tracing::warn!(
++                        attempt = shared.hint.recovery_attempts(),
++                        "reconnecting slow audio source without refreshed location"
++                    );
++                    continue;
++                }
+                 let mut data = shared.data.lock().unwrap();
+                 if data.phase != Phase::Cancelled {
+                     data.phase = Phase::Failed;
+@@ -354,7 +419,9 @@ async fn download(
+     shared: &Shared,
+     limit: usize,
+     idle_timeout: Duration,
+-) -> Result<(), ()> {
++    expected_duration: Option<Duration>,
++    slow_source_window: Duration,
++) -> Result<(), DownloadFailure> {
+     // Drain each downloader-sized response promptly. Holding an origin body
+     // open across playback pauses/seeks can trigger peer resets. Local readers
+     // still receive bytes immediately; demand gates only the next HTTP range.
+@@ -448,7 +515,7 @@ async fn download(
+                 http_version = ?response.version(),
+                 "current audio cache HTTP failure"
+             );
+-            return Err(());
++            return Err(DownloadFailure::Fetch);
+         }
+         let range_header = response
+             .headers()
+@@ -492,6 +559,7 @@ async fn download(
+             if data.phase == Phase::Cancelled {
+                 return Ok(());
+             }
++            data.source_slow = false;
+             if known_length == 0 {
+                 data.length = length;
+                 data.blocks = (0..length.div_ceil(BLOCK)).map(|_| Vec::new()).collect();
+@@ -506,6 +574,15 @@ async fn download(
+         }
+         let mut pending = bytes::Bytes::new();
+         let mut received = 0;
++        // Throughput alone does not imply decoder starvation: cached audio may
++        // still be far ahead. Only the first slow window proactively refreshes;
++        // subsequent windows expose health for the hub's buffering decision.
++        // Keep monitoring the final round so starvation cannot remain silent.
++        let minimum_rate = minimum_realtime_rate(length, expected_duration)
++            .filter(|_| shared.hint.source_refresh().is_some());
++        let mut last_chunk = std::time::Instant::now();
++        let mut progress_started = std::time::Instant::now();
++        let mut progress_bytes = 0;
+         loop {
+             shared.data.lock().unwrap().resume_index = index;
+             let block_end = ((index + 1) * BLOCK).min(length);
+@@ -517,9 +594,42 @@ async fn download(
+                 }
+                 if pending.is_empty() {
+                     // No timeout runs between completed ranges while paused.
+-                    pending = tokio::time::timeout(idle_timeout, response.chunk())
+-                        .await
+-                        .map_err(|_| fetch_failure("body_read_timeout"))?
++                    // For a monitored source, also wake at the end of
++                    // the progress window even if tiny chunks keep the socket
++                    // from reaching the ordinary idle timeout.
++                    let progress_remaining = minimum_rate
++                        .map(|_| slow_source_window.saturating_sub(progress_started.elapsed()));
++                    let read_timeout = progress_remaining
++                        .map(|remaining| remaining.max(Duration::from_millis(1)))
++                        .map_or(idle_timeout, |remaining| remaining.min(idle_timeout))
++                        .min(idle_timeout.saturating_sub(last_chunk.elapsed()));
++                    let next = match tokio::time::timeout(read_timeout, response.chunk()).await {
++                        Ok(result) => result,
++                        Err(_) if last_chunk.elapsed() >= idle_timeout => {
++                            return Err(fetch_failure("body_read_timeout"));
++                        }
++                        Err(_)
++                            if minimum_rate.is_some()
++                                && progress_started.elapsed() >= slow_source_window =>
++                        {
++                            if record_source_rate(
++                                shared,
++                                progress_bytes,
++                                progress_started.elapsed(),
++                                minimum_rate.unwrap(),
++                                length,
++                                expected_duration.unwrap(),
++                                start,
++                            ) {
++                                return Err(DownloadFailure::SlowSource);
++                            }
++                            progress_started = std::time::Instant::now();
++                            progress_bytes = 0;
++                            continue;
++                        }
++                        Err(_) => return Err(fetch_failure("body_read_timeout")),
++                    };
++                    pending = next
+                         .map_err(|error| {
+                             tracing::warn!(
+                                 range_start = start,
+@@ -531,11 +641,31 @@ async fn download(
+                             transport_failure("body_read", &error)
+                         })?
+                         .ok_or_else(|| fetch_failure("truncated_body"))?;
++                    last_chunk = std::time::Instant::now();
+                     received += pending.len();
++                    progress_bytes += pending.len();
+                     if received > last + 1 - first {
+                         shared.data.lock().unwrap().integrity_failed = true;
+                         return Err(fetch_failure("oversized_body"));
+                     }
++                    if let Some(minimum_rate) = minimum_rate {
++                        let elapsed = progress_started.elapsed();
++                        if elapsed >= slow_source_window {
++                            if record_source_rate(
++                                shared,
++                                progress_bytes,
++                                elapsed,
++                                minimum_rate,
++                                length,
++                                expected_duration.unwrap(),
++                                start,
++                            ) {
++                                return Err(DownloadFailure::SlowSource);
++                            }
++                            progress_started = std::time::Instant::now();
++                            progress_bytes = 0;
++                        }
++                    }
+                 }
+                 let mut data = shared.data.lock().unwrap();
+                 if data.phase == Phase::Cancelled {
+@@ -581,6 +711,7 @@ async fn download(
+                     && data.blocks.iter().map(Vec::len).sum::<usize>() == length
+                 {
+                     data.phase = Phase::Complete;
++                    data.source_slow = false;
+                     shared.hint.mark_complete();
+                     shared.changed.send_replace(());
+                     tracing::info!(bytes = length, "current audio cache complete");
+@@ -602,11 +733,69 @@ async fn download(
+     }
+ }
+ 
+-fn fetch_failure(kind: &'static str) {
++fn minimum_realtime_rate(length: usize, duration: Option<Duration>) -> Option<f64> {
++    let seconds = duration?.as_secs_f64();
++    (seconds.is_finite() && seconds > 0.0).then_some(length as f64 / seconds * REALTIME_RATE_MARGIN)
++}
++
++fn record_source_rate(
++    shared: &Shared,
++    received: usize,
++    elapsed: Duration,
++    minimum_rate: f64,
++    length: usize,
++    duration: Duration,
++    range_start: usize,
++) -> bool {
++    let slow = slow_source_detected(
++        received,
++        elapsed,
++        minimum_rate,
++        length,
++        duration,
++        range_start,
++    );
++    let mut data = shared.data.lock().unwrap();
++    data.source_slow = slow;
++    let refresh = slow && shared.hint.recovery_attempts() == 0;
++    if refresh {
++        data.refreshing = true;
++    }
++    shared.changed.send_replace(());
++    refresh
++}
++
++fn slow_source_detected(
++    received: usize,
++    elapsed: Duration,
++    minimum_rate: f64,
++    length: usize,
++    duration: Duration,
++    range_start: usize,
++) -> bool {
++    let observed_rate = received as f64 / elapsed.as_secs_f64();
++    if observed_rate >= minimum_rate {
++        return false;
++    }
++    tracing::warn!(
++        received_bytes = received,
++        sample_millis = elapsed.as_millis(),
++        observed_bytes_per_second = observed_rate.round() as u64,
++        minimum_bytes_per_second = minimum_rate.round() as u64,
++        content_length = length,
++        duration_millis = duration.as_millis(),
++        range_start,
++        "audio cache source is too slow for uninterrupted playback"
++    );
++    true
++}
++
++fn fetch_failure(kind: &'static str) -> DownloadFailure {
+     tracing::warn!(kind, "audio cache fetch failure detail");
++    DownloadFailure::Fetch
+ }
+ 
+-fn transport_failure(stage: &'static str, error: &reqwest::Error) {
++fn transport_failure(stage: &'static str, error: &reqwest::Error) -> DownloadFailure {
+     // reqwest's Display/Debug may contain a signed media URL: only safe flags.
+     let (io_kind, os_error) = transport_io_cause(error);
+     tracing::warn!(
+@@ -619,6 +808,7 @@ fn transport_failure(stage: &'static str, error: &reqwest::Error) {
+         os_error,
+         "audio cache transport failure"
+     );
++    DownloadFailure::Fetch
+ }
+ 
+ fn transport_io_cause(
+@@ -802,7 +992,9 @@ mod tests {
+             &cache.url,
+             &cache.shared,
+             cache.limit,
+-            cache.idle_timeout
++            cache.idle_timeout,
++            cache.expected_duration,
++            cache.slow_source_window,
+         )
+         .await
+         .is_err());
+@@ -959,6 +1151,27 @@ mod tests {
+         declared: Option<usize>,
+         status: u16,
+         supports_range: bool,
++    ) -> Origin {
++        origin_server(payload, declared, status, supports_range, None).await
++    }
++
++    async fn dripping_origin(payload: &[u8], chunk_size: usize, interval: Duration) -> Origin {
++        origin_server(
++            payload,
++            Some(payload.len()),
++            200,
++            true,
++            Some((chunk_size, interval)),
++        )
++        .await
++    }
++
++    async fn origin_server(
++        payload: &[u8],
++        declared: Option<usize>,
++        status: u16,
++        supports_range: bool,
++        drip: Option<(usize, Duration)>,
+     ) -> Origin {
+         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+         let url = format!("http://{}/audio", listener.local_addr().unwrap());
+@@ -981,6 +1194,7 @@ mod tests {
+                         let observed = observed.clone();
+                         let observed_ranges = observed_ranges.clone();
+                         let observed_requests = observed_requests.clone();
++                        let drip = drip;
+                         children.spawn(async move {
+                             let mut request = vec![0; 8192];
+                             let n = socket.read(&mut request).await.unwrap();
+@@ -998,6 +1212,13 @@ mod tests {
+                             let length = length.map(|n| format!("Content-Length: {n}\r\n")).unwrap_or_default();
+                             let header = format!("HTTP/1.1 {status} Test\r\n{length}{content_range}Content-Type: audio/mp4\r\nConnection: close\r\n\r\n");
+                             if socket.write_all(header.as_bytes()).await.is_err() { return; }
++                            if let Some((chunk_size, interval)) = drip {
++                                for chunk in payload.chunks(chunk_size) {
++                                    if socket.write_all(chunk).await.is_err() { return; }
++                                    tokio::time::sleep(interval).await;
++                                }
++                                return;
++                            }
+                             let mid = payload.len() / 2;
+                             if socket.write_all(&payload[..mid]).await.is_err() { return; }
+                             while !*rx.borrow_and_update() {
+@@ -1491,6 +1712,356 @@ mod tests {
+         }
+     }
+ 
++    #[derive(Debug)]
++    struct MissingRefresh {
++        calls: AtomicUsize,
++    }
++
++    #[async_trait]
++    impl vibecast_sdk::MediaSourceRefresh for MissingRefresh {
++        async fn refresh(&self) -> Option<String> {
++            self.calls.fetch_add(1, Ordering::SeqCst);
++            None
++        }
++    }
++
++    #[tokio::test]
++    async fn slow_source_refreshes_and_resumes_the_same_cached_object() {
++        let payload = vec![42; BLOCK * 4];
++        let slow = origin(&payload, Some(payload.len()), 200).await;
++        let fast = origin(&payload, Some(payload.len()), 200).await;
++        fast.release.send(true).unwrap();
++        let hint = MediaCacheHint::default();
++        let (_ready_tx, ready) = watch::channel(true);
++        let refresh = Arc::new(Refresh {
++            url: fast.url.clone(),
++            calls: AtomicUsize::new(0),
++            ready,
++        });
++        hint.set_refresh(refresh.clone());
++        let mut cache = AudioCache::new(reqwest::Client::new(), slow.url.clone(), hint.clone())
++            .with_expected_duration(Some(1.0));
++        cache.slow_source_window = Duration::from_millis(100);
++        cache.idle_timeout = Duration::from_secs(1);
++
++        assert_eq!(
++            read_all(open(&cache, None, Method::GET).await).await,
++            payload
++        );
++        assert_eq!(refresh.calls.load(Ordering::SeqCst), 1);
++        assert_eq!(hint.recovery_attempts(), 1);
++        assert!(hint.is_complete());
++        assert_eq!(*slow.ranges.lock().unwrap(), [(0, BLOCK * 4)]);
++        assert_eq!(*fast.ranges.lock().unwrap(), [(BLOCK * 2, BLOCK * 4)]);
++    }
++
++    #[tokio::test]
++    async fn still_slow_refreshed_source_preserves_audio_until_decoder_needs_recovery() {
++        let payload = vec![43; BLOCK * 4];
++        let first = origin(&payload, Some(payload.len()), 200).await;
++        let second = origin(&payload, Some(payload.len()), 200).await;
++        let hint = MediaCacheHint::default();
++        let (_ready_tx, ready) = watch::channel(true);
++        let refresh = Arc::new(Refresh {
++            url: second.url.clone(),
++            calls: AtomicUsize::new(0),
++            ready,
++        });
++        hint.set_refresh(refresh.clone());
++        let mut cache = AudioCache::new(reqwest::Client::new(), first.url.clone(), hint.clone())
++            .with_expected_duration(Some(1.0));
++        cache.slow_source_window = Duration::from_millis(100);
++        cache.idle_timeout = Duration::from_secs(1);
++
++        let response = open(&cache, None, Method::GET).await;
++        tokio::time::timeout(Duration::from_secs(2), async {
++            while !cache.needs_recovery_when_buffering() {
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .unwrap();
++        assert!(!cache.has_failed());
++        assert!(
++            cache
++                .shared
++                .data
++                .lock()
++                .unwrap()
++                .blocks
++                .iter()
++                .map(Vec::len)
++                .sum::<usize>()
++                >= BLOCK * 2
++        );
++        second.release.send(true).unwrap();
++        assert_eq!(read_all(response).await, payload);
++        assert!(!cache.needs_recovery_when_buffering());
++        assert_eq!(refresh.calls.load(Ordering::SeqCst), 1);
++        assert_eq!(hint.recovery_attempts(), 1);
++        assert!(!cache.has_failed());
++        assert_eq!(first.count.load(Ordering::SeqCst), 1);
++        assert_eq!(second.count.load(Ordering::SeqCst), 1);
++        assert!(hint.try_recovery(), "the clean decoder reload must remain");
++        assert!(
++            !hint.try_recovery(),
++            "the two-round budget must remain bounded"
++        );
++    }
++
++    #[tokio::test]
++    async fn slow_drip_refreshes_even_though_each_chunk_beats_the_idle_timeout() {
++        let payload = vec![41; BLOCK * 4];
++        let slow = dripping_origin(&payload, 1024, Duration::from_millis(10)).await;
++        let fast = origin(&payload, Some(payload.len()), 200).await;
++        fast.release.send(true).unwrap();
++        let hint = MediaCacheHint::default();
++        let (_ready_tx, ready) = watch::channel(true);
++        let refresh = Arc::new(Refresh {
++            url: fast.url.clone(),
++            calls: AtomicUsize::new(0),
++            ready,
++        });
++        hint.set_refresh(refresh.clone());
++        let mut cache = AudioCache::new(reqwest::Client::new(), slow.url.clone(), hint.clone())
++            .with_expected_duration(Some(1.0));
++        cache.slow_source_window = Duration::from_millis(100);
++        cache.idle_timeout = Duration::from_secs(1);
++
++        assert_eq!(
++            read_all(open(&cache, None, Method::GET).await).await,
++            payload
++        );
++        assert_eq!(refresh.calls.load(Ordering::SeqCst), 1);
++        assert_eq!(hint.recovery_attempts(), 1);
++        assert!(hint.is_complete());
++        assert_eq!(slow.count.load(Ordering::SeqCst), 1);
++        assert_eq!(fast.count.load(Ordering::SeqCst), 1);
++        assert!(fast.ranges.lock().unwrap()[0].0 > 0);
++    }
++
++    #[tokio::test]
++    async fn unavailable_slow_source_refresh_reconnects_without_failing_playback() {
++        let payload = vec![24; BLOCK * 4];
++        let origin = origin(&payload, Some(payload.len()), 200).await;
++        let hint = MediaCacheHint::default();
++        let refresh = Arc::new(MissingRefresh {
++            calls: AtomicUsize::new(0),
++        });
++        hint.set_refresh(refresh.clone());
++        let mut cache = AudioCache::new(reqwest::Client::new(), origin.url.clone(), hint.clone())
++            .with_expected_duration(Some(1.0));
++        cache.slow_source_window = Duration::from_millis(100);
++        cache.idle_timeout = Duration::from_secs(1);
++        let count = origin.count.clone();
++        let release = origin.release.clone();
++        let release_reconnect = tokio::spawn(async move {
++            while count.load(Ordering::SeqCst) < 2 {
++                tokio::task::yield_now().await;
++            }
++            release.send(true).unwrap();
++        });
++
++        assert_eq!(
++            read_all(open(&cache, None, Method::GET).await).await,
++            payload
++        );
++        release_reconnect.await.unwrap();
++        assert_eq!(refresh.calls.load(Ordering::SeqCst), 1);
++        assert_eq!(hint.recovery_attempts(), 1);
++        assert!(hint.is_complete());
++        assert!(!cache.has_failed());
++        assert_eq!(origin.count.load(Ordering::SeqCst), 2);
++    }
++
++    #[tokio::test]
++    async fn unavailable_refresh_reconnects_only_once_and_preserves_slow_audio() {
++        let payload = vec![25; BLOCK * 4];
++        let origin = origin(&payload, Some(payload.len()), 200).await;
++        let hint = MediaCacheHint::default();
++        let refresh = Arc::new(MissingRefresh {
++            calls: AtomicUsize::new(0),
++        });
++        hint.set_refresh(refresh.clone());
++        let mut cache = AudioCache::new(reqwest::Client::new(), origin.url.clone(), hint.clone())
++            .with_expected_duration(Some(1.0));
++        cache.slow_source_window = Duration::from_millis(100);
++        cache.idle_timeout = Duration::from_secs(1);
++
++        let response = open(&cache, None, Method::GET).await;
++        tokio::time::timeout(Duration::from_secs(2), async {
++            while !cache.needs_recovery_when_buffering() {
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .unwrap();
++        assert!(!cache.has_failed());
++        assert!(
++            cache
++                .shared
++                .data
++                .lock()
++                .unwrap()
++                .blocks
++                .iter()
++                .map(Vec::len)
++                .sum::<usize>()
++                >= BLOCK * 2
++        );
++        origin.release.send(true).unwrap();
++        assert_eq!(read_all(response).await, payload);
++        assert!(!cache.needs_recovery_when_buffering());
++        assert_eq!(refresh.calls.load(Ordering::SeqCst), 1);
++        assert_eq!(hint.recovery_attempts(), 1);
++        assert!(!cache.has_failed());
++        assert_eq!(origin.count.load(Ordering::SeqCst), 2);
++        assert!(hint.try_recovery(), "the clean decoder reload must remain");
++        assert!(
++            !hint.try_recovery(),
++            "the two-round budget must remain bounded"
++        );
++    }
++
++    #[tokio::test]
++    async fn final_round_slow_drip_is_monitored_without_discarding_audio_or_retrying() {
++        let payload = vec![31; BLOCK];
++        let origin = dripping_origin(&payload, 4096, Duration::from_millis(10)).await;
++        let hint = MediaCacheHint::default();
++        let refresh = Arc::new(MissingRefresh {
++            calls: AtomicUsize::new(0),
++        });
++        hint.set_refresh(refresh.clone());
++        hint.set_recovery_attempts(2);
++        let mut cache = AudioCache::new(reqwest::Client::new(), origin.url.clone(), hint.clone())
++            .with_expected_duration(Some(0.1));
++        cache.slow_source_window = Duration::from_millis(50);
++        cache.idle_timeout = Duration::from_secs(1);
++        let response = open(&cache, None, Method::GET).await;
++        tokio::time::timeout(Duration::from_secs(2), async {
++            while !cache.needs_recovery_when_buffering() {
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .unwrap();
++        assert!(!cache.has_failed());
++        assert_eq!(hint.recovery_attempts(), 2);
++        assert_eq!(refresh.calls.load(Ordering::SeqCst), 0);
++        assert_eq!(read_all(response).await, payload);
++        assert!(hint.is_complete());
++        assert!(!cache.needs_recovery_when_buffering());
++    }
++
++    #[tokio::test]
++    async fn health_sampling_does_not_extend_final_round_idle_timeout() {
++        let payload = vec![32; BLOCK * 4];
++        let origin = origin(&payload, Some(payload.len()), 200).await;
++        let hint = MediaCacheHint::default();
++        let refresh = Arc::new(MissingRefresh {
++            calls: AtomicUsize::new(0),
++        });
++        hint.set_refresh(refresh.clone());
++        hint.set_recovery_attempts(2);
++        let mut cache = AudioCache::new(reqwest::Client::new(), origin.url.clone(), hint)
++            .with_expected_duration(Some(1.0));
++        cache.slow_source_window = Duration::from_millis(20);
++        cache.idle_timeout = Duration::from_millis(100);
++        let _response = open(&cache, None, Method::GET).await;
++        tokio::time::timeout(Duration::from_secs(1), async {
++            while !cache.has_failed() {
++                tokio::task::yield_now().await;
++            }
++        })
++        .await
++        .unwrap();
++        assert_eq!(refresh.calls.load(Ordering::SeqCst), 0);
++        assert!(!cache.needs_recovery_when_buffering());
++    }
++
++    #[test]
++    fn healthy_window_clears_slow_health_and_refresh_suppresses_escalation() {
++        let hint = MediaCacheHint::default();
++        hint.set_recovery_attempts(1);
++        let cache = AudioCache::new(
++            reqwest::Client::new(),
++            "http://invalid.invalid".into(),
++            hint,
++        );
++        cache.shared.data.lock().unwrap().phase = Phase::Streaming;
++        assert!(!record_source_rate(
++            &cache.shared,
++            1,
++            Duration::from_secs(1),
++            10.0,
++            100,
++            Duration::from_secs(10),
++            0
++        ));
++        assert!(cache.needs_recovery_when_buffering());
++        cache.shared.data.lock().unwrap().refreshing = true;
++        assert!(!cache.needs_recovery_when_buffering());
++        cache.shared.data.lock().unwrap().refreshing = false;
++        assert!(!record_source_rate(
++            &cache.shared,
++            20,
++            Duration::from_secs(1),
++            10.0,
++            100,
++            Duration::from_secs(10),
++            0
++        ));
++        assert!(!cache.needs_recovery_when_buffering());
++    }
++
++    #[tokio::test]
++    async fn fast_source_does_not_spend_recovery_budget() {
++        let payload = vec![7; BLOCK * 4];
++        let origin = origin(&payload, Some(payload.len()), 200).await;
++        origin.release.send(true).unwrap();
++        let hint = MediaCacheHint::default();
++        let (_ready_tx, ready) = watch::channel(true);
++        let refresh = Arc::new(Refresh {
++            url: origin.url.clone(),
++            calls: AtomicUsize::new(0),
++            ready,
++        });
++        hint.set_refresh(refresh.clone());
++        let mut cache = AudioCache::new(reqwest::Client::new(), origin.url.clone(), hint.clone())
++            .with_expected_duration(Some(1.0));
++        cache.slow_source_window = Duration::from_millis(100);
++
++        assert_eq!(
++            read_all(open(&cache, None, Method::GET).await).await,
++            payload
++        );
++        assert_eq!(refresh.calls.load(Ordering::SeqCst), 0);
++        assert_eq!(hint.recovery_attempts(), 0);
++        assert!(hint.is_complete());
++    }
++
++    #[test]
++    fn invalid_or_missing_duration_disables_rate_recovery() {
++        for duration in [
++            None,
++            Some(0.0),
++            Some(-1.0),
++            Some(f64::NAN),
++            Some(f64::INFINITY),
++            Some(f64::MAX),
++        ] {
++            let cache = AudioCache::new(
++                reqwest::Client::new(),
++                "http://invalid.invalid".into(),
++                MediaCacheHint::default(),
++            )
++            .with_expected_duration(duration);
++            assert!(cache.expected_duration.is_none());
++        }
++        assert_eq!(minimum_realtime_rate(100, None), None);
++        assert_eq!(minimum_realtime_rate(100, Some(Duration::ZERO)), None);
++    }
++
+     #[derive(Debug)]
+     struct ContextRefresh {
+         url: String,
+@@ -1822,9 +2393,22 @@ mod tests {
+             .all(|request| request.contains("cookie: session=memory-only")));
+     }
+ 
++    #[cfg(unix)]
+     #[tokio::test]
+     #[ignore = "requires installed mpv; silent real-decoder buffering check"]
+     async fn real_mpv_pause_does_not_leave_origin_response_open() {
++        real_mpv_cached_runway(false).await;
++    }
++
++    #[cfg(unix)]
++    #[tokio::test]
++    #[ignore = "requires installed mpv; silent real-decoder slow-source regression"]
++    async fn real_mpv_slow_tail_preserves_playable_cached_runway() {
++        real_mpv_cached_runway(true).await;
++    }
++
++    #[cfg(unix)]
++    async fn real_mpv_cached_runway(slow_tail: bool) {
+         let audio_size = 180_u32 * 8_000 * 2;
+         let mut wav = Vec::new();
+         wav.extend_from_slice(b"RIFF");
+@@ -1844,12 +2428,20 @@ mod tests {
+         wav.extend_from_slice(&audio_size.to_le_bytes());
+         wav.resize(44 + audio_size as usize, 0);
+         let origin = origin(&wav, Some(wav.len()), 200).await;
+-        origin.release.send(true).unwrap();
+-        let cache = Arc::new(AudioCache::new(
+-            reqwest::Client::new(),
+-            origin.url.clone(),
+-            MediaCacheHint::default(),
+-        ));
++        if !slow_tail {
++            origin.release.send(true).unwrap();
++        }
++        let hint = MediaCacheHint::default();
++        if slow_tail {
++            hint.set_refresh(Arc::new(MissingRefresh {
++                calls: AtomicUsize::new(0),
++            }));
++            hint.set_recovery_attempts(1);
++        }
++        let mut cache = AudioCache::new(reqwest::Client::new(), origin.url.clone(), hint)
++            .with_expected_duration(Some(180.0));
++        cache.slow_source_window = Duration::from_millis(200);
++        let cache = Arc::new(cache);
+         let socket = tokio::net::TcpSocket::new_v4().unwrap();
+         socket.set_send_buffer_size(64 * 1024).unwrap();
+         socket.bind("127.0.0.1:0".parse().unwrap()).unwrap();
+@@ -1886,17 +2478,24 @@ mod tests {
+                 }
+             }
+         });
++        let ipc_path =
++            std::env::temp_dir().join(format!("vibecast-mpv-{}.sock", uuid::Uuid::new_v4()));
+         let mut player = std::process::Command::new("mpv")
+             .args([
+                 "--no-config",
+                 "--ao=null",
+                 "--vo=null",
+-                "--pause",
+                 "--cache=yes",
+                 "--cache-secs=30",
+                 "--demuxer-max-bytes=512KiB",
+                 "--stream-buffer-size=64KiB",
+             ])
++            .arg(if slow_tail {
++                "--pause=no"
++            } else {
++                "--pause=yes"
++            })
++            .arg(format!("--input-ipc-server={}", ipc_path.display()))
+             .arg(format!("http://{address}/cache/audio.wav"))
+             .stdout(std::process::Stdio::null())
+             .stderr(std::process::Stdio::null())
+@@ -1912,16 +2511,56 @@ mod tests {
+             .iter()
+             .map(Vec::len)
+             .sum();
+-        eprintln!("paused real decoder retained {bytes}/{} bytes", wav.len());
+-        player.kill().unwrap();
++        // Query the real decoder before cleanup, but defer assertions until the
++        // child is reaped so a regression cannot leave a running mpv process.
++        let playback = if slow_tail {
++            use tokio::io::AsyncBufReadExt;
++            tokio::time::timeout(Duration::from_secs(2), async {
++                let mut ipc = tokio::net::UnixStream::connect(&ipc_path).await?;
++                ipc.write_all(b"{\"command\":[\"get_property\",\"time-pos\"],\"request_id\":1}\n{\"command\":[\"get_property\",\"paused-for-cache\"],\"request_id\":2}\n").await?;
++                let mut lines = tokio::io::BufReader::new(ipc).lines();
++                let mut position = None;
++                let mut buffering = None;
++                while let Some(line) = lines.next_line().await? {
++                    let value: serde_json::Value = serde_json::from_str(&line)?;
++                    match value["request_id"].as_u64() {
++                        Some(1) => position = value["data"].as_f64(),
++                        Some(2) => buffering = value["data"].as_bool(),
++                        _ => {}
++                    }
++                    if position.is_some() && buffering.is_some() { break; }
++                }
++                Ok::<_, Box<dyn std::error::Error>>((position, buffering))
++            }).await.ok().and_then(Result::ok)
++        } else {
++            None
++        };
++        let _ = player.kill();
+         player.wait().unwrap();
+         server.abort();
+-        assert_eq!(
+-            bytes,
+-            wav.len(),
+-            "finish the current native-sized response even while mpv is paused"
+-        );
+-        assert!(cache.hint.is_complete());
++        let _ = std::fs::remove_file(ipc_path);
++        if slow_tail {
++            assert!(cache.needs_recovery_when_buffering());
++            assert!(!cache.has_failed());
++            assert!(
++                bytes >= wav.len() / 2,
++                "preserve the initial ninety seconds of audio"
++            );
++            let (position, buffering) = playback.expect("mpv must answer playback queries");
++            assert!(
++                position.is_some_and(|position| position > 1.0),
++                "decoder must advance"
++            );
++            assert_eq!(buffering, Some(false), "cached runway must remain playable");
++            assert_eq!(cache.hint.recovery_attempts(), 1);
++        } else {
++            assert_eq!(
++                bytes,
++                wav.len(),
++                "finish the open response while mpv is paused"
++            );
++            assert!(cache.hint.is_complete());
++        }
+         assert_eq!(origin.count.load(Ordering::SeqCst), 1);
+     }
+ }
+diff --git a/crates/vibecast-core/src/hub.rs b/crates/vibecast-core/src/hub.rs
+index da4d375..02bef7a 100644
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -316,6 +316,7 @@ struct SenderFingerprint {
+ struct SenderConnectProfile {
+     has_sdk_metadata: bool,
+     known_observer: bool,
++    desktop_browser: bool,
+ }
+ 
+ impl SenderConnectProfile {
+@@ -324,6 +325,10 @@ impl SenderConnectProfile {
+         let user_agent = user_agent.to_ascii_lowercase();
+         Self {
+             has_sdk_metadata: request.sender_info.is_some(),
++            desktop_browser: user_agent.contains("chrome/")
++                && !user_agent.contains("android")
++                && !user_agent.contains("mobile")
++                && !user_agent.contains("crios"),
+             known_observer: user_agent.contains("pychromecast")
+                 || user_agent.contains("home-assistant")
+                 || user_agent.contains("home assistant"),
+@@ -333,6 +338,7 @@ impl SenderConnectProfile {
+     fn merge(&mut self, other: Self) {
+         self.has_sdk_metadata |= other.has_sdk_metadata;
+         self.known_observer |= other.known_observer;
++        self.desktop_browser |= other.desktop_browser;
+     }
+ }
+ 
+@@ -450,6 +456,7 @@ pub struct DeviceHub {
+     media_http: reqwest::Client,
+     data_dir: PathBuf,
+     volume: Volume,
++    volume_revision: u64,
+     user_agent: String,
+     cast_device_capabilities: String,
+     capabilities: PlayerCapabilities,
+@@ -500,6 +507,7 @@ impl DeviceHub {
+             media_http: config.media_http,
+             data_dir: config.data_dir,
+             volume,
++            volume_revision: 0,
+             user_agent: config.user_agent,
+             cast_device_capabilities: config.cast_device_capabilities,
+             capabilities: config.capabilities,
+@@ -743,7 +751,14 @@ impl DeviceHub {
+                     );
+                     return;
+                 }
+-                self.volume.apply_update(&r.volume);
++                let mut volume = r.volume.clone();
++                if let vibecast_messages::Patch::Set(level) = volume.level {
++                    volume.level = vibecast_messages::Patch::Set(
++                        self.decode_sender_volume(conn_id, source, level),
++                    );
++                }
++                self.volume.apply_update(&volume);
++                let volume_revision = self.next_volume_revision();
+                 for (id, session) in &mut self.sessions {
+                     session.coordinator.volume = self.volume.clone();
+                     self.player
+@@ -751,6 +766,7 @@ impl DeviceHub {
+                             session_id: id.clone(),
+                             level: self.volume.level,
+                             muted: self.volume.muted,
++                            volume_revision,
+                         })
+                         .await;
+                 }
+@@ -870,11 +886,13 @@ impl DeviceHub {
+ 
+         app.on_volume_update(&ctx, self.volume.level, self.volume.muted)
+             .await;
++        let volume_revision = self.next_volume_revision();
+         self.player
+             .send(PlayerCommand::Volume {
+                 session_id: session_id.clone(),
+                 level: self.volume.level,
+                 muted: self.volume.muted,
++                volume_revision,
+             })
+             .await;
+ 
+@@ -1292,9 +1310,15 @@ impl DeviceHub {
+                 self.request_stop(transport, r.request_id).await;
+             }
+             MediaRequest::SetVolume(r) => {
++                let mut volume = r.volume.clone();
++                if let vibecast_messages::Patch::Set(level) = volume.level {
++                    volume.level = vibecast_messages::Patch::Set(
++                        self.decode_sender_volume(conn_id, source, level),
++                    );
++                }
+                 let (level, muted) = match self.sessions.get_mut(transport) {
+                     Some(session) => {
+-                        session.coordinator.volume.apply_update(&r.volume);
++                        session.coordinator.volume.apply_update(&volume);
+                         (
+                             session.coordinator.volume.level,
+                             session.coordinator.volume.muted,
+@@ -1307,11 +1331,13 @@ impl DeviceHub {
+                     None => return,
+                 };
+                 self.broadcast(transport, ns::MEDIA, &response).await;
++                let volume_revision = self.next_volume_revision();
+                 self.player
+                     .send(PlayerCommand::Volume {
+                         session_id: transport.to_string(),
+                         level,
+                         muted,
++                        volume_revision,
+                     })
+                     .await;
+                 self.notify_app(transport).await;
+@@ -1808,6 +1834,7 @@ impl DeviceHub {
+     ) -> PlaybackMedia {
+         // Exactly one current progressive object per output; speculative queue
+         // resolution never reaches this point. A repeat carries the same hint.
++        let expected_duration = media.duration;
+         let requested = media
+             .streams
+             .first()
+@@ -1829,11 +1856,10 @@ impl DeviceHub {
+                     old.cancel();
+                 }
+                 session.audio_cache = requested.map(|(url, hint)| {
+-                    Arc::new(crate::audio_cache::AudioCache::new(
+-                        self.media_http.clone(),
+-                        url,
+-                        hint,
+-                    ))
++                    Arc::new(
++                        crate::audio_cache::AudioCache::new(self.media_http.clone(), url, hint)
++                            .with_expected_duration(expected_duration),
++                    )
+                 });
+             }
+         }
+@@ -1932,6 +1958,14 @@ impl DeviceHub {
+ 
+     // -- player reports ---------------------------------------------------
+ 
++    fn next_volume_revision(&mut self) -> Option<u64> {
++        if !self.capabilities.volume_revisions {
++            return None;
++        }
++        self.volume_revision += 1;
++        Some(self.volume_revision)
++    }
++
+     async fn publish_volume(&mut self) {
+         let path = volume_path(&self.data_dir, &self.identity.device_id);
+         let tmp = path.with_extension("tmp");
+@@ -2009,14 +2043,20 @@ impl DeviceHub {
+                 duration,
+                 idle_reason,
+                 volume,
++                volume_revision,
+                 muted,
+                 ..
+             } => {
+                 let before = self.volume.clone();
+-                if let Some(level) = volume.filter(|v| v.is_finite()) {
++                // Playback reports remain useful while a newer volume command
++                // is pending. Only its volume/mute fields are stale. Hardware
++                // changes after the latest applied command retain its revision.
++                let current_volume = !self.capabilities.volume_revisions
++                    || volume_revision == Some(self.volume_revision);
++                if let Some(level) = volume.filter(|v| current_volume && v.is_finite()) {
+                     self.volume.level = level.clamp(0.0, 1.0);
+                 }
+-                if let Some(muted) = muted {
++                if let Some(muted) = muted.filter(|_| current_volume) {
+                     self.volume.muted = muted;
+                 }
+                 if self.volume != before {
+@@ -2118,6 +2158,37 @@ impl DeviceHub {
+             // duplicate CANCELLED into another app-level resolver retry.
+             return;
+         }
++        // A low-rate background fetch is harmless while the decoder has audio.
++        // Only its actual cache-starvation report turns sustained source trouble
++        // into a playback failure. Do not wait for an EOF that a dripping HTTP
++        // response may never produce, including on the final recovery attempt.
++        let cache_starved = player_state == PlayerState::Buffering
++            && self.sessions.get(session_id).is_some_and(|session| {
++                session.audio_cache.as_ref().is_some_and(|cache| {
++                    cache.has_failed() || cache.needs_recovery_when_buffering()
++                })
++            });
++        let (player_state, idle_reason) = if cache_starved {
++            tracing::warn!(
++                session_id,
++                current_time,
++                "decoder buffer exhausted while audio source remains unhealthy"
++            );
++            self.player
++                .send(PlayerCommand::Stop {
++                    session_id: session_id.to_owned(),
++                })
++                .await;
++            // Keep title/position for the app's bounded recovery, but reject
++            // queued reports (including the Stop acknowledgement) from this
++            // decoder load. A new committed load restores playback_media.
++            if let Some(session) = self.sessions.get_mut(session_id) {
++                session.coordinator.playback_media = None;
++            }
++            (PlayerState::Idle, Some(IdleReason::Error))
++        } else {
++            (player_state, idle_reason)
++        };
+         // mpv may call a truncated HTTP stream EOF after draining its buffer.
+         // An authoritative cache failure must reach both Cast and the app as
+         // ERROR, before either can advance the playlist on a false FINISHED.
+@@ -2190,7 +2261,14 @@ impl DeviceHub {
+         else {
+             return false;
+         };
+-        if profile.known_observer {
++        // Play services also opens SDK-labelled channels for background media
++        // discovery (including Assistant activation). Its queue read is not a
++        // casting decision. Keep this exclusion local to weak joins: LAUNCH,
++        // app handshakes and companion/reconnect attachment remain valid.
++        if profile.known_observer
++            || source == "com.google.android.gms"
++            || source.starts_with("com.google.android.gms-")
++        {
+             return false;
+         }
+         profile.has_sdk_metadata
+@@ -2355,6 +2433,7 @@ impl DeviceHub {
+                 session_id = transport,
+                 conn_id,
+                 peer_host = %fingerprint.peer_host,
++                source_id = source,
+                 "guarded sender join rejected"
+             );
+         }
+@@ -2641,6 +2720,62 @@ impl DeviceHub {
+         self.proxy.unregister_license(session_id);
+     }
+ 
++    fn browser_volume_sender(&self, conn_id: u64, source: Option<&str>) -> bool {
++        self.sender_connect_profiles
++            .iter()
++            .any(|((conn, sender), profile)| {
++                *conn == conn_id
++                    && source.is_none_or(|source| sender == source)
++                    && profile.desktop_browser
++                    && !profile.known_observer
++            })
++    }
++
++    fn decode_sender_volume(&self, conn_id: u64, source: &str, level: f64) -> f64 {
++        let browser = self.browser_volume_sender(conn_id, Some(source));
++        self.sessions
++            .values()
++            .find(|session| session.owner_connections.contains(&conn_id))
++            .map_or(level, |session| {
++                session.app.volume_from_sender(level, browser)
++            })
++    }
++
++    /// Project only standardized volume fields, separately for each recipient.
++    /// Internally, output state and player commands always retain normal volume.
++    fn project_sender_volume(&self, conn_id: u64, source: Option<&str>, value: &mut Value) {
++        let browser = self.browser_volume_sender(conn_id, source);
++        let Some(session) = self
++            .sessions
++            .values()
++            .find(|session| session.owner_connections.contains(&conn_id))
++        else {
++            return;
++        };
++        match value.get("type").and_then(Value::as_str) {
++            Some("RECEIVER_STATUS") => {
++                if let Some(level) = value.pointer_mut("/status/volume/level") {
++                    if let Some(raw) = level.as_f64() {
++                        *level = serde_json::json!(session.app.volume_to_sender(raw, browser));
++                    }
++                }
++            }
++            Some("MEDIA_STATUS") => {
++                if let Some(statuses) = value.get_mut("status").and_then(Value::as_array_mut) {
++                    for status in statuses {
++                        if let Some(level) = status.pointer_mut("/volume/level") {
++                            if let Some(raw) = level.as_f64() {
++                                *level =
++                                    serde_json::json!(session.app.volume_to_sender(raw, browser));
++                            }
++                        }
++                    }
++                }
++            }
++            _ => {}
++        }
++    }
++
+     async fn send_to<T: Serialize>(
+         &self,
+         conn_id: u64,
+@@ -2652,9 +2787,12 @@ impl DeviceHub {
+         let Some(handle) = self.connections.get(&conn_id) else {
+             return;
+         };
+-        let Ok(value) = serde_json::to_value(message) else {
++        let Ok(mut value) = serde_json::to_value(message) else {
+             return;
+         };
++        if namespace == ns::RECEIVER || namespace == ns::MEDIA {
++            self.project_sender_volume(conn_id, Some(dest), &mut value);
++        }
+         let _ = handle.send_json(source, dest, namespace, &value).await;
+     }
+ 
+@@ -2690,7 +2828,13 @@ impl DeviceHub {
+                 continue;
+             }
+             if let Some(handle) = self.connections.get(&conn_id) {
+-                let _ = handle.send_json(transport, "*", namespace, &value).await;
++                let mut projected = value.clone();
++                if namespace == ns::RECEIVER || namespace == ns::MEDIA {
++                    self.project_sender_volume(conn_id, None, &mut projected);
++                }
++                let _ = handle
++                    .send_json(transport, "*", namespace, &projected)
++                    .await;
+             }
+         }
+     }
+diff --git a/crates/vibecast-core/src/tests.rs b/crates/vibecast-core/src/tests.rs
+index 31d8a9f..98de89c 100644
+--- a/crates/vibecast-core/src/tests.rs
++++ b/crates/vibecast-core/src/tests.rs
+@@ -156,6 +156,22 @@ struct FakeSession(
+ 
+ #[async_trait]
+ impl AppSession for FakeSession {
++    fn volume_from_sender(&self, level: f64, browser: bool) -> f64 {
++        if browser {
++            level / 2.0
++        } else {
++            level
++        }
++    }
++
++    fn volume_to_sender(&self, level: f64, browser: bool) -> f64 {
++        if browser {
++            level * 2.0
++        } else {
++            level
++        }
++    }
++
+     async fn on_sender_connected(
+         &self,
+         _ctx: &AppContext,
+@@ -411,6 +427,19 @@ async fn setup_exclusive() -> Harness {
+ async fn setup_with_options(
+     player_settings: PlayerSettings,
+     exclusive_sender_takeover: bool,
++) -> Harness {
++    setup_with_capabilities(
++        player_settings,
++        exclusive_sender_takeover,
++        PlayerCapabilities::default(),
++    )
++    .await
++}
++
++async fn setup_with_capabilities(
++    player_settings: PlayerSettings,
++    exclusive_sender_takeover: bool,
++    capabilities: PlayerCapabilities,
+ ) -> Harness {
+     let (server_end, client_end) = tokio::io::duplex(64 * 1024);
+     let (events_tx, mut events_rx) = mpsc::channel::<ServerEvent>(32);
+@@ -445,7 +474,7 @@ async fn setup_with_options(
+         volume: attenuation_volume(),
+         user_agent: String::new(),
+         cast_device_capabilities: String::new(),
+-        capabilities: PlayerCapabilities::default(),
++        capabilities,
+         player_settings,
+     });
+     let hub_handle = hub.handle();
+@@ -728,6 +757,7 @@ async fn failed_cache_eof_is_error_before_cast_broadcast_and_stays_error() {
+                 current_time: 55.2,
+                 duration: Some(230.0),
+                 idle_reason: Some(vibecast_messages::IdleReason::Finished),
++                volume_revision: None,
+                 volume: None,
+                 muted: None,
+             })
+@@ -748,6 +778,134 @@ async fn failed_cache_eof_is_error_before_cast_broadcast_and_stays_error() {
+     h.hub.shutdown().await;
+ }
+ 
++#[tokio::test]
++async fn cache_failure_recovers_on_buffering_without_eof_and_rejects_old_reports() {
++    for attempts in [1, 2] {
++        let mut h = setup().await;
++        let session = launch(&mut h.client).await;
++        send(
++            &mut h.client,
++            ns::CONNECTION,
++            &session,
++            r#"{"type":"CONNECT"}"#,
++        )
++        .await;
++        next_json(&mut h.client).await;
++        send(
++            &mut h.client,
++            FAKE_NS,
++            &session,
++            &serde_json::json!({"type":"PUSH_CACHE","recoveryAttempts":attempts}).to_string(),
++        )
++        .await;
++        next_json(&mut h.client).await;
++        next_json(&mut h.client).await;
++        next_json(&mut h.client).await;
++        let report = |player_state, idle_reason| PlayerReport::State {
++            media_session_id: None,
++            session_id: session.clone(),
++            player_state,
++            current_time: 55.2,
++            duration: Some(230.0),
++            idle_reason,
++            volume_revision: None,
++            volume: None,
++            muted: None,
++        };
++        // Ordinary startup buffering is not itself an error.
++        h.hub
++            .send_player_report(report(PlayerState::Buffering, None))
++            .await
++            .unwrap();
++        assert_eq!(
++            next_json(&mut h.client).await["status"][0]["playerState"],
++            "BUFFERING"
++        );
++        next_json(&mut h.client).await;
++        let proxy = h.proxy.manifests.lock().unwrap()[&session].clone();
++        let token = h
++            .player
++            .commands()
++            .into_iter()
++            .find_map(|command| match command {
++                PlayerCommand::Load { media, .. } => {
++                    Some(media.streams[0].url.rsplit('/').next().unwrap().to_owned())
++                }
++                _ => None,
++            })
++            .unwrap();
++        assert_eq!(
++            proxy
++                .handle_cached_media(&token, http::Method::GET, http::HeaderMap::new())
++                .await
++                .unwrap()
++                .status,
++            502
++        );
++        // A failed background fetch must not force a paused or still-playing
++        // decoder to stop. Actual starvation is the recovery boundary.
++        for state in [PlayerState::Playing, PlayerState::Paused] {
++            h.hub.send_player_report(report(state, None)).await.unwrap();
++            next_json(&mut h.client).await;
++            next_json(&mut h.client).await;
++        }
++        assert!(!h
++            .player
++            .commands()
++            .iter()
++            .any(|c| matches!(c, PlayerCommand::Stop { .. })));
++        h.hub
++            .send_player_report(report(PlayerState::Buffering, None))
++            .await
++            .unwrap();
++        let status = next_json(&mut h.client).await;
++        assert_eq!(status["status"][0]["idleReason"], "ERROR");
++        assert_eq!(status["status"][0]["currentTime"], 55.2);
++        let recovery = next_json(&mut h.client).await;
++        assert_eq!(recovery["attempts"], attempts);
++        assert_eq!(recovery["error"], true);
++        assert_eq!(
++            h.player
++                .commands()
++                .iter()
++                .filter(|c| matches!(c, PlayerCommand::Stop { .. }))
++                .count(),
++            1
++        );
++        for (state, reason) in [
++            (PlayerState::Buffering, None),
++            (PlayerState::Playing, None),
++            (
++                PlayerState::Idle,
++                Some(vibecast_messages::IdleReason::Cancelled),
++            ),
++        ] {
++            h.hub
++                .send_player_report(report(state, reason))
++                .await
++                .unwrap();
++        }
++        assert!(
++            tokio::time::timeout(std::time::Duration::from_millis(50), h.client.next())
++                .await
++                .is_err()
++        );
++        // A fresh selection installs a new media load and accepts its feedback.
++        send(&mut h.client, FAKE_NS, &session, r#"{"type":"PUSH_MEDIA"}"#).await;
++        next_json(&mut h.client).await;
++        next_json(&mut h.client).await;
++        h.hub
++            .send_player_report(report(PlayerState::Playing, None))
++            .await
++            .unwrap();
++        assert_eq!(
++            next_json(&mut h.client).await["status"][0]["playerState"],
++            "PLAYING"
++        );
++        h.hub.shutdown().await;
++    }
++}
++
+ #[tokio::test]
+ async fn current_cache_survives_eof_repeat_but_not_title_change_or_stop() {
+     async fn push(h: &mut Harness, session: &str, kind: &str, loads: usize) -> String {
+@@ -801,6 +959,7 @@ async fn current_cache_survives_eof_repeat_but_not_title_change_or_stop() {
+             current_time: 100.0,
+             duration: Some(100.0),
+             idle_reason: Some(vibecast_messages::IdleReason::Finished),
++            volume_revision: None,
+             volume: None,
+             muted: None,
+         })
+@@ -1149,6 +1308,7 @@ async fn old_decoder_report_cannot_finish_a_pending_load() {
+             current_time: 111.0,
+             duration: Some(111.0),
+             idle_reason: Some(vibecast_messages::IdleReason::Finished),
++            volume_revision: None,
+             volume: None,
+             muted: None,
+         })
+@@ -1226,6 +1386,7 @@ async fn late_decoder_reports_after_stop_cannot_republish_or_overwrite_terminal_
+                 current_time: 42.0,
+                 duration: Some(99.0),
+                 idle_reason: reason,
++                volume_revision: None,
+                 volume: None,
+                 muted: None,
+             })
+@@ -1265,6 +1426,7 @@ async fn late_decoder_reports_after_stop_cannot_republish_or_overwrite_terminal_
+             current_time: 7.0,
+             duration: Some(90.0),
+             idle_reason: None,
++            volume_revision: None,
+             volume: None,
+             muted: None,
+         })
+@@ -1605,6 +1767,7 @@ async fn failed_replacement_load_stops_the_previous_decoder() {
+             current_time: 0.0,
+             duration: None,
+             idle_reason: Some(vibecast_messages::IdleReason::Cancelled),
++            volume_revision: None,
+             volume: None,
+             muted: None,
+         })
+@@ -1656,6 +1819,7 @@ async fn primary_player_report_broadcasts_status() {
+             current_time: 33.5,
+             duration: Some(120.0),
+             idle_reason: None,
++            volume_revision: None,
+             volume: None,
+             muted: None,
+         })
+@@ -1720,6 +1884,7 @@ async fn correlated_old_reports_and_controls_cannot_finish_or_stop_a_replacement
+             current_time: 99.0,
+             duration: Some(99.0),
+             idle_reason: Some(vibecast_messages::IdleReason::Finished),
++            volume_revision: None,
+             volume: None,
+             muted: None,
+         })
+@@ -1771,6 +1936,7 @@ async fn correlated_old_reports_and_controls_cannot_finish_or_stop_a_replacement
+                 current_time: position,
+                 duration: Some(90.0),
+                 idle_reason: None,
++                volume_revision: None,
+                 volume: None,
+                 muted: None,
+             })
+@@ -1805,6 +1971,7 @@ async fn correlated_old_reports_and_controls_cannot_finish_or_stop_a_replacement
+             current_time: 99.0,
+             duration: None,
+             idle_reason: Some(vibecast_messages::IdleReason::Finished),
++            volume_revision: None,
+             volume: Some(0.25),
+             muted: None,
+         })
+@@ -2484,6 +2651,7 @@ async fn stalled_observer_does_not_block_active_owner_or_player_reports() {
+                     current_time: n as f64,
+                     duration: Some(600.0),
+                     idle_reason: None,
++                    volume_revision: None,
+                     volume: None,
+                     muted: None,
+                 })
+@@ -3268,7 +3436,9 @@ async fn takeover_closes_every_socket_of_the_previous_owner_device() {
+     .await;
+     assert_eq!(next_json(&mut harness.client).await["type"], "MEDIA_STATUS");
+ 
+-    let service_source = "cbe183d7-0c46-48b8-830a-6ea872003b1b";
++    // A Play-services socket on the already owning phone is still a companion,
++    // despite being ineligible to take over another device via a queue read.
++    let service_source = "com.google.android.gms-7";
+     let sdk_connect = r#"{"type":"CONNECT","senderInfo":{"sdkType":2,"platform":1}}"#;
+     let mut service_socket = connect_peer(&harness.hub, 2, "peer").await;
+     send_as(
+@@ -3344,6 +3514,113 @@ async fn takeover_closes_every_socket_of_the_previous_owner_device() {
+     .await;
+ }
+ 
++#[tokio::test]
++async fn android_system_queue_probes_do_not_displace_owner_but_explicit_claim_does() {
++    let mut h = setup_exclusive().await;
++    let transport = launch(&mut h.client).await;
++    send(
++        &mut h.client,
++        ns::CONNECTION,
++        &transport,
++        r#"{"type":"CONNECT"}"#,
++    )
++    .await;
++    next_json(&mut h.client).await;
++    send(
++        &mut h.client,
++        FAKE_NS,
++        &transport,
++        r#"{"type":"PUSH_MEDIA"}"#,
++    )
++    .await;
++    next_json(&mut h.client).await;
++    next_json(&mut h.client).await;
++    let commands = h.player.commands().len();
++    let sdk = r#"{"type":"CONNECT","userAgent":"Android CastSDK,264330035,24069PC21G,peridot_eea,15","senderInfo":{"sdkType":1,"platform":1}}"#;
++    // Play services creates fresh sockets/source suffixes for background media
++    // discovery, including Assistant activation. None is explicit casting.
++    // Keep platform sockets alive to avoid unrelated disconnect-status broadcasts.
++    let mut service_sockets = Vec::new();
++    for (index, source) in [
++        "com.google.android.gms",
++        "com.google.android.gms-8",
++        "com.google.android.gms-9",
++    ]
++    .into_iter()
++    .enumerate()
++    {
++        let mut system = connect_peer(&h.hub, 10 + index as u64, "android-phone").await;
++        send_as(&mut system, source, ns::CONNECTION, "receiver-0", sdk).await;
++        send_as(&mut system, source, ns::CONNECTION, &transport, sdk).await;
++        assert_eq!(next_json(&mut system).await["type"], "MEDIA_STATUS");
++        send_as(
++            &mut system,
++            source,
++            ns::MEDIA,
++            &transport,
++            r#"{"type":"QUEUE_GET_ITEM_IDS","requestId":90}"#,
++        )
++        .await;
++        send_as(
++            &mut system,
++            source,
++            ns::MEDIA,
++            &transport,
++            r#"{"type":"GET_STATUS","requestId":91}"#,
++        )
++        .await;
++        assert_eq!(
++            next_json(&mut system).await["requestId"],
++            91,
++            "a background queue probe must not acquire ownership"
++        );
++        send(&mut h.client, FAKE_NS, &transport, r#"{"type":"PING"}"#).await;
++        assert_eq!(
++            next_json(&mut h.client).await["type"],
++            "PONG",
++            "the desktop must not receive session-ended or CLOSE"
++        );
++        assert_eq!(h.player.commands().len(), commands);
++        assert_eq!(
++            h.sender_attachments.lock().unwrap().as_slice(),
++            &[SenderAttachment::Initial]
++        );
++        if index < 2 {
++            send_as(
++                &mut system,
++                source,
++                ns::CONNECTION,
++                &transport,
++                r#"{"type":"CLOSE"}"#,
++            )
++            .await;
++            send(&mut h.client, FAKE_NS, &transport, r#"{"type":"PING"}"#).await;
++            assert_eq!(next_json(&mut h.client).await["type"], "PONG");
++        } else {
++            // A genuine app handshake on this same service socket is still
++            // a takeover: revoke desktop and notify the app to rotate Lounge.
++            send_as(
++                &mut system,
++                source,
++                FAKE_NS,
++                &transport,
++                r#"{"type":"CLAIM"}"#,
++            )
++            .await;
++            assert_eq!(next_json(&mut h.client).await["type"], "RECEIVER_STATUS");
++            assert_eq!(next_json(&mut h.client).await["type"], "CLOSE");
++            assert_eq!(next_json(&mut system).await["type"], "PONG");
++            wait_for_sender_attachments(
++                &h.sender_attachments,
++                &[SenderAttachment::Initial, SenderAttachment::Takeover],
++            )
++            .await;
++        }
++        service_sockets.push(system);
++    }
++    h.hub.shutdown().await;
++}
++
+ #[tokio::test]
+ async fn weak_queue_takeover_requires_evidence_of_an_active_cast_sender() {
+     let mut harness = setup_exclusive().await;
+@@ -4044,3 +4321,219 @@ async fn home_assistant_observer_controls_transport_and_real_app_queue_without_t
+         .iter()
+         .any(|command| matches!(command, PlayerCommand::Stop { .. })));
+ }
++
++#[tokio::test]
++async fn volume_revisions_reject_delayed_echoes_without_discarding_playback_or_hardware_changes() {
++    for opted_in in [true, false] {
++        let catalog = SettingsCatalog::new(vec![fake_manifest().settings]).unwrap();
++        let service = SettingsService::new(catalog, Arc::new(MemorySettingsPersistence::default()))
++            .await
++            .unwrap();
++        let capabilities = PlayerCapabilities {
++            volume_revisions: opted_in,
++            ..Default::default()
++        };
++        let mut h =
++            setup_with_capabilities(service.player("volume-test").unwrap(), false, capabilities)
++                .await;
++        let transport = launch(&mut h.client).await;
++        send(
++            &mut h.client,
++            ns::CONNECTION,
++            &transport,
++            r#"{"type":"CONNECT"}"#,
++        )
++        .await;
++        next_json_of_type(&mut h.client, "MEDIA_STATUS").await;
++        send(
++            &mut h.client,
++            FAKE_NS,
++            &transport,
++            r#"{"type":"PUSH_MEDIA"}"#,
++        )
++        .await;
++        next_json_of_type(&mut h.client, "MEDIA_STATUS").await;
++        next_json_of_type(&mut h.client, "MEDIA_STATUS").await;
++        for (request, level) in [(81, 0.4), (82, 0.6)] {
++            send(
++                &mut h.client,
++                ns::RECEIVER,
++                "receiver-0",
++                &serde_json::json!({
++                    "type":"SET_VOLUME", "requestId":request, "volume":{"level":level,"muted":true}
++                })
++                .to_string(),
++            )
++            .await;
++            next_json_for_request(&mut h.client, request).await;
++        }
++        let revision = h
++            .player
++            .commands()
++            .iter()
++            .rev()
++            .find_map(|command| match command {
++                PlayerCommand::Volume {
++                    volume_revision, ..
++                } => Some(*volume_revision),
++                _ => None,
++            })
++            .unwrap();
++        assert_eq!(revision.is_some(), opted_in);
++        for (index, reported_revision) in [revision.map(|v| v - 1), None, revision.map(|v| v + 1)]
++            .into_iter()
++            .enumerate()
++        {
++            h.hub
++                .send_player_report(PlayerReport::State {
++                    session_id: transport.clone(),
++                    media_session_id: None,
++                    player_state: PlayerState::Playing,
++                    current_time: 12.0 + index as f64,
++                    duration: None,
++                    idle_reason: None,
++                    volume: Some(0.4),
++                    muted: Some(false),
++                    volume_revision: reported_revision,
++                })
++                .await
++                .unwrap();
++            let status = next_json_of_type(&mut h.client, "MEDIA_STATUS").await;
++            assert_eq!(status["status"][0]["currentTime"], 12.0 + index as f64);
++            assert_eq!(
++                status["status"][0]["volume"]["level"],
++                if opted_in { 0.6 } else { 0.4 }
++            );
++            assert_eq!(status["status"][0]["volume"]["muted"], opted_in);
++        }
++        // This can be a real physical control after the latest command, not
++        // necessarily its requested value. Its matching revision is accepted.
++        h.hub
++            .send_player_report(PlayerReport::State {
++                session_id: transport.clone(),
++                media_session_id: None,
++                player_state: PlayerState::Playing,
++                current_time: 20.0,
++                duration: None,
++                idle_reason: None,
++                volume: Some(0.25),
++                muted: Some(false),
++                volume_revision: revision,
++            })
++            .await
++            .unwrap();
++        let status = next_json_of_type(&mut h.client, "MEDIA_STATUS").await;
++        assert_eq!(status["status"][0]["volume"]["level"], 0.25);
++        assert_eq!(status["status"][0]["volume"]["muted"], false);
++        h.hub.shutdown().await;
++    }
++}
++
++#[tokio::test]
++async fn volume_mapping_is_sender_specific_on_ingress_and_status_feedback() {
++    for (user_agent, browser) in [
++        ("Mozilla/5.0 (X11; Linux x86_64) Chrome/130.0.0.0", true),
++        (
++            "Mozilla/5.0 (Linux; Android 15) Chrome/130.0.0.0 Mobile",
++            false,
++        ),
++        ("PyChromecast Chrome/130.0.0.0", false),
++    ] {
++        let mut h = setup().await;
++        let transport = launch(&mut h.client).await;
++        send(
++            &mut h.client,
++            ns::CONNECTION,
++            &transport,
++            &serde_json::json!({"type":"CONNECT","userAgent":user_agent}).to_string(),
++        )
++        .await;
++        next_json_of_type(&mut h.client, "MEDIA_STATUS").await;
++        send(
++            &mut h.client,
++            FAKE_NS,
++            &transport,
++            r#"{"type":"PUSH_MEDIA"}"#,
++        )
++        .await;
++        next_json_of_type(&mut h.client, "MEDIA_STATUS").await;
++        next_json_of_type(&mut h.client, "MEDIA_STATUS").await;
++        let media_id = h
++            .player
++            .commands()
++            .iter()
++            .rev()
++            .find_map(|command| match command {
++                PlayerCommand::Load { media, .. } => media.media_session_id,
++                _ => None,
++            })
++            .unwrap();
++        let mut observer = connect_peer(&h.hub, 2, "home-assistant-peer").await;
++        send_as(
++            &mut observer,
++            "sender-0",
++            ns::CONNECTION,
++            "receiver-0",
++            r#"{"type":"CONNECT","userAgent":"PyChromecast"}"#,
++        )
++        .await;
++        send_as(
++            &mut observer,
++            "sender-0",
++            ns::CONNECTION,
++            &transport,
++            r#"{"type":"CONNECT","userAgent":"PyChromecast"}"#,
++        )
++        .await;
++        next_json_of_type(&mut observer, "MEDIA_STATUS").await;
++        for (request, namespace, destination) in [
++            (91, ns::RECEIVER, "receiver-0"),
++            (92, ns::MEDIA, transport.as_str()),
++        ] {
++            send(&mut h.client, namespace, destination, &serde_json::json!({
++                "type":"SET_VOLUME", "requestId":request, "mediaSessionId":media_id, "volume":{"level":0.8,"muted":true}
++            }).to_string()).await;
++            let response = next_json_for_request(&mut h.client, request).await;
++            let level = if namespace == ns::RECEIVER {
++                &response["status"]["volume"]["level"]
++            } else {
++                &response["status"][0]["volume"]["level"]
++            };
++            assert_eq!(*level, 0.8, "sender must receive its own wire scale");
++            let expected = if browser { 0.4 } else { 0.8 };
++            // GET_STATUS acts as a barrier after broadcasts to this observer.
++            send_as(
++                &mut observer,
++                "sender-0",
++                ns::RECEIVER,
++                "receiver-0",
++                &serde_json::json!({"type":"GET_STATUS","requestId":request+100}).to_string(),
++            )
++            .await;
++            let status = next_json_for_request(&mut observer, request + 100).await;
++            assert_eq!(status["status"]["volume"]["level"], expected);
++            assert_eq!(status["status"]["volume"]["muted"], true);
++            let command = h
++                .player
++                .commands()
++                .into_iter()
++                .rev()
++                .find(|command| matches!(command, PlayerCommand::Volume { .. }))
++                .unwrap();
++            assert!(
++                matches!(command, PlayerCommand::Volume { level, muted: true, .. } if level == expected)
++            );
++            send_as(
++                &mut observer,
++                "sender-0",
++                ns::MEDIA,
++                &transport,
++                &serde_json::json!({"type":"GET_STATUS","requestId":request+200}).to_string(),
++            )
++            .await;
++            let media = next_json_for_request(&mut observer, request + 200).await;
++            assert_eq!(media["status"][0]["volume"]["level"], expected);
++        }
++        h.hub.shutdown().await;
++    }
++}
+diff --git a/crates/vibecast-platform/src/manager.rs b/crates/vibecast-platform/src/manager.rs
+index 56e5b18..e90d36c 100644
+--- a/crates/vibecast-platform/src/manager.rs
++++ b/crates/vibecast-platform/src/manager.rs
+@@ -321,6 +321,7 @@ fn player_capabilities(payload: PlayerCapabilitiesPayload) -> PlayerCapabilities
+     let default = PlayerCapabilities::default();
+     PlayerCapabilities {
+         local_audio_cache: payload.local_audio_cache,
++        volume_revisions: payload.volume_revisions,
+         platform: payload.platform.map_or(default.platform, parse_platform),
+         drm: payload
+             .drm
+diff --git a/crates/vibecast-player-api/src/protocol.rs b/crates/vibecast-player-api/src/protocol.rs
+index fef281a..1117012 100644
+--- a/crates/vibecast-player-api/src/protocol.rs
++++ b/crates/vibecast-player-api/src/protocol.rs
+@@ -161,6 +161,9 @@ pub enum PlayerCommand {
+     },
+     /// Update player volume.
+     Volume {
++        /// Output-wide command ordering, present for opted-in players.
++        #[serde(default, skip_serializing_if = "Option::is_none")]
++        volume_revision: Option<u64>,
+         /// Owning session id.
+         session_id: String,
+         /// Level in `[0.0, 1.0]`.
+@@ -226,6 +229,9 @@ pub enum PlayerReport {
+         idle_reason: Option<IdleReason>,
+         #[serde(default)]
+         volume: Option<f64>,
++        /// Last completely applied output-wide volume command.
++        #[serde(default, skip_serializing_if = "Option::is_none")]
++        volume_revision: Option<u64>,
+         #[serde(default)]
+         muted: Option<bool>,
+     },
+@@ -303,6 +309,7 @@ pub struct PlayerRegistration {
+ #[serde(rename_all = "camelCase", default)]
+ pub struct PlayerCapabilitiesPayload {
+     pub local_audio_cache: bool,
++    pub volume_revisions: bool,
+     pub platform: Option<String>,
+     pub drm: Vec<DrmCapabilityPayload>,
+     pub video_codecs: Vec<String>,
+@@ -396,6 +403,8 @@ pub enum ClientMessage {
+         #[serde(default)]
+         volume: Option<f64>,
+         #[serde(default)]
++        volume_revision: Option<u64>,
++        #[serde(default)]
+         muted: Option<bool>,
+     },
+     #[serde(rename = "error")]
+@@ -444,6 +453,7 @@ impl ClientMessage {
+                 duration,
+                 idle_reason,
+                 volume,
++                volume_revision,
+                 muted,
+             } => Some(PlayerReport::State {
+                 session_id,
+@@ -453,6 +463,7 @@ impl ClientMessage {
+                 duration,
+                 idle_reason,
+                 volume,
++                volume_revision,
+                 muted,
+             }),
+             Self::Error {
+@@ -537,6 +548,39 @@ mod tests {
+     use super::*;
+     use serde_json::json;
+ 
++    #[test]
++    fn volume_revision_wire_fields_are_optional_and_preserved() {
++        let legacy: PlayerCapabilitiesPayload = serde_json::from_value(json!({})).unwrap();
++        assert!(!legacy.volume_revisions);
++        let capable: PlayerCapabilitiesPayload =
++            serde_json::from_value(json!({"volumeRevisions":true})).unwrap();
++        assert!(capable.volume_revisions);
++        for revision in [None, Some(7)] {
++            let command = PlayerCommand::Volume {
++                session_id: "s1".into(),
++                level: 0.6,
++                muted: true,
++                volume_revision: revision,
++            };
++            let wire = serde_json::to_value(command).unwrap();
++            assert_eq!(
++                wire.get("volumeRevision").and_then(|v| v.as_u64()),
++                revision
++            );
++            let mut report = json!({"type":"state","sessionId":"s1","playerState":"PLAYING","volume":0.6,"muted":true});
++            if let Some(revision) = revision {
++                report["volumeRevision"] = json!(revision);
++            }
++            let message: ClientMessage = serde_json::from_value(report).unwrap();
++            match message.into_report().unwrap() {
++                PlayerReport::State {
++                    volume_revision, ..
++                } => assert_eq!(volume_revision, revision),
++                _ => panic!("expected state"),
++            }
++        }
++    }
++
+     #[test]
+     fn media_generation_reports_preserve_ids_and_accept_legacy_messages() {
+         fn id(report: PlayerReport) -> Option<i64> {
+diff --git a/crates/vibecast-sdk/src/capabilities.rs b/crates/vibecast-sdk/src/capabilities.rs
+index 218335b..251dd89 100644
+--- a/crates/vibecast-sdk/src/capabilities.rs
++++ b/crates/vibecast-sdk/src/capabilities.rs
+@@ -112,6 +112,8 @@ impl Resolution {
+ pub struct PlayerCapabilities {
+     /// Decoder can fetch the receiver's local current-title audio cache.
+     pub local_audio_cache: bool,
++    /// Player echoes the last applied output-wide volume command revision.
++    pub volume_revisions: bool,
+     /// The player's runtime platform.
+     pub platform: Platform,
+     /// DRM systems the player supports, with security levels.
+@@ -169,6 +171,7 @@ impl Default for PlayerCapabilities {
+         Self {
+             platform: Platform::Other("unknown".to_string()),
+             local_audio_cache: false,
++            volume_revisions: false,
+             drm: Vec::new(),
+             video_codecs: vec!["h264".to_string(), "hevc".to_string()],
+             audio_codecs: vec!["aac".to_string()],
+diff --git a/crates/vibecast-sdk/src/lib.rs b/crates/vibecast-sdk/src/lib.rs
+index 6c8bb7d..71b5255 100644
+--- a/crates/vibecast-sdk/src/lib.rs
++++ b/crates/vibecast-sdk/src/lib.rs
+@@ -297,6 +297,19 @@ pub trait AppSession: Send + Sync {
+     /// Output volume, including changes made directly at the player.
+     async fn on_volume_update(&self, _ctx: &AppContext, _level: f64, _muted: bool) {}
+ 
++    /// Convert sender wire volume into canonical output volume. Core supplies
++    /// browser eligibility for the owning physical sender connection; apps must
++    /// independently establish any more specific compatibility profile.
++    fn volume_from_sender(&self, level: f64, _browser: bool) -> f64 {
++        level
++    }
++
++    /// Project canonical volume into one sender's wire representation. Keep
++    /// stored/output volume canonical and apply this only at the sender boundary.
++    fn volume_to_sender(&self, level: f64, _browser: bool) -> f64 {
++        level
++    }
++
+     /// Whether sender/output Play must go through app-owned recovery instead of
+     /// directly unpausing the decoder. App-originated Play is never intercepted.
+     fn handles_play_requests(&self) -> bool {
+diff --git a/crates/vibecast-apps-youtube/src/volume.rs b/crates/vibecast-apps-youtube/src/volume.rs
+new file mode 100644
+index 0000000..a6bc593
+--- /dev/null
++++ b/crates/vibecast-apps-youtube/src/volume.rs
+@@ -0,0 +1,211 @@
++//! Optional inverse of YouTube Music Web's slider curve, not an output gain law.
++
++use std::sync::Mutex;
++
++use serde_json::Value;
++use vibecast_sdk::{AppSettingsReader, SettingKey};
++
++pub(crate) const WEB_VOLUME_COMPATIBILITY: SettingKey<bool> =
++    SettingKey::new("web_volume_compatibility");
++
++pub(crate) struct WebVolumeCompatibility {
++    settings: AppSettingsReader,
++    // A retired Lounge poll must not classify a replacement controller.
++    profile: Mutex<(u64, bool)>,
++}
++
++impl WebVolumeCompatibility {
++    pub(crate) fn new(settings: AppSettingsReader) -> Self {
++        Self {
++            settings,
++            profile: Mutex::new((0, false)),
++        }
++    }
++
++    pub(crate) fn reset(&self) {
++        let mut profile = self.profile.lock().unwrap();
++        *profile = (profile.0.wrapping_add(1), false);
++    }
++
++    pub(crate) fn epoch(&self) -> u64 {
++        self.profile.lock().unwrap().0
++    }
++
++    pub(crate) fn music_web_at_epoch(&self, epoch: u64) -> bool {
++        let profile = self.profile.lock().unwrap();
++        profile.0 == epoch && profile.1
++    }
++
++    pub(crate) fn observe(&self, epoch: u64, music_web: bool) -> bool {
++        let mut profile = self.profile.lock().unwrap();
++        if profile.0 != epoch || profile.1 == music_web {
++            return false;
++        }
++        profile.1 = music_web;
++        tracing::info!(
++            music_web_controller = music_web,
++            "YouTube web volume controller profile changed"
++        );
++        true
++    }
++
++    fn active(&self, browser: bool) -> bool {
++        browser
++            && self.profile.lock().unwrap().1
++            && self
++                .settings
++                .snapshot()
++                .get(WEB_VOLUME_COMPATIBILITY)
++                .ok()
++                .flatten()
++                .unwrap_or(true)
++    }
++
++    pub(crate) fn decode_sender(&self, level: f64, browser: bool) -> f64 {
++        if !self.active(browser) || !level.is_finite() {
++            return level;
++        }
++        // Preserve exact endpoints. Do not round here: the web sender already
++        // quantizes its wire value and output precision should not add jitter.
++        if level <= 0.0 {
++            return 0.0;
++        }
++        if level >= 1.0 {
++            return 1.0;
++        }
++        // Exact inverse of the forward curve avoids drift from the website's
++        // rounded inverse coefficients during repeated status round trips.
++        (((level * 100.0 + 7.13431).log2() - 2.82823) / (0.03917 * 100.0)).clamp(0.0, 1.0)
++    }
++
++    pub(crate) fn to_sender(&self, level: f64, browser: bool) -> f64 {
++        if !self.active(browser) || !level.is_finite() {
++            return level;
++        }
++        if level <= 0.0 {
++            return 0.0;
++        }
++        if level >= 1.0 {
++            return 1.0;
++        }
++        ((2_f64.powf(0.03917 * level * 100.0 + 2.82823) - 7.13431) / 100.0).clamp(0.0, 1.0)
++    }
++}
++
++/// Lounge identifies the application, whereas Cast identifies its transport.
++/// No profile for mobile, regular YouTube, unknown or multiple controllers.
++pub(crate) fn music_web_controller(params: Option<&Value>) -> bool {
++    let Some(devices) = params
++        .and_then(|p| p.get("devices"))
++        .and_then(Value::as_str)
++        .and_then(|raw| serde_json::from_str::<Value>(raw).ok())
++    else {
++        return false;
++    };
++    let Some(devices) = devices.as_array().filter(|devices| devices.len() <= 32) else {
++        return false;
++    };
++    let mut controller = None;
++    for device in devices {
++        match device.get("type").and_then(Value::as_str) {
++            Some("LOUNGE_SCREEN") => continue,
++            Some("REMOTE_CONTROL") => {}
++            _ => return false,
++        }
++        if controller.is_some() {
++            return false;
++        }
++        controller = Some(device);
++    }
++    controller.is_some_and(|device| {
++        device.get("app").and_then(Value::as_str) == Some("youtube.m-desktop")
++            && device
++                .get("id")
++                .and_then(Value::as_str)
++                .is_some_and(|id| !id.trim().is_empty() && id.len() <= 256)
++            && device
++                .get("theme")
++                .is_none_or(|theme| theme.as_str() == Some("m"))
++    })
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++    use serde_json::json;
++
++    fn profile() -> WebVolumeCompatibility {
++        WebVolumeCompatibility::new(crate::tests::test_settings())
++    }
++
++    fn snapshot(devices: Value) -> Value {
++        json!({"devices": devices.to_string()})
++    }
++
++    #[test]
++    fn only_one_identified_music_web_controller_is_eligible() {
++        let web = json!({"id":"web","type":"REMOTE_CONTROL",
++            "app":"youtube.m-desktop","theme":"m"});
++        assert!(music_web_controller(Some(&snapshot(json!([web])))));
++        assert!(music_web_controller(Some(&snapshot(json!([
++            {"type":"LOUNGE_SCREEN","id":"screen"}, web
++        ])))));
++        for devices in [
++            json!([]),
++            json!([{"id":"yt","type":"REMOTE_CONTROL","app":"youtube-desktop"}]),
++            json!([{"id":"phone","type":"REMOTE_CONTROL","app":"youtube.m-android"}]),
++            json!([{"id":"unknown","type":"REMOTE_CONTROL","theme":"m"}]),
++            json!([web, {"id":"phone","type":"REMOTE_CONTROL"}]),
++            json!([web, web]),
++            json!([web, {"id":"unknown"}]),
++            json!([{"id":"web","type":"REMOTE_CONTROL","app":"youtube.m-desktop","theme":"u"}]),
++            json!([{"type":"REMOTE_CONTROL","app":"youtube.m-desktop"}]),
++        ] {
++            assert!(
++                !music_web_controller(Some(&snapshot(devices.clone()))),
++                "{devices}"
++            );
++        }
++        assert!(!music_web_controller(None));
++        assert!(!music_web_controller(Some(&json!({"devices":"not json"}))));
++        assert!(!music_web_controller(Some(&snapshot(json!({})))));
++    }
++
++    #[test]
++    fn browser_gate_and_takeover_preserve_identity_without_fresh_evidence() {
++        let profile = profile();
++        assert_eq!(profile.decode_sender(0.2, true), 0.2);
++        assert_eq!(profile.to_sender(0.5, true), 0.5);
++        let old_epoch = profile.epoch();
++        assert!(profile.observe(old_epoch, true));
++        assert_eq!(profile.decode_sender(0.2, false), 0.2);
++        assert_eq!(profile.to_sender(0.5, false), 0.5);
++        assert!((profile.decode_sender(0.2, true) - 0.4937).abs() < 0.001);
++        profile.reset();
++        assert!(!profile.observe(old_epoch, true));
++        assert_eq!(profile.decode_sender(0.2, true), 0.2);
++        assert!(profile.observe(profile.epoch(), true));
++        assert!(profile.observe(profile.epoch(), false));
++        assert_eq!(profile.to_sender(0.5, true), 0.5);
++    }
++
++    #[test]
++    fn volume_projection_roundtrips_and_preserves_exact_mute_endpoints() {
++        let profile = profile();
++        profile.observe(profile.epoch(), true);
++        for level in [0.0, 1.0] {
++            assert_eq!(profile.decode_sender(level, true), level);
++            assert_eq!(profile.to_sender(level, true), level);
++        }
++        let mut last = 0.0;
++        for percent in 1..100 {
++            let canonical = percent as f64 / 100.0;
++            let wire = profile.to_sender(canonical, true);
++            assert!(wire > last);
++            last = wire;
++            assert!((profile.decode_sender(wire, true) - canonical).abs() < 0.0001);
++        }
++        assert!((profile.to_sender(0.5, true) - 0.204682).abs() < 0.00001);
++        assert!(profile.decode_sender(f64::NAN, true).is_nan());
++    }
++}

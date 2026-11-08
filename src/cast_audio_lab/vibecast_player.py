@@ -22,6 +22,7 @@ from .backend import (
     PlaybackStatus,
 )
 from .output_registry import create_output_backend, output_names
+from .settings_ipc import SettingsRelay
 
 LOGGER = logging.getLogger(__name__)
 HEALTH_LOGGER = logging.getLogger("cast_audio_lab.player_health")
@@ -38,8 +39,11 @@ class VibecastAudioPlayer:
         self.name = name
         self.backend = backend
         self.session_id: str | None = None
+        self._volume_session_id: str | None = None
         self._websocket: Any = None
+        self.settings = SettingsRelay(self)
         self._last_event_state = None
+        self._volume_revision = 0
         self.artwork_endpoint = artwork_endpoint
         self.artwork_public_url = artwork_public_url
         self._artwork_task = None
@@ -58,6 +62,7 @@ class VibecastAudioPlayer:
                 "playerId": self.player_id,
                 "name": self.name,
                 "capabilities": {
+                    "volumeRevisions": True,
                     "localAudioCache": bool(getattr(self.backend, "local_audio_cache", False)),
                     "platform": f"Linux {platform.machine()}",
                     "drm": [],
@@ -83,6 +88,7 @@ class VibecastAudioPlayer:
 
         async for websocket in connect(self.url, open_timeout=10):
             self._websocket = websocket
+            self._volume_revision = 0
             LOGGER.info("connected to Vibecast player bridge at %s", self.url)
             try:
                 await websocket.send(json.dumps(self.registration(), separators=(",", ":")))
@@ -92,8 +98,10 @@ class VibecastAudioPlayer:
             finally:
                 HEALTH_LOGGER.info("disconnected")
                 await self._cancel_artwork()
+                self.settings.disconnect()
                 self._websocket = None
                 self.session_id = None
+                self._volume_session_id = None
                 try:
                     await self.backend.stop()
                 except (OSError, ValueError, RuntimeError):
@@ -110,6 +118,9 @@ class VibecastAudioPlayer:
                 if not isinstance(message, dict):
                     raise ValueError("player command must be an object")
                 kind = message.get("type")
+                if kind in {"settingsSnapshot", "settingsUpdateResult"}:
+                    self.settings.receive(message)
+                    continue
                 session = message.get("sessionId")
                 if kind in {"load", "stop"} and isinstance(session, str):
                     # A new selection supersedes queued title controls; Stop
@@ -187,6 +198,7 @@ class VibecastAudioPlayer:
     async def handle_message(self, message: dict[str, Any]) -> None:
         command = message.get("type")
         if command in {"settingsSnapshot", "settingsUpdateResult"}:
+            self.settings.receive(message)
             return
         session_id = message.get("sessionId")
         if not isinstance(session_id, str):
@@ -202,12 +214,28 @@ class VibecastAudioPlayer:
             if command == "load":
                 await self._load(session_id, message.get("media"))
                 return
-            # Receiver volume is restored at app launch, before the first load
-            # establishes a playback session. It is output-wide, not track-local.
+            # Launch initializes the actual output volume before the first load.
+            # Explicit volume commands remain output-wide, not track-local.
             if command == "volume":
-                await self.backend.set_volume(
-                    _finite_number(message.get("level", 1.0)), bool(message.get("muted", False))
-                )
+                revision = message.get("volumeRevision")
+                if revision is not None and (isinstance(revision, bool)
+                        or not isinstance(revision, int) or not 0 <= revision < 2 ** 64):
+                    raise ValueError("invalid volume revision")
+                level = _finite_number(message.get("level", 0.25))
+                initialize = message.get("initialize")
+                if "initialize" in message and not isinstance(initialize, bool):
+                    raise ValueError("invalid volume initialization flag")
+                if initialize is True or (initialize is None and self.session_id is None
+                                           and self._volume_session_id != session_id):
+                    await self.backend.initialize_volume()
+                else:
+                    await self.backend.set_volume(level, bool(message.get("muted", False)))
+                self._volume_session_id = session_id
+                # Reports emitted during the backend's separate level/mute
+                # writes still carry the previous completed command revision.
+                # Advance only once both writes have succeeded.
+                if revision is not None:
+                    self._volume_revision = revision
                 await self._send_backend_state(session_id)
                 return
             if session_id != self.session_id:
@@ -223,6 +251,7 @@ class VibecastAudioPlayer:
                 await self._cancel_artwork()
                 await self.backend.stop()
                 self.session_id = None
+                self._volume_session_id = None
             await self._send_backend_state(session_id)
         except (OSError, TypeError, ValueError, RuntimeError) as exc:
             LOGGER.error("player command %s failed category=%s", command, type(exc).__name__)
@@ -300,6 +329,9 @@ class VibecastAudioPlayer:
                 duration=_optional_float(media.get("duration")),
             )
         )
+        if self._volume_session_id != session_id:
+            await self.backend.initialize_volume()
+            self._volume_session_id = session_id
         await self.backend.load(
             url,
             str(stream.get("contentType") or "application/octet-stream"),
@@ -422,6 +454,8 @@ class VibecastAudioPlayer:
             message["mediaSessionId"] = self._media_session_id
         if idle_reason:
             message["idleReason"] = idle_reason
+        if volume is not None or muted is not None:
+            message["volumeRevision"] = self._volume_revision
         if volume is not None:
             message["volume"] = volume
         if muted is not None:
@@ -473,6 +507,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--airplay-reconnect-on-load", action="store_true",
                         help="fallback to separate AirPlay connections for each load/seek")
     parser.add_argument("--log-level", default="INFO")
+    parser.add_argument("--settings-stdio", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument('--artwork-endpoint')
     parser.add_argument('--artwork-public-url')
     return parser
@@ -503,10 +538,14 @@ def create_output(args: argparse.Namespace) -> tuple[AudioBackend, str]:
     return backend, player_id
 
 
-async def run_player(player: VibecastAudioPlayer) -> None:
+async def run_player(player: VibecastAudioPlayer, *, settings_stdio=False) -> None:
+    settings_task = asyncio.create_task(player.settings.run_stdio()) if settings_stdio else None
     try:
         await player.run()
     finally:
+        if settings_task is not None:
+            settings_task.cancel()
+            await asyncio.gather(settings_task, return_exceptions=True)
         await player._cancel_artwork()
         await player.backend.shutdown()
 
@@ -525,7 +564,7 @@ def main() -> None:
     player = VibecastAudioPlayer(args.bridge, player_id, args.name, backend,
         artwork_endpoint=args.artwork_endpoint, artwork_public_url=args.artwork_public_url)
     try:
-        asyncio.run(run_player(player))
+        asyncio.run(run_player(player, settings_stdio=args.settings_stdio))
     except KeyboardInterrupt:
         pass
 

@@ -1,8 +1,9 @@
 # Cast Audio Receiver Lab
 
-Cast **YouTube Music** and ordinary Cast media to outputs that Google does not
-normally expose as Cast speakers. Each configured local, AirPlay or DLNA output
-appears as its own audio receiver in Android and Home Assistant.
+Cast **YouTube, YouTube Music, TuneIn and ordinary Cast media** to outputs that
+Google does not normally expose as Cast receivers. Each configured local,
+AirPlay, DLNA or Sonos output appears as a normal audio receiver plus a second
+YouTube-compatible endpoint whose name ends in `(YT)`.
 
 We built this because YouTube Music on Android has no useful AirPlay path, while
 many perfectly good amplifiers and speakers do. What began as a protocol
@@ -37,27 +38,50 @@ Port `8788` is the default and can be changed in the App configuration. The
 current release supports `amd64` and `aarch64` (64-bit ARM). ARM64 has native
 build/runtime checks; physical ARM speaker acceptance remains untested.
 
+In the Web UI, choose an output type, select or enter its target, give it the
+name you want to see in sender apps, and enable it. Use that normal name from
+YouTube Music, TuneIn and other audio senders; use the automatically created
+`(YT)` name from the regular YouTube app. Route definitions and stable Cast IDs
+are stored under `/data` and survive App restarts and updates.
+
 ## What it can do
 
-- Create a stable, audio-only Cast speaker for every configured output.
+- Create a stable Cast speaker and a YouTube endpoint for every configured
+  output. Both identities use exactly the same player, session and volume.
+- Receive regular YouTube through `<speaker name> (YT)`, including playback,
+  seek, track changes, queue controls and replay after natural end.
 - Receive YouTube Music with play/pause, seek, skip, volume, queue progression,
   metadata and artwork feedback.
 - Control the active YouTube Music session from Home Assistant with Play,
   Pause, Stop, Seek, volume, mute and real-queue Next/Previous without taking
   ownership away from the connected desktop, phone or tablet.
+- Home Assistant control policy: retain the standard Google Cast integration.
+  Displaying/browsing the active YouTube Music playlist in Home Assistant is
+  deliberately outside the current scope; no separate HA integration is
+  planned for that purpose.
+- Receive public live radio from the TuneIn Android sender with station
+  resolution, metadata and normal playback/volume controls.
 - Receive direct HTTP(S) media, radio and local/TTS URLs through the Cast
   Default Media Receiver path used by Home Assistant.
 - Play locally with mpv, forward to AirPlay with Music Assistant's
-  `airplay-cli`, or send to compatible DLNA renderers.
-- Discover AirPlay and DLNA targets, keep routes across restarts and manage them
-  from one LAN/ingress interface.
+  `airplay-cli`, or send to compatible DLNA and Sonos renderers.
+- Discover supported network targets, keep routes across restarts and manage
+  them from one LAN/ingress interface.
 - Report redacted health and support information without including credentials,
   target addresses or signed media URLs.
 
-Sonos output is implemented but has only mocked coverage, not a real-hardware
-acceptance test. Spotify Cast, Bluetooth and Google Home speaker groups are not
+Sonos through AirPlay is reported in daily use by contributor zero00zero (Era
+100 and “Play”). The direct Sonos output has automated tests and real FFmpeg
+conversion coverage, but no physical-device acceptance. See
+[network outputs and volume policy](docs/network-outputs.md). Spotify Cast, Bluetooth and Google Home speaker groups are not
 goals of this release. Spotify already has Spotify Connect; Google Home does not
 adopt this experimental device identity into native groups.
+
+Home Assistant can create two Google Cast entities for one output. This is
+expected: the normal name is the audio receiver and the `(YT)` entity is the
+regular-YouTube route. Both control the same output; disable the `(YT)` entity
+in Home Assistant if you do not need it. Existing output IDs and the audio
+receiver are retained, so this is not a playback/session migration.
 
 ## Why this is technically unusual
 
@@ -73,12 +97,12 @@ audio URL: the phone must continue to see a coherent Cast session while mpv,
 AirPlay or DLNA is actually doing the playback.
 
 ```text
-YouTube Music / Home Assistant / another DMR sender
+YouTube / YouTube Music / TuneIn / Home Assistant / another DMR sender
                        │
                        ▼
        maintained Vibecast frontend (Rust)
         discovery · TLS/auth · Cast sessions
-        YouTube/Lounge · Default Media Receiver
+        YouTube/Lounge · TuneIn · Default Media Receiver
                        │
              player protocol v2 (loopback)
                        │
@@ -87,7 +111,7 @@ YouTube Music / Home Assistant / another DMR sender
              ├─ mpv → local audio
              ├─ FFmpeg → PCM → airplay-cli
              ├─ HTTP relay/remux → DLNA
-             └─ direct media URL → Sonos (experimental)
+             └─ direct URL or shared HTTP relay → Sonos (experimental)
 ```
 
 Read [How it works](docs/how-it-works.md) for the story behind discovery,
@@ -100,14 +124,29 @@ short maintainer map.
 | Path | Current evidence |
 | --- | --- |
 | YouTube Music → local audio | Extensively tested during development and through the published HA App. |
+| Regular YouTube → audio output | `0.8.0-dev1` adds a YouTube-only video identity sharing the existing speaker's runtime. Android YouTube selection and actual mpv decoding are verified on the test laptop; Music retains the speaker. See [dual identities](docs/dual-cast-identities.md) and [validation](docs/TESTING.md). |
 | YouTube Music → AirPlay | Tested with the legacy AirReceiver reference target, including persistent sessions and controls. HomePod/native AirPlay 2 and Yamaha hardware still need acceptance tests. |
 | Home Assistant direct media / radio | Tested through the Default Media Receiver path. This does not imply support for every Cast app or DRM service. |
+| TuneIn public live radio | Implemented and tested with public stations, metadata, switching and controls. Premium/DRM, every station and every ad flow are not claimed. |
 | DLNA | Tested on an older Samsung TV, including its connection-approval flow; renderer compatibility still varies. |
-| Sonos | Implemented with deterministic tests; real hardware remains unverified. |
-| Parallel outputs / small devices / ARM | Useful community test and contribution areas, not release claims. |
+| Sonos | AirPlay use reported by contributor; direct Sonos has automated/FFmpeg coverage, hardware acceptance pending. |
+| amd64 / ARM64 containers | Both are built and smoke-tested natively. Physical ARM output acceptance remains open. |
 
 See the [working plan](docs/WORKING-PLAN.md) for the distinction between
 implemented, automated-tested, deployed and user-confirmed work.
+
+The `0.8.0-dev1` release retains each original speaker UUID and adds a
+stable video alias named `<output name> (YT)`, advertised only through YouTube's app subtype. Both identities
+share one player, session owner and volume state, regardless of the output backend.
+Music and other clients respecting discovery/availability use the speaker; generic
+scanners can still expose both identities. Existing explicit browser launches on
+the original endpoint remain accepted.
+
+The [capability lab](docs/youtube-capability-lab.md) retains the earlier 25-profile
+and paired experiments across PR #18's four announcement layers. Its silent LOAD
+results are separate from the product's real-output validation. The tested dual
+profile changes mDNS and Cast capability masks only for the alias; Eureka and
+outgoing API display flags retain their audio defaults.
 
 ## Authentication and first start
 
@@ -127,7 +166,7 @@ the authentication section in [How it works](docs/how-it-works.md).
 The published multiarch (`amd64` / `arm64`) image is:
 
 ```text
-ghcr.io/allcrafter1/cast-audio-receiver:0.7.0-dev1
+ghcr.io/allcrafter1/cast-audio-receiver:0.8.0-dev1
 ```
 
 It needs host networking for Cast/mDNS and target discovery, plus persistent
@@ -152,8 +191,9 @@ Useful maintainer documents:
 - [Licensing scope](LICENSING.md)
 - [Credits and third-party licences](THIRD_PARTY_NOTICES.md)
 
-Python runtime locks include reviewed wheel and source inventories and are
-updated as one unit; a requirements-only bot bump is intentionally not enough.
+The release container runs Python 3.15. Its amd64 and ARM64 runtime locks use
+separately reviewed wheel hashes and a matching source inventory. These records
+are updated as one unit; a requirements-only bot bump is intentionally not enough.
 Protocol and transport updates also need targeted regression tests.
 
 ## Origin, licence and contributions

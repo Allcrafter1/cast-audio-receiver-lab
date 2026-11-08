@@ -144,6 +144,18 @@ def create_app(manager, *, discover=discover_airplay, discover_renderers=discove
     async def support(request):
         return web.json_response(manager.support_snapshot(version=__version__))
 
+    async def route_settings(request):
+        ident = request.match_info["id"]
+        async with manager.lock:
+            if not any(route.id == ident for route in manager.routes):
+                raise web.HTTPNotFound(text="Output not found")
+        body = await request.json() if request.method == "PATCH" else None
+        if request.method == "PATCH" and body is None:
+            raise ValueError("invalid settings update")
+        result = await manager.settings_request(ident, body)
+        status = {"conflict": 409, "rejected": 400}.get(result.get("status"), 200)
+        return web.json_response(result, status=status)
+
     async def patch_route(request):
         body = await request.json()
         if not isinstance(body, dict) or set(body) - {"name", "enabled", "target"} or not body:
@@ -292,6 +304,8 @@ def create_app(manager, *, discover=discover_airplay, discover_renderers=discove
     app.router.add_get("/api/support", support)
     app.router.add_get("/api/routes", listing)
     app.router.add_post("/api/routes", add_route)
+    app.router.add_get("/api/routes/{id}/settings", route_settings)
+    app.router.add_patch("/api/routes/{id}/settings", route_settings)
     app.router.add_patch("/api/routes/{id}", patch_route)
     app.router.add_delete("/api/routes/{id}", delete_route)
     app.router.add_post("/api/scan", scan)

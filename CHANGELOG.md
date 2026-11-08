@@ -1,15 +1,228 @@
 # Changelog
 
+## 0.8.0.dev1 — 2026-11-08
+
+- Announce every output as two stable Cast endpoints: the normal audio receiver
+  keeps its configured name, while a YouTube-only video endpoint adds (YT).
+  Both identities share one player, session owner, queue, volume and output.
+- Add working regular-YouTube casting without turning the normal speaker into a
+  TV. Preserve YouTube Music behavior, desktop/mobile reconnect, controller
+  takeover, queue navigation, audio-track selection and replay after natural EOF.
+- Add the dedicated TuneIn receiver, including native sender autostart, station
+  resolution, metadata, playback controls and volume synchronization.
+- Replace the unsafe launch-volume restore with one common policy for all
+  outputs: adopt a readable, non-zero and unmuted physical level; otherwise
+  start at 25% and unmuted. Keep later changes synchronized in both directions.
+- Expand direct Sonos support with metadata and artwork, shared relay/transcode
+  handling for unsupported or local sources, RenderingControl volume/mute
+  events and a guarded polling fallback. Physical direct-Sonos acceptance is
+  still pending; contributor-tested Sonos-over-AirPlay remains supported.
+- Harden local mpv, AirPlay and DLNA lifecycle, seek, cancellation, metadata,
+  feedback and cleanup paths. Update AirPlay CLI to 0.5.9 with verified amd64
+  and ARM64 artifacts, rebuilt source evidence and native container checks.
+- Publish the complete maintained Vibecast frontend source, preserve exact
+  source reconstruction and third-party notices, and add release guards that
+  keep Python images aligned with reviewed wheel locks.
+- Update installation, compatibility, architecture, testing and maintenance
+  documentation for the combined release. CI covers Python 3.11–3.15; the
+  container uses reviewed CPython 3.15 wheels for amd64 and ARM64.
+
 ## Unreleased — upstream maintenance review
 
 - Prepare AirPlay CLI 0.5.9 for both Linux architectures with verified release
   hashes, rebuilt source artifact and native protocol tests. Physical playback
   acceptance remains separate; no running installation is changed by this PR.
 - Reject Python base-image changes that disagree with the reviewed CPython
-  wheel ABI. Keep Python 3.12 and Dependabot monitoring; diagnose PR #19.
+  wheel ABI. PR #19 itself remains invalid because it combines Python 3.15 with
+  CPython 3.12 locks; the complete 3.15 migration is included above instead.
 - Track the last reviewed Vibecast upstream commit separately from historical
   build provenance; record the independent audio-fork source prerelease.
 
+## 0.7.0-dev3 — candidate, not published
+
+- Restart the current title at zero when YouTube sends Play after natural EOF.
+  Reuse the existing repeat path; preserve pause/resume, Music loop modes and
+  session ownership. Clear stale EOF queue waits before cached replay.
+- Name the video endpoint `<output name> (YT)` across all output backends; keep
+  the audio name and both IDs unchanged. Use the selected endpoint name in app
+  context while retaining canonical shared storage and playback.
+- Review the reported disconnect without suppressing explicit Android CLOSE
+  messages: available logs do not establish a receiver defect.
+
+## 0.7.0-dev2 — candidate, not published
+
+- Give every desktop-managed audio output a stable YouTube-only video alias,
+  retaining its original speaker identity for Music and other Cast apps. Both
+  endpoints share the same player, session/takeover logic, settings and volume.
+- Partition app-subtype discovery and availability; suppress the alias's general
+  Cast PTR. Preserve explicit legacy launches on the original endpoint so the
+  new search policy does not itself reject previously saved browser routes.
+- Align compact UUID spelling in mDNS and Cast DEVICE_INFO without changing
+  persisted IDs. Share connection-ID allocation, certificate rotation and
+  endpoint cleanup; test cross-endpoint replacement and stale commands.
+- Include the previously integrated PR #16/#17 volume, metadata, Sonos event
+  fallback and common transcoding work, TuneIn/autostart and accepted YouTube
+  playback/reconnect corrections in one cumulative, hash-locked source patch.
+- Build and install the candidate on Audio Lab Laptop with complete runtime
+  hash verification and rollback. Keep Android real-decoder observations,
+  contributor hardware reports and outstanding acceptance distinct in TESTING.
+  No public image, GitHub PR merge or Home Assistant store update is performed.
+
+## Unreleased — speaker discovery and PR #18 review
+
+- Add a research-only, 25-profile capability matrix covering all four PR #18
+  announcement layers, with silent isolated receiver/probe helpers. Reconstruct
+  historical speaker profiles and audit the installed GMS/YouTube/Music icon
+  and selection code. Record authorized Android UI observations separately
+  from real audio acceptance; no product TV option is added.
+  Complete 50 app/profile comparisons and 16 same-device observations: full
+  PR #18 accepts media with TV artwork in both apps; conflicting profiles do
+  not establish stable speaker presentation. Preserve original raw observations
+  and add explicit visual/XML corrections for controller/cropped-icon cases.
+- Add app-specific DNS-SD subtype discovery from the shared application
+  registry, retaining one stable speaker instance/daemon and `ca=199428`.
+  Fix subtype replies when the base PTR is already cached; announce and
+  withdraw all supported subtype PTRs together. Preserve playback, Music,
+  reconnect and ownership behavior.
+- Vendor the narrowly patched `mdns-sd` 0.20.1 with its original Apache-2.0 OR
+  MIT licences and archive checksum. Independently reconstruct all 136 source
+  inputs, including 22 vendor files, from the ordered eight-patch recipe.
+- Activate private candidate `0.7.0.dev1+local.20261108.mdnsapps` on the test
+  laptop: 341 library tests, the SDK doctest, 36 dependency tests and 14 silent
+  binary checks pass. Verify the loaded executable, all 28 Python files, both
+  routes and speaker identities; retain the previous container for rollback.
+  LAN lookups now resolve both speakers through the base service and the
+  YouTube/Music subtypes. Phone retest confirms both apps list the speakers and
+  Music plays; ordinary YouTube selection still fails and temporarily removes
+  its entries. Reliable ordinary-YouTube casting remains unresolved.
+
+- Add bounded debug diagnostics for Android pre-launch investigation: app
+  availability results and sender SDK/platform classification. Private
+  `ytandroiddiag` candidate verified on test laptop, then rolled back to the
+  controls candidate for comparison; no protocol/playback change.
+  Android app playback remains unresolved; owner accepts current web behavior
+  and confirms Music still works.
+
+- Add an ordinary-YouTube-only selection/audio follow-up: honor explicit
+  `setPlaylist/VIDEO_ADDED`, prefer original native audio and implement exact
+  `setAudioTrack` with pause/position preservation and failure/cancellation
+  protection. Keep Music queue guards/resolver behavior and existing reconnect,
+  ownership, volume and speaker identity. 338 library tests + SDK doctest pass;
+  physical acceptance and Android listing remain unverified.
+- Activate private controls/audio candidate `0.7.0.dev1+local.20261108.ytcontrols`
+  on the test laptop; verify loaded binary, 28 Python files, both routes and
+  speaker identities. Preserve the preceding container for rollback; HA unchanged.
+- Correct Android probe attribution: GMS traffic may be from YouTube Music and
+  does not prove discovery by the ordinary YouTube app.
+
+- Follow-up investigation confirms all YouTube Music paths work for the owner;
+  ordinary YouTube remains unresolved. Separate Android filtering from web
+  handoff and retain the speaker identity and existing controller ownership.
+- Isolate persistent app state by receiver in the shared core, retaining it
+  across relaunch/restart. Preserve ambiguous legacy shared data without copying
+  one receiver identity into multiple outputs.
+- Correct Lounge discovery association: announce on bind/rebind, answer
+  `getDiscoveryDeviceId`, and do not echo its acknowledgement.
+- Explicitly terminate the old cloud channel on Stop/takeover, with a bounded
+  timeout. Channel termination does not revoke old-screen credentials or clear
+  a browser's cached device. The legacy web cache conflict remains open.
+- Activate private lifecycle candidate `0.7.0.dev1+local.20261107.ytlifecycle`
+  on the test laptop, with loaded binary/28 Python files and audio-only profiles
+  verified; retain the preceding container for rollback.
+- Validate the lifecycle follow-up with 332 Rust tests, the SDK doctest and
+  14 silent release-binary checks. Real ordinary-YouTube acceptance is unverified;
+  test results do not turn the earlier partial improvement into a completed fix.
+
+- Keep the audio-speaker identity (`199428`, no video output). Make Eureka and
+  streaming display defaults consistently false when runtime configuration is
+  absent or partial; managed installs must not depend on a manual TOML copy.
+- Report app availability from the registered providers instead of claiming
+  support for every app. Remove a diagnostic HTTP probe from MDX startup.
+- Preserve the Lounge screen for the same connected owner's explicit app
+  relaunch, avoiding one ordinary-YouTube screen-rotation/cache conflict. Keep fresh screens
+  for actual ownership changes, different apps and missing continuity. Preserve
+  the existing YTM/mobile reconnect, grace and multisocket ownership decisions.
+- Cancel and join the previous Lounge worker before same-owner rebinding;
+  cover interrupted cleanup and rejected/transient rebinds with regressions.
+- Audit the actually loaded laptop binary, installed Python assets and separate
+  Home Assistant versions. The latest TuneIn patch changes no discovery code.
+- Record historical identity decisions, the contributor's specific Android /
+  Sonos AirPlay test and the confirmed legacy YouTube screen-cache conflict in
+  `docs/youtube-discovery-pr18.md`. Existing stale browser caches and Android
+  listing remain separate acceptance boundaries; no TV identity is enabled.
+- Initially build locally and activate private test candidate
+  `0.7.0.dev1+local.20261107.pr18` on the existing laptop, with its predecessor
+  retained for rollback. All 313 scoped Rust tests and 14 silent Cast/bridge
+  checks pass. Actual loaded binary, 28 Python assets and speaker capabilities
+  are verified; repeated stock YouTube playback acceptance remains pending.
+
+## Unreleased — TuneIn Radio receiver
+
+- Add a dedicated TuneIn Cast application (`12F05308`) for live radio, including
+  TuneIn station resolution, initial station artwork/metadata and standard Cast
+  playback/volume controls. Direct HTTP(S) loads remain available in this app.
+- Start native TuneIn stations immediately at the live edge, including sender
+  handoffs with elapsed time and `autoplay=false`. Explicit Pause/Stop still
+  take precedence; direct URL loads preserve their requested timing/autoplay.
+- Keep TuneIn credentials in memory and omit them from returned media metadata
+  and diagnostics. Existing YouTube and Default Media Receiver providers remain
+  independently registered. Validation and remaining sender acceptance are
+  recorded in `docs/tunein-receiver.md`; this is not a published release.
+
+## Unreleased — shared startup volume and Sonos integration (PRs #16 / #17)
+
+- Adopt the actual output volume at Cast startup where readable; use 25%,
+  unmuted, for zero/mute/unreadable outputs. Preserve deliberate later changes,
+  including before the first track, and fail playback if safe setup fails.
+- Apply the policy across outputs, preserving revision-based feedback ordering.
+  The development command backend rejects unsupported volume control.
+- Handle SoCo DIDL metadata errors with title-only fallback. Ensure relay cleanup
+  errors still retire playback state for Sonos and DLNA, remove temporary media,
+  and retain failed HTTP cleanup for retry.
+- Integrate zero00zero’s Sonos metadata and bounded shared-relay transcoding,
+  including Opus/WebM → MP3. Compatible remote media/radio remains direct.
+- Prefer Sonos RenderingControl events with renewal, polling fallback and a
+  silence watchdog; retain volume monitoring after natural end until Stop.
+- Distinguish contributor-confirmed Sonos AirPlay use from the still-unverified
+  direct Sonos hardware path. Add startup, event lifecycle and real conversion
+  tests. Included in the private laptop integration candidate; no public release
+  or direct Sonos hardware acceptance is claimed.
+
+## Unreleased — playback cache and YouTube Music Web volume
+
+- Keep Lounge feedback HTTP requests from blocking playback transitions or
+  incoming controls; send current snapshots instead of a stale status backlog,
+  including after reconnect. Preserve load/finish/error transitions under load.
+- Correct backward seek priority and allow new range demand to interrupt a
+  waiting origin header response. Use finer internal cache blocks while keeping
+  large upstream HTTP requests; reset stale speed evidence on explicit seeks.
+- Report mpv seek/startup as buffering until decoder restart. If a local-cache
+  seek stays blocked, reopen the same cache URL once after one second, preserving
+  pause intent and cancelling on newer controls. No additional YouTube retry.
+- Prioritize actual seek/resume range requests over an unrelated slow prefix
+  download in the shared audio cache. Preserve partial bytes and the recovery
+  budget, keep sequential requests large, and guard competing/cancelled readers.
+  Add safe format/URL-characteristic diagnostics to distinguish source slowness
+  from local cache scheduling; the underlying source slowdown is still under
+  investigation and laptop acceptance of this cache change is pending.
+
+- Compensate YouTube Music Web's extra volume curve for positively identified
+  desktop web controllers, including matching Cast and Lounge feedback. Keep
+  Home Assistant, mobile senders and ordinary YouTube on their existing scale.
+- Reject delayed volume acknowledgements from older commands without dropping
+  playback updates or current physical-device controls. This applies across
+  the Python output adapters; legacy player clients remain compatible.
+- Coalesce YouTube Music Web's Lounge volume confirmations after a short quiet
+  period, avoiding intermediate HTTP feedback during dragging without delaying
+  audio changes, playback controls or mobile feedback.
+- Expose the default-enabled correction through per-output App settings in the
+  management UI, backed by the receiver's existing typed settings store.
+- Document the remaining YTM Web slider-drag defect, also reproduced by the user
+  on an original Cast receiver. A temporary browser-side drag guard was confirmed
+  effective; receiver feedback changes alone do not fix this website behavior.
+  The optional helper is not injected or installed automatically.
+- Automated validation and laptop acceptance are tracked in `docs/WORKING-PLAN.md`;
+  this section does not indicate a published or live-confirmed release.
 ## 0.7.0.dev1 — resilient YouTube sessions and Home Assistant controls
 
 - Preserve an active YouTube Music session for up to 60 seconds after an

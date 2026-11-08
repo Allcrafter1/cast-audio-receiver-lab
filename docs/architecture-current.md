@@ -1,7 +1,13 @@
-# Current architecture (dev18)
+# Current architecture
 
 This document describes the active product path. Historical experiments live
 under `research/` and are not installed with the runtime wheel.
+
+The `0.8.0-dev1` product has two Cast identities per output: the
+original speaker plus an app-specific YouTube video alias. Both feed one hub,
+session owner, output adapter and volume state. This is discovery composition,
+not a second playback pipeline. See [dual Cast identities](dual-cast-identities.md)
+for endpoint policies, lifecycle, compatibility and validation limits.
 
 The player bridge is a separate loopback listener; only the Python management
 interface is user-facing. The inherited browser player is an explicitly enabled
@@ -16,7 +22,7 @@ Cast sender / Home Assistant
             |
             v
 maintained Vibecast fork (Rust)
-  Cast discovery, TLS/session handling, YouTube + Default Media inputs
+  Cast discovery, TLS/session handling, YouTube + TuneIn + Default Media inputs
             |
             | player protocol v2 on loopback WebSocket
             v
@@ -64,9 +70,9 @@ replaces the URL only if the same item is still active.
 
 ## Extension boundaries
 
-Inputs are Rust `AppProvider`/`AppSession` implementations. YouTube and the
-Default Media Receiver are separate providers today. A future service-specific
-Cast receiver belongs there.
+Inputs are Rust `AppProvider`/`AppSession` implementations. YouTube, TuneIn and
+the Default Media Receiver are separate providers today. A future
+service-specific Cast receiver belongs there.
 
 Outputs implement the small Python `AudioBackend` contract and add one entry to
 the static output registry. The registry centralizes target validation,
@@ -74,9 +80,9 @@ singleton policy, process arguments and backend construction. It is deliberately
 not an arbitrary runtime plugin loader; normal source changes are an acceptable
 cost for a new adapter.
 
-DLNA uses direct target fetch when compatible and a bounded local HTTP relay for
-finite media that needs HTTPS termination or FFmpeg remux/transcode. Sonos still
-uses direct target fetch and remains hardware-unverified. See `dlna.md` and
+DLNA and Sonos use direct target fetch when compatible and a shared bounded local
+HTTP relay for finite media that needs HTTPS termination or FFmpeg
+remux/transcode. Direct Sonos remains hardware-unverified. See `dlna.md` and
 `network-outputs.md`.
 
 ## Component roles

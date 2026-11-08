@@ -1,0 +1,812 @@
+{
+  "schema_version": 1,
+  "source_summary_sha256": "e14e3d514f2fabea273c57aed89f87185c825e737775c6b752a0a99802520022",
+  "run_method": "v3_fresh_identity",
+  "profile_count": 25,
+  "completed_app_profile_rows": 50,
+  "planned_app_profile_rows": 50,
+  "snapshot_complete": true,
+  "interpretation": {
+    "cross_app_identity": "Fresh UUID, friendly-name suffix and receiver data directory for every app/profile attempt. This is not the same receiver identity tested across both apps.",
+    "paired_receiver": "No result here verifies a future test against a previously paired or shared receiver identity.",
+    "api_source": "API display column is configuration plus shared-client default_headers source evidence; not a TLS wire capture.",
+    "selection": "selected means a row tap was attempted; it does not assert a connected session or playback.",
+    "greyed": "greyed_unselectable is recorded as unselectable; missing LAUNCH/LOAD is not a failed cast attempt.",
+    "load": "Silent bridge LOAD only; no media fetch, decoding or audible playback verified. Missing LOAD alone assigns no capability-failure cause.",
+    "icons": "UNKNOWN remains pending visual review; never inferred from capability bits or model text.",
+    "conclusion": "Observations only. No successful hybrid or general impossibility is inferred by this table.",
+    "partial": "Not-tested and incomplete rows remain explicit; rerun the writer after updating the source summary."
+  },
+  "app_statuses": {
+    "youtube": {
+      "completed": 25
+    },
+    "music": {
+      "completed": 25
+    }
+  },
+  "audio_verified": false,
+  "rows": [
+    {
+      "profile": "speaker",
+      "mdns_ca": 199428,
+      "info_ca": 199428,
+      "eureka_display": false,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": false,
+        "icon": "not_listed",
+        "selection_state": "not_listed",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "speaker",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-eureka-off",
+      "mdns_ca": 199429,
+      "info_ca": 199429,
+      "eureka_display": false,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-eureka-on",
+      "mdns_ca": 199429,
+      "info_ca": 199429,
+      "eureka_display": true,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-mdns-only",
+      "mdns_ca": 199429,
+      "info_ca": 199428,
+      "eureka_display": false,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": false,
+        "icon": "not_listed",
+        "selection_state": "not_listed",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "greyed_unselectable",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-info-only",
+      "mdns_ca": 199428,
+      "info_ca": 199429,
+      "eureka_display": false,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "speaker",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "speaker-eureka-on",
+      "mdns_ca": 199428,
+      "info_ca": 199428,
+      "eureka_display": true,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": false,
+        "icon": "not_listed",
+        "selection_state": "not_listed",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "speaker",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "speaker-nest-model",
+      "mdns_ca": 199428,
+      "info_ca": 199428,
+      "eureka_display": false,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": false,
+        "icon": "not_listed",
+        "selection_state": "not_listed",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "speaker",
+        "selection_state": "greyed_unselectable",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-nest-model",
+      "mdns_ca": 199429,
+      "info_ca": 199429,
+      "eureka_display": false,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "greyed_unselectable",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-dynamic-group",
+      "mdns_ca": 199493,
+      "info_ca": 199493,
+      "eureka_display": false,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "generic_cast",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "generic_cast",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-speaker-pair",
+      "mdns_ca": 199557,
+      "info_ca": 199557,
+      "eureka_display": false,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "minimal-speaker",
+      "mdns_ca": 4,
+      "info_ca": 4,
+      "eureka_display": false,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": false,
+        "icon": "not_listed",
+        "selection_state": "not_listed",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "speaker",
+        "selection_state": "greyed_unselectable",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "minimal-video-audio",
+      "mdns_ca": 5,
+      "info_ca": 5,
+      "eureka_display": false,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "greyed_unselectable",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "greyed_unselectable",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "no-output-diagnostic",
+      "mdns_ca": 199424,
+      "info_ca": 199424,
+      "eureka_display": false,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "generic_cast",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "generic_cast",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-static-group",
+      "mdns_ca": 199461,
+      "info_ca": 199461,
+      "eureka_display": false,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "generic_cast",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "generic_cast",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-no-audio",
+      "mdns_ca": 199425,
+      "info_ca": 199425,
+      "eureka_display": false,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "generic_cast",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "generic_cast",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-mdns-only-eureka-on",
+      "mdns_ca": 199429,
+      "info_ca": 199428,
+      "eureka_display": true,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-info-only-eureka-on",
+      "mdns_ca": 199428,
+      "info_ca": 199429,
+      "eureka_display": true,
+      "api_display_config": false,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "speaker",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [],
+        "silent_load_count": 0,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "speaker",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "speaker-api-on",
+      "mdns_ca": 199428,
+      "info_ca": 199428,
+      "eureka_display": false,
+      "api_display_config": true,
+      "youtube": {
+        "status": "completed",
+        "listed": false,
+        "icon": "not_listed",
+        "selection_state": "not_listed",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "speaker",
+        "selection_state": "greyed_unselectable",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-eureka-off-api-on",
+      "mdns_ca": 199429,
+      "info_ca": 199429,
+      "eureka_display": false,
+      "api_display_config": true,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "greyed_unselectable",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-eureka-on-api-on",
+      "mdns_ca": 199429,
+      "info_ca": 199429,
+      "eureka_display": true,
+      "api_display_config": true,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "greyed_unselectable",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-mdns-only-api-on",
+      "mdns_ca": 199429,
+      "info_ca": 199428,
+      "eureka_display": false,
+      "api_display_config": true,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-info-only-api-on",
+      "mdns_ca": 199428,
+      "info_ca": 199429,
+      "eureka_display": false,
+      "api_display_config": true,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "speaker",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [],
+        "silent_load_count": 0,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "2DB7CC49"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "speaker-eureka-on-api-on",
+      "mdns_ca": 199428,
+      "info_ca": 199428,
+      "eureka_display": true,
+      "api_display_config": true,
+      "youtube": {
+        "status": "completed",
+        "listed": false,
+        "icon": "not_listed",
+        "selection_state": "not_listed",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "speaker",
+        "selection_state": "greyed_unselectable",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-mdns-only-eureka-on-api-on",
+      "mdns_ca": 199429,
+      "info_ca": 199428,
+      "eureka_display": true,
+      "api_display_config": true,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [
+          "233637DE"
+        ],
+        "silent_load_count": 1,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "tv",
+        "selection_state": "greyed_unselectable",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    },
+    {
+      "profile": "video-info-only-eureka-on-api-on",
+      "mdns_ca": 199428,
+      "info_ca": 199429,
+      "eureka_display": true,
+      "api_display_config": true,
+      "youtube": {
+        "status": "completed",
+        "listed": true,
+        "icon": "speaker",
+        "selection_state": "selection_attempted",
+        "selection_attempted": true,
+        "launch_app_ids": [],
+        "silent_load_count": 0,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      },
+      "music": {
+        "status": "completed",
+        "listed": true,
+        "icon": "speaker",
+        "selection_state": "greyed_unselectable",
+        "selection_attempted": false,
+        "launch_app_ids": null,
+        "silent_load_count": null,
+        "identity_epoch_reused_across_latest_rows": false,
+        "audio_verified": false
+      }
+    }
+  ]
+}
