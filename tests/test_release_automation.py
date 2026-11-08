@@ -5,6 +5,7 @@ import io
 import json
 from pathlib import Path
 import tarfile
+import zipfile
 import tempfile
 import unittest
 from unittest.mock import patch, Mock
@@ -14,9 +15,12 @@ from tools import release
 
 
 class ReleaseAutomationTests(unittest.TestCase):
-    def test_version_conversion_rejects_shell_and_stable_inputs(self):
+    def test_version_conversion_accepts_stable_and_development_inputs(self):
         self.assertEqual(release.image_tag('0.6.0.dev21'), '0.6.0-dev21')
-        for bad in ['0.6.0', '0.6.0-dev21', '0.6.0.dev21;echo', '../dev21']:
+        self.assertEqual(release.image_tag('0.8.0'), '0.8.0')
+        self.assertFalse(release.is_prerelease('0.8.0'))
+        self.assertTrue(release.is_prerelease('0.8.0-dev1'))
+        for bad in ['0.6.0-dev21', '0.6.0.dev21;echo', '../dev21']:
             with self.assertRaises(ValueError):
                 release.image_tag(bad)
 
@@ -41,6 +45,14 @@ class ReleaseAutomationTests(unittest.TestCase):
             release.prepare('0.6.0.dev21', root)
             self.assertEqual(release.candidate(root), '0.6.0-dev21')
             self.assertEqual((root / 'cast-audio-receiver/config.yaml').read_bytes(), store)
+
+    def test_prepare_accepts_stable_version(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self.fixture(root)
+            release.prepare('0.8.0', root)
+            self.assertEqual(release.candidate(root), '0.8.0')
+            self.assertIn('ARG BUILD_VERSION=0.8.0', (root / 'Containerfile').read_text())
 
     def test_notes_only_selected_version_and_no_placeholders(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -140,6 +152,34 @@ class ReleaseAutomationTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 release.verify_source(root, root)
 
+    def test_python_source_archive_must_match_inventory_and_hashes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / 'config').mkdir()
+            payload = b'reviewed source'
+            source = {'filename': 'example-1.tar.gz', 'url': 'https://files.pythonhosted.org/example',
+                      'sha256': hashlib.sha256(payload).hexdigest(), 'size': len(payload)}
+            report = {'schema': 1, 'packages': [{'name': 'example', 'version': '1',
+                      'wheel_sha256': 'a' * 64, 'wheel_verified_against_pypi': True,
+                      'sources': [source], 'status': 'sdist-referenced'}],
+                      'source_archives_downloaded': False,
+                      'embedded_native_source_coverage_verified': False}
+            (root / 'config/container-python-source-references.json').write_text(json.dumps(report))
+            archive = root / 'container-python-sources.zip'
+            recorded = dict(report, source_archives_downloaded=True)
+            with zipfile.ZipFile(archive, 'w') as bundle:
+                bundle.writestr(source['filename'], payload)
+                bundle.writestr('SOURCE-REFERENCES.json', json.dumps(recorded))
+            digest = hashlib.sha256(archive.read_bytes()).hexdigest()
+            (root / 'container-python-sources.zip.sha256').write_text(digest)
+            release.verify_python_sources(root, root)
+            with zipfile.ZipFile(archive, 'a') as bundle:
+                bundle.writestr('unexpected', b'bad')
+            (root / 'container-python-sources.zip.sha256').write_text(
+                hashlib.sha256(archive.read_bytes()).hexdigest())
+            with self.assertRaises(ValueError):
+                release.verify_python_sources(root, root)
+
     def test_release_is_explicit_and_waits_for_both_artifacts(self):
         workflow = (release.ROOT / '.github/workflows/release.yml').read_text()
         self.assertIn('default: false', workflow)
@@ -160,7 +200,7 @@ class ReleaseAutomationTests(unittest.TestCase):
             self.fixture(root)
             before = (root / 'cast-audio-receiver/config.yaml').read_bytes()
             sha = 'a' * 40
-            with patch.object(release, 'ROOT', root), patch.object(release, 'run', side_effect=['', sha + '\trefs/heads/main', sha, '']), patch.object(release.subprocess, 'run', return_value=Mock(returncode=1)), patch.object(release, 'wait_ci'), patch.object(release, 'verify_source'), patch.object(release, 'verify_image', side_effect=ValueError('Wrong image')):
+            with patch.object(release, 'ROOT', root), patch.object(release, 'run', side_effect=['', sha + '\trefs/heads/main', sha, '']), patch.object(release.subprocess, 'run', return_value=Mock(returncode=1)), patch.object(release, 'wait_ci'), patch.object(release, 'verify_source'), patch.object(release, 'verify_python_sources'), patch.object(release, 'verify_image', side_effect=ValueError('Wrong image')):
                 with self.assertRaises(ValueError):
                     release.promote('0.6.0-dev21', sha, root)
             self.assertEqual((root / 'cast-audio-receiver/config.yaml').read_bytes(), before)

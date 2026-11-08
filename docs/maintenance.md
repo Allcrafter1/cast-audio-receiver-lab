@@ -18,7 +18,7 @@ be applied as a series.
 | --- | --- | --- |
 | Our adapter | `pyproject.toml`, package version, `CHANGELOG.md`, dev18 release | Keep release tag, image digest and HA version aligned. |
 | Vibecast | Public base `83ba470158189de3bc223701decdc4c502d47644`, hash-locked `0.7.0.dev1` cumulative snapshot, Cargo.lock and per-release vendored-source archive | Frozen archive rebuild is a release gate; full OS/toolchain bit reproducibility is not claimed. |
-| yt-dlp extraction stack | `config/youtube-extractor-requirements.txt`: yt-dlp 2026.8.19, yt-dlp-ejs 0.8.0, deno 2.9.6; complete container resolution in `config/container-linux-x86_64-cp312.lock.txt` | amd64 CPython 3.12 is hash-locked and offline-verified; ARM remains separate. |
+| yt-dlp extraction stack | `config/youtube-extractor-requirements.txt`: yt-dlp 2026.8.19, yt-dlp-ejs 0.8.0, deno 2.9.6; complete container resolution in the `cp315` locks | CPython 3.15 is hash-locked separately for amd64 and ARM64 and installed binary-only. |
 | AirPlay sender | `config/cliairplay-linux-x86_64.lock.json`: unified Music Assistant airplay-cli v0.5.9 candidate, source/asset/checksum pins | Release hashes, source rebuild, upstream tests and native DACP/RTSP probe verified; v0.5.9 physical playback and ARM64 execution remain pending. |
 | Python libraries | Tested constraints and separate 17-wheel CPython3.12/3.13 Linux x86_64 hash locks | Fresh offline install/pip-check/tests verified for both; ARM and extractor/build dependencies remain separate. See dependency-locks.md. |
 | FFmpeg / mpv | Host-installed executables | Host versions/build options must be recorded; no application-controlled pin yet. |
@@ -196,8 +196,8 @@ test future validity; use synthetic boundary tests instead.
 
 ## Existing release automation and follow-up
 
-- CI runs Python 3.11–3.13, clean source-export/history/wheel checks, Rust tests
-  and an amd64 container build. Manual workflows retain OCI SBOM/provenance and
+- CI runs Python 3.11–3.15, clean source-export/history/wheel checks, Rust tests
+  and native amd64/ARM64 container builds. Manual workflows retain OCI SBOM/provenance and
   frozen Rust/native source archives.
 - Dependabot reports container and GitHub Actions changes, while
   `upstream-watch.yml` follows the pinned Vibecast and airplay-cli releases.

@@ -18,15 +18,15 @@
     },
     {
       "name": "aiohttp",
-      "version": "3.14.3",
-      "wheel_sha256": "543906c127fb1d929b95076db19b83fa2d46751006ff1e23b093aa5ac4d8db42",
+      "version": "3.14.5",
+      "wheel_sha256": "276a4fc00b1d9ae492b802763a789c5b86328b989c5ea169f2faa447d6a11c7c",
       "wheel_verified_against_pypi": true,
       "sources": [
         {
-          "filename": "aiohttp-3.14.3.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/58/d9/22ce5786ac0c1653ae8b6c23bded02c1686d11f0dbb45b31ce128e0df985/aiohttp-3.14.3.tar.gz",
-          "sha256": "9491196535a88924a60afd5b5f434b5b203b6cc616250878dbdb223a8f7844bc",
-          "size": 7971213
+          "filename": "aiohttp-3.14.5.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/6c/4c/bdccd81e9ee225b69c60e7766c9a5b05364f118f4d383713b89a682d772d/aiohttp-3.14.5.tar.gz",
+          "sha256": "5558a7f5a05af9ecf744af91e5baefc436f93c9333e656c27ec253f9a6bbe178",
+          "size": 8078052
         }
       ],
       "status": "sdist-referenced"
@@ -93,15 +93,15 @@
     },
     {
       "name": "brotli",
-      "version": "1.2.0",
-      "wheel_sha256": "072e7624b1fc4d601036ab3f4f27942ef772887e876beff0301d261210bca97f",
+      "version": "1.2.1",
+      "wheel_sha256": "f00ff4b56caf151365c77988eb85a4a71eb26fe63047d4084d5614e06d65e3cf",
       "wheel_verified_against_pypi": true,
       "sources": [
         {
-          "filename": "brotli-1.2.0.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/f7/16/c92ca344d646e71a43b8bb353f0a6490d7f6e06210f8554c8f874e454285/brotli-1.2.0.tar.gz",
-          "sha256": "e310f77e41941c13340a95976fe66a8a95b01e783d430eeaf7a2f87e0a57dd0a",
-          "size": 7388632
+          "filename": "brotli-1.2.1.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/cf/81/1546c983678a9b4e77cb4718eaedd1b2caf24a6cdbf1eb8775938d22aff7/brotli-1.2.1.tar.gz",
+          "sha256": "02b2f7b5a83485efe448a44ddf7983def05c3bb1dcf917d4f7154070260e13de",
+          "size": 7389447
         }
       ],
       "status": "sdist-referenced"
@@ -124,7 +124,7 @@
     {
       "name": "charset-normalizer",
       "version": "3.5.1",
-      "wheel_sha256": "b9af956078716df40d985fb0dfeb2c2120c5ca92ba4ff4b388acfd01cdc14d08",
+      "wheel_sha256": "5c84bec0ab5ae0c64bfe73a7d2adcb5ce73b467523fc27fd6a28ab2aa6cbe35a",
       "wheel_verified_against_pypi": true,
       "sources": [
         {
@@ -169,7 +169,7 @@
     {
       "name": "frozenlist",
       "version": "1.8.0",
-      "wheel_sha256": "494a5952b1c597ba44e0e78113a7266e656b9794eec897b19ead706bd7074383",
+      "wheel_sha256": "0c18a16eab41e82c295618a77502e17b195883241c563b00f0aa5106fc4eaa0d",
       "wheel_verified_against_pypi": true,
       "sources": [
         {
@@ -214,7 +214,7 @@
     {
       "name": "lxml",
       "version": "6.1.3",
-      "wheel_sha256": "909f4e927bb051f7740d6367285fc60cdcfdaf0258c2dba4ff5ba7eadadc250c",
+      "wheel_sha256": "73fc05988ed20809450474ba760a87c8ad4e455fc09783c02195e56ec634b41a",
       "wheel_verified_against_pypi": true,
       "sources": [
         {
@@ -229,7 +229,7 @@
     {
       "name": "multidict",
       "version": "6.9.0",
-      "wheel_sha256": "6a5111a2bd824c821a3dd09da29680391b0caaa18fea7761358f4001e6898d1c",
+      "wheel_sha256": "a5f04bbfb064b87455a8012f5829b20201d608cf4b3a1a0e50c7a14173a75109",
       "wheel_verified_against_pypi": true,
       "sources": [
         {
@@ -259,7 +259,7 @@
     {
       "name": "propcache",
       "version": "0.5.4",
-      "wheel_sha256": "2814ecd8e818f487bee4b0f921bc4d1c176cc5fc71ac0f072d0fa67eda4ac14b",
+      "wheel_sha256": "23278f808cd81d5ada7184a76606b925fb3389c60e1077b2cd7da7b1fcf0553c",
       "wheel_verified_against_pypi": true,
       "sources": [
         {
@@ -379,7 +379,7 @@
     {
       "name": "websockets",
       "version": "17.1",
-      "wheel_sha256": "0c863507ada5805517ca6dff1c524dcd42942efe6304dacf06700878398d21a6",
+      "wheel_sha256": "d7b349265fad6244013eecd99df8d83c12bf3013943e431f4fadd5bffc37db42",
       "wheel_verified_against_pypi": true,
       "sources": [
         {
@@ -409,7 +409,7 @@
     {
       "name": "yarl",
       "version": "1.25.1",
-      "wheel_sha256": "c6f117789d22dce188e5754e8bc65b7e6ebf8cb73963b9fa761f672a5883769d",
+      "wheel_sha256": "23bf5b403c879a54964e0feac7285688e04bb220074878d737d331522da0a5bf",
       "wheel_verified_against_pypi": true,
       "sources": [
         {
@@ -454,7 +454,7 @@
     {
       "name": "zeroconf",
       "version": "0.151.3",
-      "wheel_sha256": "bbd2b73902a44426080190d653fa35638a93b6c6725c2be76888b4b614bc0b48",
+      "wheel_sha256": "702f94d6d1a61c01ab68dd3a6e7a0ee9128302d1f79683707e92e9dab46a8e21",
       "wheel_verified_against_pypi": true,
       "sources": [
         {

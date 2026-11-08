@@ -62,12 +62,25 @@ jobs:
           cd "$RUNNER_TEMP"
           tar --sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner -cf - vibecast-sources | gzip -n > vibecast-vendored-source.tar.gz
           sha256sum vibecast-vendored-source.tar.gz > vibecast-vendored-source.tar.gz.sha256
+      - name: Collect and verify pinned Python source distributions
+        run: |
+          python3 tools/python_source_inventory.py \
+            config/container-linux-x86_64-cp315.wheels.json \
+            "$RUNNER_TEMP/python-source-references.json" \
+            --source-archive "$RUNNER_TEMP/container-python-sources.zip"
+          python3 -c 'import json,sys; a=json.load(open(sys.argv[1])); b=json.load(open(sys.argv[2])); a["source_archives_downloaded"]=True; assert a == b' \
+            config/container-python-source-references.json \
+            "$RUNNER_TEMP/python-source-references.json"
+          sha256sum "$RUNNER_TEMP/container-python-sources.zip" \
+            > "$RUNNER_TEMP/container-python-sources.zip.sha256"
       - uses: actions/upload-artifact@v7
         with:
           name: vibecast-source-review-${{ github.sha }}
           path: |
             ${{ runner.temp }}/vibecast-vendored-source.tar.gz
             ${{ runner.temp }}/vibecast-vendored-source.tar.gz.sha256
+            ${{ runner.temp }}/container-python-sources.zip
+            ${{ runner.temp }}/container-python-sources.zip.sha256
           retention-days: 7
           compression-level: 0
           if-no-files-found: error

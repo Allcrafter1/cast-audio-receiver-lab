@@ -82,8 +82,8 @@ class ReviewPackagingTests(unittest.TestCase):
 
     def test_arm64_uses_the_same_versions_with_its_own_artifacts(self):
         config = ROOT / "config"
-        x86 = json.loads((config / "container-linux-x86_64-cp312.wheels.json").read_text())
-        arm = json.loads((config / "container-linux-aarch64-cp312.wheels.json").read_text())
+        x86 = json.loads((config / "container-linux-x86_64-cp315.wheels.json").read_text())
+        arm = json.loads((config / "container-linux-aarch64-cp315.wheels.json").read_text())
         self.assertEqual({p["name"]: p["version"] for p in x86},
                          {p["name"]: p["version"] for p in arm})
         for wheel in arm:

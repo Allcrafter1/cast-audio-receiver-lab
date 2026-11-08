@@ -1,6 +1,6 @@
 # Two Cast identities, one audio receiver
 
-The `0.7.0-dev3` candidate gives each desktop-managed output two stable Cast
+Starting with `0.8.0-dev1`, each managed output has two stable Cast
 identities. This is the product implementation of the successful
 [PR #18 capability investigation](youtube-capability-lab.md), not the silent
 research receiver. It applies to every registered output, including local mpv,
@@ -90,21 +90,21 @@ without changing their IDs or subtype policies.
   output is checked locally; this is not a new audible Sonos hardware test.
   Contributor-confirmed hardware scope remains in [network outputs](network-outputs.md).
 
-## Candidate validation and release boundary
+## Validation and release boundary
 
 Behavior tests cover per-endpoint UUID/capability/availability replies,
 shared volume and status, Speaker → Video → Speaker takeover, rejection of a
 wrong-app launch, stale media commands/disconnects, legacy explicit launches,
 unique connection IDs, socket cleanup and mDNS refresh/goodbye policy.
 
-The Linux candidate is installed on the test laptop with a retained rollback
+The pre-release candidate was installed on the test laptop with a retained rollback
 container. On-wire checks verify all four endpoint profiles for local mpv and
 AirPlay. Real Android playback/transition observations are recorded in
 [TESTING.md](TESTING.md); silent lab LOAD acceptance is kept separate from
 actual decoder playback and listener-confirmed sound.
 
 The cumulative frontend source patch, source lock, Containerfile and CI recipe
-describe the same candidate. The local wheel is checked for completeness and
-absence of historical receiver modules. Public multiarchitecture image builds,
-registry publication and Home Assistant store promotion are separate release
-steps; the test deployment does not perform them.
+describe the same release source. The local wheel is checked for completeness
+and absence of historical receiver modules. Public multiarchitecture image
+builds and registry readback are release gates, not inferred from the laptop
+deployment.

@@ -26,14 +26,14 @@
       "sha256": "45159025691832219fd632180dc62e6899695e910fa2e2f42b124b43086ab22d"
     },
     {
-      "bytes": 4697,
+      "bytes": 5027,
       "path": ".github/workflows/ci.yml",
-      "sha256": "6ccdf5c48f2df12b85a4464c7e91f4c6cb764175fb39560e58d07441c7e1afa4"
+      "sha256": "c19875ef4c84ded7e2bdb844b0f3275833899daf2753f6dc1a3d6b28fc320f52"
     },
     {
-      "bytes": 6663,
+      "bytes": 6799,
       "path": ".github/workflows/publish-image.yml",
-      "sha256": "1839c77ff602bccda1ebda36f8b5847446db996ec466889dd9d66adad412be28"
+      "sha256": "b5d43640112e3e8350376b69474cd18fe385eacfb9952ec83aee5cc5a7208423"
     },
     {
       "bytes": 2033,
@@ -41,19 +41,19 @@
       "sha256": "ad54ccaa7d5dd123f0d884b236b8430fa27ab1ec4484bd3a43e559091044df61"
     },
     {
-      "bytes": 2241,
+      "bytes": 2247,
       "path": ".github/workflows/release.yml",
-      "sha256": "fc87dde535d4794a161022446ec381af47f48fa76e3dcdc69bc445529d9ef6a2"
+      "sha256": "67fdee10c822c7ee7351e2d0bb610b74c7fbb31ccb05060a16c34694e4c3ea15"
     },
     {
-      "bytes": 3298,
+      "bytes": 4171,
       "path": ".github/workflows/source-review.yml",
-      "sha256": "44cd58cd3727132739efc3a04e7c856b4756f4e71fb20d2d160ee2ff9b02b42d"
+      "sha256": "5fbaf1b90360b466367028835511e77883257da3b182ea73c794d02591981a37"
     },
     {
-      "bytes": 2475,
+      "bytes": 2635,
       "path": ".github/workflows/upstream-watch.yml",
-      "sha256": "1f16072845a6e445b0d5932454b64de5661b3d1eb11840c9e25bcd0dfaefd88c"
+      "sha256": "0641ea7df4f7130e71cc5ab65f19e270374a7a6c26ecef1621beb32d889f1ff1"
     },
     {
       "bytes": 224,
@@ -61,9 +61,9 @@
       "sha256": "57d61edc4a7b995c3d99fdf77e29ee7b3252576491e697c682682051c96b054b"
     },
     {
-      "bytes": 52681,
+      "bytes": 67816,
       "path": "CHANGELOG.md",
-      "sha256": "0b2c21348a9bd9342a3c2e6521188ef86d3f0ec5b5c710019a70c857de78b92b"
+      "sha256": "9a963fe8490b9ebdd28b993968db8c30a50a85e20f28666d5ca3472568603d03"
     },
     {
       "bytes": 3104,
@@ -71,9 +71,9 @@
       "sha256": "d582d78ea256d6623e963ad170fa360240e172cbfcc6650c2b72c7cf0b7146ad"
     },
     {
-      "bytes": 4912,
+      "bytes": 5240,
       "path": "Containerfile",
-      "sha256": "05a62184f64e8fdd7b550a6e3920af4897625b16fa37a837a6a210d21b350aed"
+      "sha256": "55e49ec69cff787736b3801dbb171f7d7588965e6b48c9826edd4f5686516514"
     },
     {
       "bytes": 16726,
@@ -81,14 +81,14 @@
       "sha256": "3f3d9e0024b1921b067d6f7f88deb4a60cbe7a78e76c64e3f1d7fc3b779b9d04"
     },
     {
-      "bytes": 3505,
+      "bytes": 3776,
       "path": "LICENSING.md",
-      "sha256": "2e5f17fdff2875a5d2fca177e7903af71c0b9a6a687e26ed4435c30329218908"
+      "sha256": "5377f3b281fdbbc944e45af8fde20cc42433efbde88db058dbbb128fbebb5a42"
     },
     {
-      "bytes": 8896,
+      "bytes": 12039,
       "path": "README.md",
-      "sha256": "06751d33084d5e69b25113e96eae2662660382176dd3aafcfaecc3b894333b40"
+      "sha256": "e3b583834ef2ea1bb4839f1b6544c467d50096d15963ba15a3f6338016d90894"
     },
     {
       "bytes": 1140,
@@ -96,14 +96,14 @@
       "sha256": "5d26ecdc051fa36d5c36445c1010e8a8d68d71554d646ed143dcaedebc31c4f7"
     },
     {
-      "bytes": 10714,
+      "bytes": 11432,
       "path": "THIRD_PARTY_NOTICES.md",
-      "sha256": "654d3242d8c57ce519ccab9051e153ecc04c9f2afe52fe6dfe678dc00eaf3118"
+      "sha256": "d6dfc7208ee89b8f715692b321c312c48c735ca0d86fb97c48bce3e8b34acfd6"
     },
     {
-      "bytes": 10645,
+      "bytes": 12693,
       "path": "cast-audio-receiver/CHANGELOG.md",
-      "sha256": "f2a57e356c590d8d0eb9b0be40bdcb3d7c5d9339477837ec75efeb99bca9eef8"
+      "sha256": "e2aa810064fea196ac1a1406683e098602f26a17e9d0f09834ef6afca5a63b4e"
     },
     {
       "bytes": 3464,
@@ -116,9 +116,9 @@
       "sha256": "b3b2794ca51d6f9b172c61a94e587c8d29e91d15e2b0ddfaca21772b8da276ab"
     },
     {
-      "bytes": 744,
+      "bytes": 752,
       "path": "cast-audio-receiver/config.yaml",
-      "sha256": "80cff80107cba6234b12f5491271d453d5274e565cc48b75daa4b6e28776f008"
+      "sha256": "35e953e4eae0bf0aa32300843a97f86fdee59d5d50fe81384b2519dd776880db"
     },
     {
       "bytes": 3957,
@@ -133,12 +133,12 @@
     {
       "bytes": 711,
       "path": "config/airplay-native-source-evidence.json",
-      "sha256": "3d5bd0efaa20b56b1b7e3bf7498bd79904468cb6453728a7a0395e9885788b02"
+      "sha256": "1d7afae7bd50d8c96b1d7c892f7da7ecfff465a274da7e2c3a5a79e1eaa8287e"
     },
     {
       "bytes": 526,
       "path": "config/airplay-source-artifact.json",
-      "sha256": "d5522abeced2b2feaef62d85768d2694017aec7bb9d094001ca1866e35f2ec62"
+      "sha256": "43d9132ed4d7ba7cb939cf580f9bfd7a862f39d8988f2375cfe978340ea79b12"
     },
     {
       "bytes": 562,
@@ -146,9 +146,9 @@
       "sha256": "4c508372284f0333d652f783608de747dbc262e7f7f1874fe00bb55930dae167"
     },
     {
-      "bytes": 502,
+      "bytes": 490,
       "path": "config/cliairplay-linux-aarch64.lock.json",
-      "sha256": "f07d5677660d3ff7d56f10c7f02f486dd63a4f37655a3a60fb3b0b20b7cfcf85"
+      "sha256": "b67b9080f4070c9464a0e52e9e23b3277cd595747970c49df585abc893ace6d8"
     },
     {
       "bytes": 440,
@@ -156,44 +156,44 @@
       "sha256": "4932552a9339770c97f7be9d198feb145e05185c87d84d11283de5774d875050"
     },
     {
-      "bytes": 468,
+      "bytes": 489,
       "path": "config/cliairplay-linux-x86_64.lock.json",
-      "sha256": "a74d08e1c38711f0e3f3253d76549da7170936373a6ddeb8668773b92fe7650f"
+      "sha256": "2559b4b267889e4fd8ac6d74d4ccee70f096b2f9931c499c533c73a1a5295900"
     },
     {
       "bytes": 245,
-      "path": "config/container-build-cp312.lock.txt",
+      "path": "config/container-build-cp315.lock.txt",
       "sha256": "c1ebca5df11f60e444ca0eb4c66d21e85ef14844587abc2126ca5c991025d3f5"
     },
     {
       "bytes": 427,
-      "path": "config/container-build-cp312.wheels.json",
+      "path": "config/container-build-cp315.wheels.json",
       "sha256": "93fb56411edd7298a7d98b02cab3223548c252f7bec52016eee1f1ba08485d91"
     },
     {
-      "bytes": 3132,
-      "path": "config/container-linux-aarch64-cp312.lock.txt",
-      "sha256": "1c0f717e883afda2fe1b1633a6ca7d87390de4cad8c5a80bdf4ce94c48ff0f87"
+      "bytes": 2992,
+      "path": "config/container-linux-aarch64-cp315.lock.txt",
+      "sha256": "3adb574be43229af7e0df1625de1968ce99beabdc8353ee4cf27768c0d5a3ddf"
     },
     {
-      "bytes": 7560,
-      "path": "config/container-linux-aarch64-cp312.wheels.json",
-      "sha256": "035d5e230638fc2523b7fb5ef85c955517c1ad491a7c79caaf3c1dbb232283d6"
+      "bytes": 7471,
+      "path": "config/container-linux-aarch64-cp315.wheels.json",
+      "sha256": "2104929125b278be917e4ade27294d53a04e1ccc38936601e0dbe721a8b1f3ca"
     },
     {
-      "bytes": 3158,
-      "path": "config/container-linux-x86_64-cp312.lock.txt",
-      "sha256": "5e7481c883037520d9d58a4946b63242cf7ca76483a63635d2be10ec6d50f7cb"
+      "bytes": 2992,
+      "path": "config/container-linux-x86_64-cp315.lock.txt",
+      "sha256": "b48d67a52851db6f60fe1314266d338c9c6c736048a1ba1bac1914cce09909dd"
     },
     {
-      "bytes": 7500,
-      "path": "config/container-linux-x86_64-cp312.wheels.json",
-      "sha256": "1eb8144d635bb43f2b2cd401741277acf2c40ea8845bbc4a3dbcedacdbaec311"
+      "bytes": 7439,
+      "path": "config/container-linux-x86_64-cp315.wheels.json",
+      "sha256": "94a3f864df1cdb1e4e3a5aaccf3cac7b8ca310e62d91d983f39d202615b95dee"
     },
     {
       "bytes": 18554,
       "path": "config/container-python-source-references.json",
-      "sha256": "9e3364d0efeee0808c5c1a71c784aa47f9495b4d4534865b264a8cb5e565ae0b"
+      "sha256": "897df49c05a4bc1029f9c545ece1cc15d86010a54147dd491e16001f46ecd935"
     },
     {
       "bytes": 1780,
@@ -261,9 +261,14 @@
       "sha256": "5c9bb649c499dc8f7b217ad18267d839273803c6bfdab49f9ef87014006060de"
     },
     {
-      "bytes": 1144,
+      "bytes": 1485,
       "path": "config/vibecast-frontend.lock.json",
-      "sha256": "a3795e85f367a1889e04518580ceb289f5be54b75caffdba1da5b47b6e9b61e7"
+      "sha256": "64b53a30bc792408bca3230e013b91b986f90e075a6a82b4777db478725d0b49"
+    },
+    {
+      "bytes": 452,
+      "path": "config/vibecast-upstream-review.json",
+      "sha256": "de44e66fef1386d67838c91403fa592f5ec051c48d0a130d10a600cbd0387c05"
     },
     {
       "bytes": 134,
@@ -288,17 +293,17 @@
     {
       "bytes": 7810,
       "path": "docs/RELEASE-CHECKLIST.md",
-      "sha256": "3cd8de0a123e9eeddbb4f6824b66347dd362d734f4085b358ed2fe6526744f43"
+      "sha256": "2b2c362b9a872a0caab26fdd964c429ca9ed21578c378898f45f9912ce3eca50"
     },
     {
-      "bytes": 8678,
+      "bytes": 26560,
       "path": "docs/TESTING.md",
-      "sha256": "e23a00b7a392aa4b072905e707510d91a413a14b18b66761044f324f8cf4edac"
+      "sha256": "8e4824ce1913071675914bc1f6172baca40cdeaf3d05c0cd61d51ad963800eed"
     },
     {
-      "bytes": 221915,
+      "bytes": 314585,
       "path": "docs/WORKING-PLAN.md",
-      "sha256": "c0b8a5ace9ed0f6949d5ca401415c45e1122a2bc70c07bd3c3023d92a5c253af"
+      "sha256": "81fb6a690951d480098498a575e77845281409a585628cd13f2fb15ff297a553"
     },
     {
       "bytes": 4535,
@@ -311,9 +316,9 @@
       "sha256": "8ec247d94dff75c2e54892e29ea49a7993af00e7bf55e59d0975fc8124f473ba"
     },
     {
-      "bytes": 4915,
+      "bytes": 5001,
       "path": "docs/airplay-native-source-audit.md",
-      "sha256": "50a23b82852eeaec8f76ab429f70b64851fc9972e64ab15a961f208e72aa11de"
+      "sha256": "5c7357b27c77cad9798fa1fd94b28bf7e274217d46be1dc60e00d2acf25c7f33"
     },
     {
       "bytes": 2864,
@@ -331,9 +336,9 @@
       "sha256": "e519a03063840b345600cfbce3aa05d702c3ea8a528f65a6e60c252f1d6cfbe7"
     },
     {
-      "bytes": 5378,
+      "bytes": 5753,
       "path": "docs/architecture-current.md",
-      "sha256": "640d93c0c4bc87dcfe44816d13d98a8bb108c7945ecc9d3b6a32100501116222"
+      "sha256": "a86ea00a858c199debbda3b794432ba37c17a707c5565ab50323042f1b161e6f"
     },
     {
       "bytes": 7424,
@@ -386,9 +391,9 @@
       "sha256": "d769a4f83d828e89791da51bd99c8d1058b8e2f5211769712d739ca6e73868f2"
     },
     {
-      "bytes": 2022,
+      "bytes": 2249,
       "path": "docs/build-vendored-vibecast.md",
-      "sha256": "f860f4455d86f47b77e8b7c446a28d2c31ba637c21082c3a1c0aa03b9e1af8a7"
+      "sha256": "7b97a6e0834775b88daaf7cb86dd9eb38c2171dbe7c6c1340ef8827a888d30a5"
     },
     {
       "bytes": 4522,
@@ -451,9 +456,9 @@
       "sha256": "8a0b75c72ac6ed06353557369de8c007ae74fa4f915c821836cafa246b2ad440"
     },
     {
-      "bytes": 3989,
+      "bytes": 4116,
       "path": "docs/dependency-locks.md",
-      "sha256": "189fe9ec74328d926eebd29d2c04158a053cb8d7f975e7b66fce359b1958498d"
+      "sha256": "d637dd4b5018b106428aa5914733455894d8e92bf4f6feed7e93c9ee30226129"
     },
     {
       "bytes": 3474,
@@ -464,6 +469,11 @@
       "bytes": 4094,
       "path": "docs/dmr-metadata-dev5.md",
       "sha256": "8f803c34b8985ddb562e183f30ddb96223387d0423bd214097bb06cf81da16d9"
+    },
+    {
+      "bytes": 6976,
+      "path": "docs/dual-cast-identities.md",
+      "sha256": "3cf0b0bf6c47b8b8fd08019ae6fedd343d1f171ff3120d4a3897ad97564648d5"
     },
     {
       "bytes": 3998,
@@ -486,9 +496,9 @@
       "sha256": "1467273611d5349ef4515df756bbb447b68c8139387690b29f885afc266b088e"
     },
     {
-      "bytes": 5552,
+      "bytes": 5940,
       "path": "docs/installation.md",
-      "sha256": "577efc79162e2b759616cb6b64010ba757dcc32ea2369bd9ee80051c6f1900ef"
+      "sha256": "64d1f1271a2826fe9ab4d222bde119998923bbf6048503832df8c2a9d833d4c7"
     },
     {
       "bytes": 4635,
@@ -506,9 +516,9 @@
       "sha256": "9da62aaabc1e331a1e5b17f65d886dcb9cc681a50881f2e65ea5de787b7bd51c"
     },
     {
-      "bytes": 14209,
+      "bytes": 14680,
       "path": "docs/maintenance.md",
-      "sha256": "40452707274c7bf50c253371cace4f2d46ddba747d43b0684e2186680319ade8"
+      "sha256": "8ddef5fd8a59ca36f3b85052426d7e124cbafeb2dd304eb6238e46f9d1b9ca73"
     },
     {
       "bytes": 3148,
@@ -516,14 +526,14 @@
       "sha256": "5d7f099c9309d9ab9bea7d528f1b053c7e7bf26eeeef43b4fc7145878335b16d"
     },
     {
-      "bytes": 1954,
+      "bytes": 8915,
       "path": "docs/network-outputs.md",
-      "sha256": "9268ecfd63d5be1f235c924316696d76dcb6737524a4de8dcf5b4e0572ca0c23"
+      "sha256": "ccd441434866575f1f84c1f027b820bf73f874c97abaca43acf9b1e0a0731b24"
     },
     {
-      "bytes": 4888,
+      "bytes": 5021,
       "path": "docs/packaging.md",
-      "sha256": "fc9bfa93f60808fe301ad030d133dfea3642cc0e40c404827c2a08e5e4b24c3a"
+      "sha256": "8e2f1ec11f11836b272fdfaffa5406a61a630f159ce3b1df2f0af3dd98d6cf25"
     },
     {
       "bytes": 5768,
@@ -566,14 +576,14 @@
       "sha256": "acd7c789bda32a9ae3990064d33bd8fc835fbdc094699bb7117f203fc0b182de"
     },
     {
-      "bytes": 3795,
+      "bytes": 3891,
       "path": "docs/source-delivery.md",
-      "sha256": "a22b563e300012ee5778e6f95aadd1f88b049f6cb0212e38e2bd6cba5da15c01"
+      "sha256": "271d71966c87c5a0a2dafaed00e1fc7573864f9d9149dcb2cb37138ddf56e64a"
     },
     {
-      "bytes": 9258,
+      "bytes": 15559,
       "path": "docs/source-reconstruction.md",
-      "sha256": "35d64c90ddd053f011fe3fac337a799c390711d8dfa095359cc257d70314676e"
+      "sha256": "df8afa37730ec270fd0ff39c92d44506b1b00df626ac29672568f1810c50f79b"
     },
     {
       "bytes": 5071,
@@ -586,14 +596,54 @@
       "sha256": "f9bf5aa788a4a87510382e07064de4d5ad0d4651096647078e1e235bf233f750"
     },
     {
-      "bytes": 5679,
+      "bytes": 9740,
+      "path": "docs/tunein-receiver.md",
+      "sha256": "9b097a4aced7a88217d9b2608bf92a0642a708131eecdb1cb8c604842f9cb5c5"
+    },
+    {
+      "bytes": 7713,
+      "path": "docs/upstream-review-20261108.md",
+      "sha256": "fd5d9af3da6b928cdaadea95f8b3c8602ddd60d0615c4750e20aa495eb29907b"
+    },
+    {
+      "bytes": 5921,
       "path": "docs/vibecast-audio-frontend.md",
-      "sha256": "b047a8bbfa34348e1b1184944149e99c07c2072458cf5e12e1eb57919626aa6e"
+      "sha256": "1226117cbf76cefd2d5eb51f230e2ff27f1fd73110a1836dad0195d4eed203a9"
+    },
+    {
+      "bytes": 25549,
+      "path": "docs/youtube-capability-lab.md",
+      "sha256": "f79441b8197f220dabb5cd817defce066c65b0afce051fffd83d97054d11557c"
+    },
+    {
+      "bytes": 22723,
+      "path": "docs/youtube-capability-paired-20261108.json",
+      "sha256": "d3123684f509694717f72d2e49dc624151f76d00af4943f76a56709a9c5f2c70"
+    },
+    {
+      "bytes": 3937,
+      "path": "docs/youtube-capability-paired-20261108.md",
+      "sha256": "71d69f1915f6ae69f2f5bb92765a38c1b2bdc60c0a7bb6f52dc8c2472e2c89f1"
+    },
+    {
+      "bytes": 24084,
+      "path": "docs/youtube-capability-results-20261108.json",
+      "sha256": "600a68f67925866e618e01b7647b4dca94a5fd70f2296ef0496f42ced73bc300"
+    },
+    {
+      "bytes": 5051,
+      "path": "docs/youtube-capability-results-20261108.md",
+      "sha256": "e14919c77a53e166a4b484cfa3d614997027d15257d97cd924d354ea58170a7c"
     },
     {
       "bytes": 4798,
       "path": "docs/youtube-ctt-dev27.md",
       "sha256": "8790c235bc79a45eedba5d8336820a6894fb92ac4fed54fea110c0925d87c14c"
+    },
+    {
+      "bytes": 43161,
+      "path": "docs/youtube-discovery-pr18.md",
+      "sha256": "5d41397b4489d35e0546c7e6270d9e97de988b6f453befb66d637a344b21a901"
     },
     {
       "bytes": 23871,
@@ -606,9 +656,9 @@
       "sha256": "a1aebf4f3c685521be1efe8ca615a060075c78349776d54f146d363ca08a5ed2"
     },
     {
-      "bytes": 6761,
+      "bytes": 8256,
       "path": "docs/youtube-repeat.md",
-      "sha256": "3889d0f6432de04119a7fd98522a567542528f0b70bc9c71925792854b2b74eb"
+      "sha256": "049d2cee5523ce09bc6c229c36d826f39af8a3fcab46400883111023b28d9df6"
     },
     {
       "bytes": 1657,
@@ -649,6 +699,16 @@
       "bytes": 670,
       "path": "licenses/libraop-upstream-statement.txt",
       "sha256": "771de73e572996e842c28e976b486c0efa86c1566f69ae34d6b3e403277f8f1a"
+    },
+    {
+      "bytes": 10857,
+      "path": "licenses/mdns-sd-APACHE.txt",
+      "sha256": "1118360170ac75117538c65db992cfec5d0ffa28a6b990e46ab45602b638c8fd"
+    },
+    {
+      "bytes": 1091,
+      "path": "licenses/mdns-sd-MIT.txt",
+      "sha256": "cf0547f95d22b91b11540bc053d4973ad8beed39f98b614254c074ca4ed6b6af"
     },
     {
       "bytes": 553,
@@ -701,6 +761,16 @@
       "sha256": "3d4119abefbeff18a0f86b90a4252cafa7a3341ce136c8fd4c6103a6a5e62204"
     },
     {
+      "bytes": 1664944,
+      "path": "patches/vibecast-0.7.0.dev2-current.patch",
+      "sha256": "293cba6b4efdc8fee245e7bb7601adf590223e3c1948bdda2270dbf5b0655c55"
+    },
+    {
+      "bytes": 1671425,
+      "path": "patches/vibecast-0.7.0.dev3-current.patch",
+      "sha256": "4dbaa7f90f43348181c7af16cb8d64da598d25d09682a1b6d0c9d1640cc5c323"
+    },
+    {
       "bytes": 1818,
       "path": "patches/vibecast-after-0.5.0-installation-id.patch",
       "sha256": "c2b45cb4676b6976780411e9124ef80d8c073a4f2836fb1d61bb6e4a792ee1c4"
@@ -709,6 +779,11 @@
       "bytes": 2960,
       "path": "patches/vibecast-after-dev5-audio-category.patch",
       "sha256": "c2f37257566f588d37e4527fbedde24c6c2100c739855685ba842e619d433ceb"
+    },
+    {
+      "bytes": 1930,
+      "path": "patches/vibecast-android-diagnostics-20261108.patch",
+      "sha256": "bd4a186db30196391e6c520937d219dd1121be2ed6bcea2a27fe5ac43ff5fd14"
     },
     {
       "bytes": 17324,
@@ -816,9 +891,34 @@
       "sha256": "3a4cc9cd3326d96ec92bd599fc3745d3cfca1f92c1310be39b0e4ac0b5348499"
     },
     {
+      "bytes": 629240,
+      "path": "patches/vibecast-mdns-app-discovery-20261108.patch",
+      "sha256": "c4e6f2da1440a5b11cf08561d4ed49fa440261fa3192b6d8d839b455de0b91da"
+    },
+    {
+      "bytes": 4850,
+      "path": "patches/vibecast-output-volume-integration-20261107.patch",
+      "sha256": "23d18dda663e8793ed80eb7a0eee48ef333b1b335bf2e9562d52d0ae5d0518b9"
+    },
+    {
+      "bytes": 52330,
+      "path": "patches/vibecast-owner-continuity-review-20261107.patch",
+      "sha256": "e6c448bb116af04dc757f8c4276b74e93ab6748edb5f174a2e081cd386c65afd"
+    },
+    {
+      "bytes": 207993,
+      "path": "patches/vibecast-playback-coordination-review-20261107.patch",
+      "sha256": "138c993cf70dba91cd40b8c6cd0335d8f16ca013e015e08f992058704d93834c"
+    },
+    {
       "bytes": 4558,
       "path": "patches/vibecast-responsive-controls.patch",
       "sha256": "59198545dd4c781f13f79dc0dce60d538fbe288d1179fd50ead74d07b39f352c"
+    },
+    {
+      "bytes": 162085,
+      "path": "patches/vibecast-seek-priority-review-20261107.patch",
+      "sha256": "a5806a0caec192f8ac8998875dc54b3d0e81a4dda5af2df8bf0558146bb3da0a"
     },
     {
       "bytes": 9561,
@@ -826,14 +926,54 @@
       "sha256": "c32b80bef4564eb8dd2328dd4ac6185fc57beb64d149767d6fc32a10b8fe65a1"
     },
     {
+      "bytes": 9687,
+      "path": "patches/vibecast-speaker-discovery-review-20261107.patch",
+      "sha256": "79361f203dc91da0ecbca59ddeeaea6c0157f95dc47d590b58ec49e73b2219c5"
+    },
+    {
+      "bytes": 2364,
+      "path": "patches/vibecast-tunein-autostart-20261107.patch",
+      "sha256": "094d88e1655163423eec47af347f35d8decd85fa06dfd759cda3cb59b500b5af"
+    },
+    {
+      "bytes": 39908,
+      "path": "patches/vibecast-tunein-receiver.patch",
+      "sha256": "5a2134c30763fd25ddef510e4665fca3a0e6f16017077ee90e6694ca2fc92847"
+    },
+    {
+      "bytes": 251842,
+      "path": "patches/vibecast-tunein-review-20261107.patch",
+      "sha256": "6556f01e6dcfc13ce67ef1ca491f7f52551faeb204ca64e0a919ff8160c27c49"
+    },
+    {
+      "bytes": 143483,
+      "path": "patches/vibecast-web-volume-review-20261107.patch",
+      "sha256": "614027cc680fe1e3e98c8d29e944da7394465ff97c247fb09d848567d5010b66"
+    },
+    {
+      "bytes": 39811,
+      "path": "patches/vibecast-youtube-controls-review-20261108.patch",
+      "sha256": "5c523656dc80a1d6241262813ee737bfa109274a5bdbbaadc8618f4cd447c1bf"
+    },
+    {
+      "bytes": 9363,
+      "path": "patches/vibecast-youtube-dual-identity-lab-20261108.patch",
+      "sha256": "e38f8e58d5296775b075d0a7cc42445787518e6d6826d0fb8e1d656d22328e99"
+    },
+    {
       "bytes": 4758,
       "path": "patches/vibecast-youtube-hls-experiment.patch",
       "sha256": "2394ffda1aeedb74c2730817dbe0e7b6dd991dd6551b3c1283fc7ca4554d7ec7"
     },
     {
-      "bytes": 1304,
+      "bytes": 24340,
+      "path": "patches/vibecast-youtube-lifecycle-review-20261107.patch",
+      "sha256": "7875e3c35707b05123e2ae015866fc6051585345e8d689d140500a7a2268a3f1"
+    },
+    {
+      "bytes": 1324,
       "path": "pyproject.toml",
-      "sha256": "6daaf4c0dc5eb8001df8a54c59bb0ca0a3dca939c6732a15e0d18feef7c13cc4"
+      "sha256": "b073ecb875660f9f2bb453dd18a27e92cb7081ae261c76e58ac048e01a8c6913"
     },
     {
       "bytes": 114,
@@ -898,7 +1038,7 @@
     {
       "bytes": 112,
       "path": "src/cast_audio_lab/__init__.py",
-      "sha256": "7e35685cdc11b2f2feda175816f1df1d02c01e5d3e5aaf193fdf5c3c0b971a5d"
+      "sha256": "d7d03bf1c15bbfe744891e8ccae7c1b05aaed0a7439b69fca7ac8962fe18733d"
     },
     {
       "bytes": 153,
@@ -906,9 +1046,9 @@
       "sha256": "abdaaa5504b74e7650c9c6cd41827ab384c68973448131ee8867fce63597a5de"
     },
     {
-      "bytes": 48269,
+      "bytes": 51953,
       "path": "src/cast_audio_lab/airplay.py",
-      "sha256": "a7ffd361836a7d08104d716857c11de304552bf74d97063cc203aa112eebf635"
+      "sha256": "5596fca8ae598ea57926427d13a35f5a1f0398457994c95ea6f7fbb6746c21c4"
     },
     {
       "bytes": 6861,
@@ -926,9 +1066,9 @@
       "sha256": "d8baeef2c3ecee983d4131341d48c5372a1891ce1c0c4765c60236e9aa616467"
     },
     {
-      "bytes": 10007,
+      "bytes": 11500,
       "path": "src/cast_audio_lab/backend.py",
-      "sha256": "7ada3956bd060ca6667f565afed6c78080836a9dcda58b7dce036a945249c3b6"
+      "sha256": "36cded520683d3a8c4c8fbfad5b4025d36d34fd8232ae4682c213c8e2f25ce53"
     },
     {
       "bytes": 6432,
@@ -956,9 +1096,9 @@
       "sha256": "2a8edc6897c5763c97c25762cf248f3926b6725550d9a736b358ffcf87a62d51"
     },
     {
-      "bytes": 10649,
+      "bytes": 11040,
       "path": "src/cast_audio_lab/dlna.py",
-      "sha256": "8a1276c9497ff563f35ffe9cbf584bd93cb2ecf473dd6bde74250e495a335e47"
+      "sha256": "77c34151256b802b642798ff501347c18e4464f8bd701d35958c13f0b64131fb"
     },
     {
       "bytes": 3562,
@@ -966,19 +1106,19 @@
       "sha256": "9775fc2c965ab4fe9871e434f5a4198ab4c2257859b288332d679d2281074cbc"
     },
     {
-      "bytes": 6912,
+      "bytes": 7372,
       "path": "src/cast_audio_lab/dlna_media.py",
-      "sha256": "433bb7f17ee6361707bb400adb9b17c7e17504064d69a72d661fd2629fcbf448"
+      "sha256": "a0d9c829c03b7966ea56a9a36df2f2bc21d8730c03ec8b3da36448b403bc26a9"
     },
     {
-      "bytes": 19145,
+      "bytes": 19918,
       "path": "src/cast_audio_lab/management.py",
-      "sha256": "20e5b4bbec8b76fa1cdf8ea027c1bad39cd9c66f0b12566aa06fe357fb7a901e"
+      "sha256": "f62a92e3bb4b7566562cd6ccbf2e5527a7bac28d80f923a135dcc43e03907f15"
     },
     {
-      "bytes": 14137,
+      "bytes": 17344,
       "path": "src/cast_audio_lab/mpv_backend.py",
-      "sha256": "1dd1855a6176b2c9947d6de2d7c4f76fa480535f8c326592a30955f67cfb6c7d"
+      "sha256": "dbefc34e990399537fdc5945747d77f58bf6f8806a2c411341daa0cc4ffa8067"
     },
     {
       "bytes": 9153,
@@ -986,9 +1126,9 @@
       "sha256": "0eb68048e2cc4c9b18ff03512d6e81c9554039a321ea774382bcadcc647815b8"
     },
     {
-      "bytes": 13676,
+      "bytes": 16335,
       "path": "src/cast_audio_lab/route_manager.py",
-      "sha256": "8f8a7f6e5cf39c725b33b924eb3d8628f7c98c89947faa52c63f81c2ec1880bc"
+      "sha256": "b6229c5c13a35e9821c80bf6e80171643f5758a8c9bd791221c6b840dee65e91"
     },
     {
       "bytes": 5070,
@@ -1001,19 +1141,24 @@
       "sha256": "b4fc06b98d3e68c06a352a7296f8b77c6a82db641c91e0b53cbffbbd684c84ce"
     },
     {
-      "bytes": 5966,
+      "bytes": 4620,
+      "path": "src/cast_audio_lab/settings_ipc.py",
+      "sha256": "dac6b76fc49cb90a862d930908246951cd5654166d974c1fb2b83fceec70df11"
+    },
+    {
+      "bytes": 14266,
       "path": "src/cast_audio_lab/sonos.py",
-      "sha256": "a6c4277ca7588d10a34657722b98b80dedeec1c77ca6330fcd6f2f10c911e9be"
+      "sha256": "f1737de1f3b47b360e7791bcf2cc51dddabd9ab92b4aa81645575b4b218e3c82"
     },
     {
-      "bytes": 23543,
+      "bytes": 25892,
       "path": "src/cast_audio_lab/vibecast_player.py",
-      "sha256": "6834684181fe49da72d2b098a747ca71f64271995c79354981a5a9e5a3612083"
+      "sha256": "2ee13cfd48eb8c895ae745191bc13490661e36c60ca77590dfc25dc3a74201ff"
     },
     {
-      "bytes": 16427,
+      "bytes": 20673,
       "path": "src/cast_audio_lab/web/app.js",
-      "sha256": "424889a559aebe23691c7b4080f2994e88c27e6d18a9dcbe7ee97289809a4bf6"
+      "sha256": "a0c3b5e269ad846ba35edfaa4ae42e19623daf7b4190810412e4d48432024d2a"
     },
     {
       "bytes": 324,
@@ -1026,9 +1171,9 @@
       "sha256": "9f3dc23256259dc8bd814111372d500df2f3235f3db39fb999a827a8bd46c7d9"
     },
     {
-      "bytes": 2596,
+      "bytes": 2926,
       "path": "src/cast_audio_lab/web/style.css",
-      "sha256": "ee71d5ec1e7a654cba46f2f4cb99470bca01d9fd2697b235a7652cf8f9811e1e"
+      "sha256": "7c402a33a04d0c5a2ccbb8ea8c778ee86a5fc9c3f2de8711d874e96855f7c15d"
     },
     {
       "bytes": 8823,
@@ -1069,6 +1214,16 @@
       "bytes": 2992,
       "path": "tests/test_airplay_source_package.py",
       "sha256": "06a8ced6db8434c915d22c4c8f0eaef04a4037fb27c6966f7b4b5a188d53f645"
+    },
+    {
+      "bytes": 9695,
+      "path": "tests/test_airplay_starvation.py",
+      "sha256": "e6ecb278e65a8dffab6541001dcdc278c59cf4e2e0c8093a972068f47a33249d"
+    },
+    {
+      "bytes": 9959,
+      "path": "tests/test_app_settings.py",
+      "sha256": "70761c2b8830d964d06a43912535fca0f5470786382ca9ecf894af3ab1e9ecc4"
     },
     {
       "bytes": 5823,
@@ -1156,9 +1311,9 @@
       "sha256": "c9137b4f1f5b272e0d07036b0b62154cd121767ad78eb161a2d1e5c4ab32f203"
     },
     {
-      "bytes": 5316,
+      "bytes": 10510,
       "path": "tests/test_dlna_media.py",
-      "sha256": "e078c3a78356ab0a1a69963af23567da9afb63b77e0cd626c3bfe823e16e0611"
+      "sha256": "3430c7ad93d96e2be6decc39ce608cd72c5b2a9b0f05430a6fade7cb2404d1db"
     },
     {
       "bytes": 1663,
@@ -1201,9 +1356,9 @@
       "sha256": "bed60d7c839aadff5842ab843f575315cba78cde335a03ebedddf9ff1435f6e3"
     },
     {
-      "bytes": 13989,
+      "bytes": 25108,
       "path": "tests/test_mpv_backend.py",
-      "sha256": "288895c1186149e0f8722c8465b6f5f72987e85e8162d8d8627f7e214831bde0"
+      "sha256": "83a8651e39ab101954900adb89137a0b1b2c396e2cfd61ee22e9f5e375cc522c"
     },
     {
       "bytes": 5628,
@@ -1248,17 +1403,17 @@
     {
       "bytes": 3640,
       "path": "tests/test_python_source_inventory.py",
-      "sha256": "d3cdbb3bbfd068b576097f43d73c2d678ccae6f1c0d7bb831142add33d257690"
+      "sha256": "6a430d135b87c39af10d2a31f26c916eaebb671b3ecb231fb72f237d36ef8301"
     },
     {
-      "bytes": 9053,
+      "bytes": 11447,
       "path": "tests/test_release_automation.py",
-      "sha256": "fccc1bbbce362b8f12804b2630c450abc2d18d5cc1c0eb90c00d67cba18d38ed"
+      "sha256": "68efaa46fc1c917ee34242ba95fcb9e5bd629a640a4ec0cd00b0a53c9f43407d"
     },
     {
-      "bytes": 4350,
+      "bytes": 5072,
       "path": "tests/test_release_records.py",
-      "sha256": "e7d554d3a1345e1a138787d44e9be0cbb90aeb95f390c47b1aa20eac894a1ebc"
+      "sha256": "43b2982629da2a570ea9d0c10afa40d9d2b3f31df11b0d2678f2c93dcc744c1b"
     },
     {
       "bytes": 1385,
@@ -1273,7 +1428,7 @@
     {
       "bytes": 7125,
       "path": "tests/test_review_packaging.py",
-      "sha256": "f4a90bf141f06e5f799fb55f3b6e7b467b4ece503cf9b77e4a5bc18967fc5474"
+      "sha256": "acd4bcc95913e47884277dd802c7c56a41e77459b3a8c162983832e64afab012"
     },
     {
       "bytes": 23556,
@@ -1291,9 +1446,9 @@
       "sha256": "50d2f04cd653657d8fc713061ea466aec6b00d04f836bb06edf30bf9168b968e"
     },
     {
-      "bytes": 4511,
+      "bytes": 10615,
       "path": "tests/test_sonos.py",
-      "sha256": "6a74d1d74564492ee09fe7e2d6356e8ec71045da30970f08ca0e297a38a5fac1"
+      "sha256": "69a169fa53c3262cf8decefafffc5e74ede27563d6c45d05c86dec50962d8749"
     },
     {
       "bytes": 2045,
@@ -1306,14 +1461,19 @@
       "sha256": "f5768f434eb4fe98324da6e40a36b122fddb806f51998b5559bb309307130a6b"
     },
     {
-      "bytes": 19913,
+      "bytes": 22695,
       "path": "tests/test_vibecast_player.py",
-      "sha256": "ff5d068319c5f3665f66da5ad2de9e9538019729bb7b442b558e99a5621da819"
+      "sha256": "1ddb5bfd55418939dea2c1233a901b616ec7b399e053ef6fe524fcd4d5aa5621"
     },
     {
-      "bytes": 3507,
+      "bytes": 14387,
+      "path": "tests/test_volume_policy.py",
+      "sha256": "f2c1c82996a178ab47be78f15adb8c607ae98f2a1a4d70147d4dd382534f2171"
+    },
+    {
+      "bytes": 5882,
       "path": "tests/test_web_requests.py",
-      "sha256": "26e4aed5eea15cbee7919e910d48afc792b8aba253174700c7c893c6ae946af7"
+      "sha256": "6a54f23363ae2b47f8e642aa2ea1dd5a52494ac0fa58ff0210c316c1ddd9d325"
     },
     {
       "bytes": 2424,
@@ -1338,12 +1498,12 @@
     {
       "bytes": 2174,
       "path": "tools/build_airplay_source_candidate.sh",
-      "sha256": "8cb202ae40fafce274612b214d30062fa4f219f65d75246d3459f7243c04b89e"
+      "sha256": "395d032af1de9fd1cc3aa6a7fbe2f7344d352b2c8b22f86b731aff235aa58ed3"
     },
     {
       "bytes": 1515,
       "path": "tools/build_exported_airplay.sh",
-      "sha256": "a9e76493e7263831a5ecac5e08cba6cc917ad7851e87d58d1eb9c46db6bcd9f4"
+      "sha256": "8901f54f901adf2b69db7a29f276f71e1fa55e0402d00847e1244bb75957fdb2"
     },
     {
       "bytes": 7154,
@@ -1393,7 +1553,7 @@
     {
       "bytes": 2235,
       "path": "tools/create_ha_test_repository.py",
-      "sha256": "7feda8e58079027b8834eea9fff32872c144fb58e1a81bf5967b45f5596e3d1b"
+      "sha256": "114d65e98ccf914045bc0a40199dc4440b0e7410a7186ff2f8462e013b44a9d6"
     },
     {
       "bytes": 6479,
@@ -1431,9 +1591,9 @@
       "sha256": "0490ed1ac2633902120829c22f6f931204227ebaaf86e2d7e3b6ce9b5ab4d2d7"
     },
     {
-      "bytes": 6849,
+      "bytes": 6875,
       "path": "tools/inspect_receiver.py",
-      "sha256": "9f08c064756099db3d3713b6aa0ed38f9c581dc35daf2534840ac1ec72bc97a9"
+      "sha256": "c7e08ae76fb3d543d3c8dd4bc8d32c2aa4dca45ff1602525451461b6ff35bbbd"
     },
     {
       "bytes": 2898,
@@ -1448,7 +1608,7 @@
     {
       "bytes": 7203,
       "path": "tools/package_airplay_source.py",
-      "sha256": "52b8e9c0b166734f4ad065585a84c94cfd4c2bc8eb1e6b4aace04f3562b8afe4"
+      "sha256": "ca8f5f7ab977cd2949feca54585ec3162026968297222fd5a223d0970c8fad16"
     },
     {
       "bytes": 2278,
@@ -1481,9 +1641,9 @@
       "sha256": "9fbb796979b79be310c4dc5bda24c18c7ef3c47da74aa259b77e7fd34ddb5c21"
     },
     {
-      "bytes": 11829,
+      "bytes": 13811,
       "path": "tools/release.py",
-      "sha256": "17a4e3c88d8c6d97eb0d88b76ba3bb1dde5624db133cc867b8097d93bc539d3c"
+      "sha256": "60b6bfb37b429037ad68cafd708191059326437efc3563aa8409384ccac79d22"
     },
     {
       "bytes": 705,
@@ -1526,6 +1686,11 @@
       "sha256": "1013ec9bc9df54d5e9449de9f4b4dbdb6517e517bd7f1cf370b1a80f7835e73a"
     },
     {
+      "bytes": 21997,
+      "path": "tools/test_tunein.py",
+      "sha256": "00341dc04ffa9dc3cf62f839f2c672749063a57a70b50f0c93929d716f15a9f8"
+    },
+    {
       "bytes": 1965,
       "path": "tools/watch_receiver.py",
       "sha256": "dcd144ebab2faaa4580d8908fe1b42c1aa11806c0a748f740089648c2a8c267e"
@@ -1534,6 +1699,46 @@
       "bytes": 2741,
       "path": "tools/wheel_inventory.py",
       "sha256": "c1f7fdc56a63771ad5d484cb85b95b82c411a0f184947c299b58ff183277ad94"
+    },
+    {
+      "bytes": 12316,
+      "path": "tools/youtube_capability_lab/README.md",
+      "sha256": "1ff453e0869744701d29e536b1418f4dab405e904ae9bc25f99a343eff6a3af1"
+    },
+    {
+      "bytes": 2988,
+      "path": "tools/youtube_capability_lab/prepare.py",
+      "sha256": "44bf3a208db19bdeb1806c92b7ab0d3272ba5ac2aba104f7eea9e8d680d9f95b"
+    },
+    {
+      "bytes": 9976,
+      "path": "tools/youtube_capability_lab/probe_profile.py",
+      "sha256": "3164e1da272d2ce8efc974d9d9f490855e5910c3a3ace8444b85d8b7d402cff8"
+    },
+    {
+      "bytes": 5318,
+      "path": "tools/youtube_capability_lab/profiles.json",
+      "sha256": "472476ca6e863f8b81153254f35fb9462b257ed19bcb2fb42e7051478cfd9fdb"
+    },
+    {
+      "bytes": 11200,
+      "path": "tools/youtube_capability_lab/run_profile.py",
+      "sha256": "39affbd792b6fb8486eb3cedba0461d60916ced0eb9e17d65b8b813b134f20e4"
+    },
+    {
+      "bytes": 3345,
+      "path": "tools/youtube_capability_lab/test_helper.py",
+      "sha256": "00fc2938f0cba8fd1398f42c40561787e05b05115cbb8fdaca5964d9857a5bc2"
+    },
+    {
+      "bytes": 5767,
+      "path": "tools/youtube_capability_lab/wire.py",
+      "sha256": "6f8ee5908fa2895a2ec10d164f4b8ca7e539e1f07a6478a18de66afeaa2e4e67"
+    },
+    {
+      "bytes": 1833,
+      "path": "tools/ytmusic-volume-drag-guard.js",
+      "sha256": "262b4b2eba863a6b4b2745f9af9d0c27a4a3ea3ee4db2849ae3abd5987445401"
     }
   ],
   "schema": 1

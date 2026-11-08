@@ -1,8 +1,8 @@
 # Reproducible test matrix
 
-## Current candidate: Replay and endpoint names — 2026-11-08
+## Current release candidate: 0.8.0-dev1 — 2026-11-08
 
-`0.7.0.dev3` is the follow-up to the complete dev2 candidate below. It restarts
+`0.8.0.dev1` integrates the complete dev3 candidate below. It restarts
 natural-EOF Replay through the existing repeat worker and names video aliases
 `<output name> (YT)`. Audio names, UUIDs, shared playback and ownership remain
 unchanged. [Replay details and disconnect evidence](youtube-repeat.md).

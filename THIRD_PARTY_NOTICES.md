@@ -102,7 +102,8 @@ third-party notices as a separate native-runtime review task; the Python
 wrapper's licence alone is not a complete Deno/V8/TypeScript inventory.
 
 The exact selected wheel filenames, hashes and declared license metadata for
-the tested CPython 3.12 and 3.13 environments are recorded separately in
+the tested management CPython 3.12 and 3.13 environments and the CPython 3.15
+release-container environment are recorded separately in
 `config/management-linux-x86_64-cp312.wheels.json` and the corresponding cp313
 inventory. Principal dependencies:
 

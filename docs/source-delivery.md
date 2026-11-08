@@ -44,15 +44,16 @@ sizes and hashes. It can be refreshed without running package build hooks:
 
 ```sh
 python tools/python_source_inventory.py \
-  config/container-linux-x86_64-cp312.wheels.json \
+  config/container-linux-x86_64-cp315.wheels.json \
   new-source-inventory.json --source-archive new-python-sources.zip
 ```
 
-The checked source ZIP is 33,188,344 bytes, SHA-256
-`ec83949c9ef27f743bd08127357467325104e205f75ef15e5bccb52cff75e61d`.
+The checked CPython 3.15 source ZIP is 33,295,998 bytes, SHA-256
+`cab5b1c472cf2ccbbf4a848dcb1501e24e73a9af7e1f643bb9494ff6b648a62a`.
 It contains the 31 hash-verified, unopened source distributions and a metadata
 record; it is retained with the public release. No package setup/build code
-was executed to collect it. Runtime versions have not changed.
+was executed to collect it. The Python 3.15 update changes only aiohttp from
+3.14.3 to 3.14.5 and Brotli from 1.2.0 to 1.2.1 in this runtime set.
 
 **Do not equate a Python sdist with complete native source coverage.** In
 particular, Deno's small Python package is a wrapper for a separate executable;

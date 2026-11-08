@@ -39,11 +39,12 @@ jobs:
           import os, re, tomllib
           from pathlib import Path
           version = tomllib.loads(Path('pyproject.toml').read_text())['project']['version']
-          match = re.fullmatch(r'([0-9]+\.[0-9]+\.[0-9]+)\.dev([0-9]+)', version)
+          match = re.fullmatch(r'([0-9]+[.][0-9]+[.][0-9]+)(?:[.]dev([0-9]+))?', version)
           if not match:
               raise SystemExit('Unsupported release version')
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
-              output.write('tag=' + match.group(1) + '-dev' + match.group(2) + '\n')
+              tag = match.group(1) + (('-dev' + match.group(2)) if match.group(2) else '')
+              output.write('tag=' + tag + '\n')
           PY
       - name: Refuse overwriting an existing version
         env:
@@ -121,11 +122,12 @@ jobs:
           import json, re, subprocess, tomllib
           from pathlib import Path
           version = tomllib.loads(Path('pyproject.toml').read_text())['project']['version']
-          match = re.fullmatch(r'([0-9]+\.[0-9]+\.[0-9]+)\.dev([0-9]+)', version)
+          match = re.fullmatch(r'([0-9]+[.][0-9]+[.][0-9]+)(?:[.]dev([0-9]+))?', version)
           if not match:
               raise SystemExit('Unsupported release version')
           image = 'ghcr.io/allcrafter1/cast-audio-receiver'
-          tag = image + ':' + match.group(1) + '-dev' + match.group(2)
+          version_tag = match.group(1) + (('-dev' + match.group(2)) if match.group(2) else '')
+          tag = image + ':' + version_tag
           sources = []
           for arch in ('amd64', 'arm64'):
               digest = Path(f'digests/image-digest-{arch}.txt').read_text().strip()

@@ -16,10 +16,10 @@ RUN git clone --filter=blob:none "${VIBECAST_REPOSITORY}" . \
     && git apply /tmp/vibecast-current.patch
 RUN cargo build --locked --release -p vibecast-cli
 
-FROM python:3.12-slim-bookworm AS python-builder
+FROM python:3.15-slim-bookworm AS python-builder
 WORKDIR /src
-COPY config/container-build-cp312.lock.txt /tmp/build-requirements.txt
-RUN python -c 'import sys; assert sys.version_info[:2] == (3, 12), "Python image and reviewed cp312 locks disagree; update wheel/source inventories together"' \
+COPY config/container-build-cp315.lock.txt /tmp/build-requirements.txt
+RUN python -c 'import sys; assert sys.version_info[:2] == (3, 15), "Python image and reviewed cp315 locks disagree; update wheel/source inventories together"' \
     && python -m pip install --no-cache-dir --disable-pip-version-check \
       --require-hashes -r /tmp/build-requirements.txt
 COPY pyproject.toml README.md LICENSE LICENSING.md ./
@@ -47,22 +47,22 @@ RUN case "$TARGETARCH" in \
     && echo "${airplay_sha}  /tmp/cliairplay" | sha256sum --check --strict \
     && chmod 0755 /tmp/cliairplay
 
-FROM python:3.12-slim-bookworm
+FROM python:3.15-slim-bookworm
 ARG TARGETARCH
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
        ca-certificates ffmpeg libstdc++6 libssl3 mpv tini \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/cast-audio-receiver
-COPY config/container-linux-*-cp312.lock.txt /tmp/runtime-locks/
-RUN python -c 'import sys; assert sys.version_info[:2] == (3, 12), "Python image and reviewed cp312 locks disagree; update wheel/source inventories together"' \
+COPY config/container-linux-*-cp315.lock.txt /tmp/runtime-locks/
+RUN python -c 'import sys; assert sys.version_info[:2] == (3, 15), "Python image and reviewed cp315 locks disagree; update wheel/source inventories together"' \
     && case "$TARGETARCH" in \
       amd64) wheel_arch=x86_64 ;; \
       arm64) wheel_arch=aarch64 ;; \
       *) echo "Unsupported target architecture" >&2; exit 1 ;; \
     esac \
     && python -m pip install --no-cache-dir --disable-pip-version-check \
-      --only-binary=:all: --require-hashes -r "/tmp/runtime-locks/container-linux-${wheel_arch}-cp312.lock.txt"
+      --only-binary=:all: --require-hashes -r "/tmp/runtime-locks/container-linux-${wheel_arch}-cp315.lock.txt"
 COPY --from=python-builder /tmp/wheels/cast_audio_receiver_lab-*.whl /tmp/
 RUN python -m pip install --no-cache-dir --disable-pip-version-check \
       --no-deps /tmp/cast_audio_receiver_lab-*.whl \
@@ -83,7 +83,7 @@ RUN groupadd --gid 1000 cast-audio \
     && mkdir -p /data/private && chown -R 1000:1000 /data
 ENV HOME=/home/cast-audio
 # Release metadata must not invalidate dependency installation/build layers.
-ARG BUILD_VERSION=0.7.0-dev3
+ARG BUILD_VERSION=0.8.0-dev1
 ARG BUILD_ARCH=${TARGETARCH}
 LABEL org.opencontainers.image.title="Cast Audio Receiver Lab"
 LABEL org.opencontainers.image.description="Experimental Cast audio receiver with modular local and AirPlay outputs"

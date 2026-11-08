@@ -1,12 +1,40 @@
 # Changelog
 
+## 0.8.0.dev1 — 2026-11-08
+
+- Announce every output as two stable Cast endpoints: the normal audio receiver
+  keeps its configured name, while a YouTube-only video endpoint adds (YT).
+  Both identities share one player, session owner, queue, volume and output.
+- Add working regular-YouTube casting without turning the normal speaker into a
+  TV. Preserve YouTube Music behavior, desktop/mobile reconnect, controller
+  takeover, queue navigation, audio-track selection and replay after natural EOF.
+- Add the dedicated TuneIn receiver, including native sender autostart, station
+  resolution, metadata, playback controls and volume synchronization.
+- Replace the unsafe launch-volume restore with one common policy for all
+  outputs: adopt a readable, non-zero and unmuted physical level; otherwise
+  start at 25% and unmuted. Keep later changes synchronized in both directions.
+- Expand direct Sonos support with metadata and artwork, shared relay/transcode
+  handling for unsupported or local sources, RenderingControl volume/mute
+  events and a guarded polling fallback. Physical direct-Sonos acceptance is
+  still pending; contributor-tested Sonos-over-AirPlay remains supported.
+- Harden local mpv, AirPlay and DLNA lifecycle, seek, cancellation, metadata,
+  feedback and cleanup paths. Update AirPlay CLI to 0.5.9 with verified amd64
+  and ARM64 artifacts, rebuilt source evidence and native container checks.
+- Publish the complete maintained Vibecast frontend source, preserve exact
+  source reconstruction and third-party notices, and add release guards that
+  keep Python images aligned with reviewed wheel locks.
+- Update installation, compatibility, architecture, testing and maintenance
+  documentation for the combined release. CI covers Python 3.11–3.15; the
+  container uses reviewed CPython 3.15 wheels for amd64 and ARM64.
+
 ## Unreleased — upstream maintenance review
 
 - Prepare AirPlay CLI 0.5.9 for both Linux architectures with verified release
   hashes, rebuilt source artifact and native protocol tests. Physical playback
   acceptance remains separate; no running installation is changed by this PR.
 - Reject Python base-image changes that disagree with the reviewed CPython
-  wheel ABI. Keep Python 3.12 and Dependabot monitoring; diagnose PR #19.
+  wheel ABI. PR #19 itself remains invalid because it combines Python 3.15 with
+  CPython 3.12 locks; the complete 3.15 migration is included above instead.
 - Track the last reviewed Vibecast upstream commit separately from historical
   build provenance; record the independent audio-fork source prerelease.
 

@@ -1,15 +1,15 @@
 # TuneIn Radio receiver — issue 8
 
-This is an unreleased receiver implementation for
+TuneIn support is included in `0.8.0-dev1`. It implements
 [issue 8](https://github.com/Allcrafter1/cast-audio-receiver-lab/issues/8), whose
 requested workflow is casting from the existing TuneIn Android app, including
 TuneIn Radio Pro. Pro and a Premium subscription are different products; Premium
 acceptance is not established by implementing public live radio.
 
-## Current test-laptop candidate
+## Integrated release
 
-TuneIn and its autostart fix are included in the cumulative `0.7.0-dev2`
-candidate, together with the volume/Sonos work and dual Cast identities.
+TuneIn and its autostart fix are included together with the volume/Sonos work
+and dual Cast identities.
 TuneIn continues to use the original speaker; the video alias is YouTube-only.
 The hardware observations below describe the earlier TuneIn test, not a new
 stock-app acceptance run of this candidate.
