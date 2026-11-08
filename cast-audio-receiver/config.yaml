@@ -1,5 +1,5 @@
 name: Cast Audio Receiver Lab
-version: "0.8.0-dev1"
+version: "0.8.0-dev2"
 slug: cast_audio_receiver
 description: Cast audio receiver with YouTube, Music, TuneIn and modular outputs
 url: https://github.com/Allcrafter1/cast-audio-receiver-lab
