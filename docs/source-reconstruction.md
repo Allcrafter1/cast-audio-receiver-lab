@@ -1,6 +1,112 @@
 # Reconstructing the Rust frontend
 
-## Current 0.7.0.dev1 maintained source
+## Current 0.7.0.dev3 cumulative source
+
+Start at public commit `83ba470158189de3bc223701decdc4c502d47644` from
+`https://github.com/Allcrafter1/vibecast.git` and apply only
+`patches/vibecast-0.7.0.dev3-current.patch`. The exact digest is in
+`config/vibecast-frontend.lock.json`. Containerfile and CI use this same patch.
+Do not stack any of the historical overlays below on top of it.
+
+The same 139 inventoried inputs are now committed at
+`1a040ed9483745e4532e1c79ec32138198be5710` and published as the source-only
+[cast-audio-0.7.0-dev3 prerelease](https://github.com/Allcrafter1/vibecast/releases/tag/cast-audio-0.7.0-dev3).
+`published_source_commit` records this equivalence; the current build recipe
+continues to use the verified base plus snapshot. This source publication does
+not publish or promote the product image.
+
+The cumulative source includes the accepted dev1 work, TuneIn, PR #16/#17
+frontend integration, the PR #18 follow-ups and the shared-runtime dual identity
+implementation. A clean archive plus this one patch was reconstructed separately
+and all **139 inventoried inputs** matched the working source. The local review
+build uses Rust 1.98.0 and Zig targeting glibc 2.36 (highest referenced symbol
+GLIBC_2.34); release CI retains its pinned 1.98.1 toolchain.
+
+Source-review CI vendors registry dependencies into `registry-vendor`, keeping
+the deliberately patched `vendor/mdns-sd` path dependency intact. Upstream
+Apache-2.0/MIT notices and the description of local changes stay with it.
+
+The installed candidate and remaining acceptance gates are in
+[TESTING.md](TESTING.md). The records below describe earlier builds, not the
+active source lock or current deployment.
+
+## Historical local PR #18 investigation candidate
+
+Use base `85918111ac68cbf837bf58835b5fd066615963ad` from the maintained fork,
+then apply these local review patches in order, once each:
+
+1. `patches/vibecast-tunein-review-20261107.patch`
+2. `patches/vibecast-tunein-autostart-20261107.patch`
+3. `patches/vibecast-speaker-discovery-review-20261107.patch`
+4. `patches/vibecast-owner-continuity-review-20261107.patch`
+5. `patches/vibecast-youtube-lifecycle-review-20261107.patch`
+6. `patches/vibecast-youtube-controls-review-20261108.patch`
+7. `patches/vibecast-android-diagnostics-20261108.patch`
+8. `patches/vibecast-mdns-app-discovery-20261108.patch`
+
+The third patch changes only five files for speaker defaults, truthful app
+availability and non-blocking MDX startup. Its SHA-256 is
+`79361f203dc91da0ecbca59ddeeaea6c0157f95dc47d590b58ec49e73b2219c5`.
+The fourth patch adds bounded same-owner continuity and Lounge worker cleanup;
+its SHA-256 is
+`e6c448bb116af04dc757f8c4276b74e93ab6748edb5f174a2e081cd386c65afd`.
+The fifth patch isolates receiver app storage and corrects discovery handshake
+and explicit cloud-channel teardown. Its SHA-256 is
+`7875e3c35707b05123e2ae015866fc6051585345e8d689d140500a7a2268a3f1`;
+its 114 reconstructed inputs and test/build records are retained in
+`.state/youtube-lifecycle-20261107-1/`.
+The sixth patch adds the ordinary-YouTube selection/original-audio corrections;
+its SHA-256 is
+`5c523656dc80a1d6241262813ee737bfa109274a5bdbbaadc8618f4cd447c1bf`.
+The seventh patch adds bounded pre-launch diagnostics without changing protocol
+responses or playback; its SHA-256 is
+`bd4a186db30196391e6c520937d219dd1121be2ed6bcea2a27fe5ac43ff5fd14`.
+Their frozen records are `.state/youtube-controls-20261108-1/` and
+`.state/youtube-android-diagnostics-20261108-1/`. The diagnostic deployment was
+rolled back to the controls build for comparison; it remains part of the ordered
+source recipe for the following candidate.
+
+The eighth patch adds application-subtype DNS-SD discovery from the shared app
+registry. Its SHA-256 is
+`c4e6f2da1440a5b11cf08561d4ed49fa440261fa3192b6d8d839b455de0b91da`.
+It keeps one service instance and daemon per receiver, the stable device
+identity and audio-only `ca=199428` profile. It changes no playback, YouTube
+Music, reconnect or ownership rules. The private candidate is
+`0.7.0.dev1+local.20261108.mdnsapps`, with freeze record
+`.state/mdns-app-discovery-20261108-1/`. Independent reconstruction from the base
+and all eight patches matches **136 source inputs** exactly, including **22
+vendored files**. The release build and all **14 silent binary checks** pass.
+The candidate is active on the test laptop; the loaded `/proc/PID/exe` SHA-256
+is `02d1494745094f9df3e61df3b25a5e557ebcb7c2c3a1251e073e1e353feb847b`,
+matching the frozen binary. Its highest referenced glibc symbol version is
+`GLIBC_2.34`. All 28 installed Python files match, both routes are ready, and
+both receiver identities retain `ca=199428` / `display_supported=false`. The
+preceding container is retained as
+`cast-audio-receiver-before-mdns-app-discovery-20261108-1`. Ordinary Android
+sender acceptance is not met: the phone retest lists both apps and confirms
+Music playback, but ordinary YouTube selection still fails with transient entry
+removal. Build and installation checks do not establish ordinary YouTube casting.
+
+This overlay includes a narrowly patched, vendored `mdns-sd` **0.20.1**, rather
+than relying on a modified Cargo registry cache. The original crates.io archive
+has SHA-256
+`fb75febbe5fa1837a52fdbd1c735e168286c5c645fc2ddd31526f65c49941c2e`,
+matching the pre-patch Cargo.lock checksum. Its licence remains **Apache-2.0 OR
+MIT**, with both upstream licence texts retained. The local changes add multiple
+subtype PTRs for the same instance, answer the requested subtype even when the
+base PTR is already known, and announce/withdraw all subtype PTRs together. The
+legacy single-subtype API remains compatible. The frozen source manifest
+includes the vendored directory and licences, plus the root Cargo patch/lock
+inputs; the earlier 114-file inventory alone is insufficient for this candidate.
+
+The earlier local records `.state/pr18-review-20261107-1/` and
+`.state/pr18-continuity-20261107-1/` distinguish the initial five-file review
+from the follow-up. All 114 frontend inputs match those earlier frozen candidates,
+with forward/reverse patch checks. These overlays are not part of the public release
+lock below. See [the investigation](youtube-discovery-pr18.md) for validation,
+deployment status and the remaining legacy browser-cache boundaries.
+
+## Historical 0.7.0.dev1 maintained source
 
 Check out public dev26 base `83ba470158189de3bc223701decdc4c502d47644`
 from `https://github.com/Allcrafter1/vibecast.git`, then apply

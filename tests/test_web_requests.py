@@ -8,6 +8,48 @@ import unittest
 
 @unittest.skipUnless(shutil.which("node"), "Node.js is needed for browser-helper tests")
 class WebRequestTests(unittest.TestCase):
+    def test_settings_toggle_uses_receiver_value_and_revision_for_its_route(self):
+        script = Path(__file__).parents[1] / "src/cast_audio_lab/web/app.js"
+        result = subprocess.run(["node", "-e", r'''
+const fs = require('fs'), vm = require('vm'), assert = require('assert');
+(async () => {
+  class Element {
+    constructor(tag) { this.tag = tag; this.children = []; this.dataset = {}; }
+    append(...items) { this.children.push(...items); }
+    replaceChildren(...items) { this.children = items; }
+    setAttribute() {}
+  }
+  const context = vm.createContext({
+    document: {getElementById: () => new Element('div'), querySelectorAll: () => [],
+      createElement: tag => new Element(tag), documentElement: {}},
+    navigator: {language: 'en'}, fetch: () => new Promise(() => {}), setInterval: () => {},
+  });
+  vm.runInContext(fs.readFileSync(process.argv[1], 'utf8'), context);
+  const requests = [];
+  let revision = 2, value = true;
+  context.fetch = async (path, options) => {
+    requests.push({path, options});
+    if (options.method === 'PATCH') { revision++; value = JSON.parse(options.body).changes.web_volume_compatibility; }
+    return {ok: true, json: async () => ({apps: [{appKey:'youtube', displayName:'YouTube', revision,
+      settings:[{key:'web_volume_compatibility', label:'Web volume', description:'Description',
+        kind:'boolean', value, writable:true}]}]})};
+  };
+  const panel = vm.runInContext('settingsPanel({id:"route-a", enabled:true})', context);
+  panel.open = true; panel.ontoggle(); await new Promise(setImmediate);
+  const find = node => node.tag === 'input' ? node : node.children.map(find).find(Boolean);
+  const checkbox = find(panel);
+  assert.equal(checkbox.checked, true);
+  checkbox.checked = false; await checkbox.onchange();
+  const update = requests.find(r => r.options.method === 'PATCH');
+  assert.equal(update.path, 'api/routes/route-a/settings');
+  assert.deepEqual(JSON.parse(update.options.body), {appKey:'youtube', expectedRevision:2,
+    changes:{web_volume_compatibility:false}});
+  assert.equal(find(panel).checked, false, 'receiver snapshot must replace edited local state');
+  assert.equal(revision, 3);
+})().catch(error => { console.error(error); process.exitCode = 1; });
+''', str(script)], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
     def test_late_refresh_and_poll_cannot_replace_newer_configuration(self):
         script = Path(__file__).parents[1] / "src/cast_audio_lab/web/app.js"
         result = subprocess.run(["node", "-e", r'''

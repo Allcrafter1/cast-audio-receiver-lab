@@ -326,6 +326,60 @@ class VibecastAudioPlayerTests(unittest.IsolatedAsyncioTestCase):
         await self.player.handle_message({"type": "pause", "sessionId": "s1"})
         self.assertEqual(self.backend.status().state, "PAUSED")
 
+    async def test_volume_revision_advances_only_after_level_and_mute_finish(self):
+        self.assertTrue(self.player.registration()["player"]["capabilities"]["volumeRevisions"])
+        self.player.session_id = "s1"
+        started = asyncio.Event()
+        release = asyncio.Event()
+
+        async def apply(level, muted):
+            self.backend._status.volume = level
+            started.set()
+            await release.wait()
+            self.backend._status.muted = muted
+
+        self.backend.set_volume = apply
+        command = asyncio.create_task(self.player.handle_message({
+            "type": "volume", "sessionId": "s1", "level": .6,
+            "muted": True, "volumeRevision": 7}))
+        await started.wait()
+        await self.player._send_backend_state("s1")
+        self.assertEqual(self.sent[-1]["volumeRevision"], 0)
+        self.assertEqual(self.sent[-1]["volume"], .6)
+        self.assertFalse(self.sent[-1]["muted"])
+        release.set()
+        await command
+        self.assertEqual(self.sent[-1]["volumeRevision"], 7)
+        self.assertTrue(self.sent[-1]["muted"])
+        # Hardware feedback after the completed command carries its revision,
+        # including across a new title; it is not an echo to be suppressed.
+        self.backend._status.volume = .3
+        self.backend._status.muted = False
+        self.player.session_id = "s2"
+        await self.player._send_backend_state("s2")
+        self.assertEqual(self.sent[-1]["volumeRevision"], 7)
+        self.assertEqual(self.sent[-1]["volume"], .3)
+
+    async def test_failed_volume_command_does_not_acknowledge_revision(self):
+        self.player._volume_revision = 3
+        self.backend.set_volume = AsyncMock(side_effect=OSError("output unavailable"))
+        await self.player.handle_message({"type": "volume", "sessionId": "s1",
+                                          "level": .6, "volumeRevision": 4})
+        self.assertEqual(self.sent[-1]["type"], "error")
+        self.assertEqual(self.player._volume_revision, 3)
+        for revision in (True, -1, 2 ** 64, 1.5, "4"):
+            self.backend.set_volume.reset_mock()
+            await self.player.handle_message({"type": "volume", "sessionId": "s1",
+                                              "level": .6, "volumeRevision": revision})
+            self.backend.set_volume.assert_not_awaited()
+            self.assertEqual(self.player._volume_revision, 3)
+
+    async def test_legacy_volume_commands_still_apply_without_revision(self):
+        self.player.session_id = "s1"
+        await self.player.handle_message({"type": "volume", "sessionId": "s1", "level": .4})
+        self.assertEqual(self.sent[-1]["volume"], .4)
+        self.assertEqual(self.sent[-1]["volumeRevision"], 0)
+
     async def test_actual_volume_is_in_status(self):
         await self.backend.set_volume(0.5, True)
         await self.player._send_backend_state("s1")
@@ -357,9 +411,10 @@ class VibecastAudioPlayerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.backend.metadata.album, "")
         self.assertEqual(self.backend.metadata.artwork_url, "https://example.test/yt")
 
-    async def test_volume_can_be_restored_before_first_load(self):
+    async def test_explicit_volume_can_be_changed_before_first_load(self):
         await self.player.handle_message(
-            {"type": "volume", "sessionId": "new-session", "level": 0.26, "muted": False}
+            {"type": "volume", "sessionId": "new-session", "level": 0.26, "muted": False,
+             "initialize": False}
         )
         self.assertEqual(self.backend.status().volume, 0.26)
         self.assertEqual(self.sent[-1]["volume"], 0.26)

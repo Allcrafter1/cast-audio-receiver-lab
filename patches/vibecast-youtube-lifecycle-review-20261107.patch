@@ -1,0 +1,604 @@
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -608,6 +608,42 @@
+ 
+     pub(crate) async fn run(
+         mut self,
++        command_tx: &mpsc::Sender<LoungeCommand>,
++        playback_rx: &mut mpsc::Receiver<PlaybackState>,
++        output_control_rx: &mut mpsc::Receiver<OutputControl>,
++        worker_event_rx: &mut mpsc::Receiver<WorkerEvent>,
++        cancel: &mut watch::Receiver<bool>,
++        takeover_rx: &mut mpsc::Receiver<LoungeTakeover>,
++    ) -> LoungeRunExit {
++        let exit = self
++            .run_loop(
++                command_tx,
++                playback_rx,
++                output_control_rx,
++                worker_event_rx,
++                cancel,
++                takeover_rx,
++            )
++            .await;
++        // Dropping an HTTP long poll does not close its BrowserChannel. Close
++        // the old SID before a relaunch/takeover can bind a replacement. This
++        // does not revoke a screen identity or replace core's ownership policy.
++        self.bound.rid += 1;
++        let mut url = self.bind_url.clone();
++        append_bound_query(&mut url, &self.bound, &self.bound.rid.to_string());
++        url.query_pairs_mut().append_pair("TYPE", "terminate");
++        let _ = self
++            .http
++            .get(url)
++            .header("User-Agent", USER_AGENT)
++            .timeout(Duration::from_millis(500))
++            .send()
++            .await;
++        exit
++    }
++
++    async fn run_loop(
++        &mut self,
+         command_tx: &mpsc::Sender<LoungeCommand>,
+         playback_rx: &mut mpsc::Receiver<PlaybackState>,
+         output_control_rx: &mut mpsc::Receiver<OutputControl>,
+@@ -736,6 +772,10 @@
+         cancel: &mut watch::Receiver<bool>,
+     ) -> Result<(), LoungeError> {
+         let mut feedback = PendingFeedback::default();
++        // Associate the Lounge screen with the actual Cast receiver on every
++        // bind/rebind. onSetDiscoveryDeviceId is the service's acknowledgement,
++        // not a request: replying to it would create an announcement loop.
++        feedback.push(Outbound::DiscoveryDeviceId);
+         feedback.push(Outbound::NowPlaying);
+         let mut sending = None;
+ 
+@@ -1173,7 +1213,7 @@
+             Incoming::GetNowPlaying => Some(Outbound::NowPlaying),
+             Incoming::GetPlaybackSpeed => Some(Outbound::PlaybackSpeed),
+             Incoming::GetVolume => Some(Outbound::Volume),
+-            Incoming::SetDiscoveryDeviceId => Some(Outbound::DiscoveryDeviceId),
++            Incoming::GetDiscoveryDeviceId => Some(Outbound::DiscoveryDeviceId),
+             Incoming::Command(_)
+             | Incoming::QueueAddition(_)
+             | Incoming::Ignored
+@@ -1603,7 +1643,7 @@
+     GetNowPlaying,
+     GetPlaybackSpeed,
+     GetVolume,
+-    SetDiscoveryDeviceId,
++    GetDiscoveryDeviceId,
+     Ignored,
+ }
+ 
+@@ -2152,7 +2192,7 @@
+         "getNowPlaying" => Incoming::GetNowPlaying,
+         "getPlaybackSpeed" => Incoming::GetPlaybackSpeed,
+         "getVolume" => Incoming::GetVolume,
+-        "onSetDiscoveryDeviceId" => Incoming::SetDiscoveryDeviceId,
++        "getDiscoveryDeviceId" => Incoming::GetDiscoveryDeviceId,
+         _ => Incoming::Ignored,
+     }
+ }
+@@ -4624,105 +4664,233 @@
+     }
+ 
+     #[tokio::test]
+-    async fn discovery_identity_follows_the_server_request() {
++    async fn stopping_or_taking_over_terminates_the_bound_cloud_channel() {
++        for takeover in [false, true] {
++            let server = MockServer::start().await;
++            Mock::given(method("GET"))
++                .and(wiremock::matchers::query_param("TYPE", "terminate"))
++                .respond_with(ResponseTemplate::new(200))
++                .expect(1)
++                .with_priority(1)
++                .mount(&server)
++                .await;
++            Mock::given(method("GET"))
++                .respond_with(
++                    ResponseTemplate::new(200)
++                        .set_body_string(frame("[]"))
++                        .set_delay(Duration::from_secs(5)),
++                )
++                .with_priority(2)
++                .mount(&server)
++                .await;
++            Mock::given(method("POST"))
++                .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(5)))
++                .mount(&server)
++                .await;
++            let connection = regression_connection(&server);
++            let (command_tx, _command_rx) = mpsc::channel(1);
++            let (_playback_tx, mut playback_rx) = mpsc::channel(1);
++            let (_control_tx, mut control_rx) = mpsc::channel(1);
++            let (_worker_tx, mut worker_rx) = mpsc::channel(1);
++            let (cancel_tx, mut cancel_rx) = watch::channel(false);
++            let (takeover_tx, mut takeover_rx) = mpsc::channel(1);
++            let task = tokio::spawn(async move {
++                connection
++                    .run(
++                        &command_tx,
++                        &mut playback_rx,
++                        &mut control_rx,
++                        &mut worker_rx,
++                        &mut cancel_rx,
++                        &mut takeover_rx,
++                    )
++                    .await
++            });
++            tokio::time::timeout(Duration::from_secs(1), async {
++                loop {
++                    if server
++                        .received_requests()
++                        .await
++                        .unwrap()
++                        .iter()
++                        .any(|r| r.method.as_str() == "GET")
++                    {
++                        break;
++                    }
++                    tokio::task::yield_now().await;
++                }
++            })
++            .await
++            .unwrap();
++            if takeover {
++                let (ready, _ready_rx) = tokio::sync::oneshot::channel();
++                takeover_tx
++                    .send(LoungeTakeover {
++                        ready,
++                        owner_continuity_key: Some("next-owner".into()),
++                    })
++                    .await
++                    .unwrap();
++            } else {
++                cancel_tx.send(true).unwrap();
++            }
++            let exit = tokio::time::timeout(Duration::from_secs(1), task)
++                .await
++                .unwrap()
++                .unwrap();
++            assert_eq!(matches!(exit, LoungeRunExit::Takeover { .. }), takeover);
++            let requests = server.received_requests().await.unwrap();
++            let terminated = requests
++                .iter()
++                .find(|r| {
++                    r.url
++                        .query_pairs()
++                        .any(|(k, v)| k == "TYPE" && v == "terminate")
++                })
++                .expect("the cloud channel was abandoned without termination");
++            let query: std::collections::HashMap<_, _> = terminated.url.query_pairs().collect();
++            assert_eq!(query.get("SID").unwrap(), "SID");
++            assert_eq!(query.get("gsessionid").unwrap(), "GSID");
++            assert!(query.get("RID").unwrap().parse::<u64>().unwrap() > 1);
++            assert!(terminated.body.is_empty());
++        }
++    }
++
++    #[tokio::test]
++    async fn stalled_cloud_termination_cannot_hold_up_stop() {
++        let server = MockServer::start().await;
++        Mock::given(method("GET"))
++            .and(wiremock::matchers::query_param("TYPE", "terminate"))
++            .respond_with(ResponseTemplate::new(200).set_delay(Duration::from_secs(5)))
++            .expect(1)
++            .mount(&server)
++            .await;
++        let connection = regression_connection(&server);
++        let (command_tx, _command_rx) = mpsc::channel(1);
++        let (_playback_tx, mut playback_rx) = mpsc::channel(1);
++        let (_control_tx, mut control_rx) = mpsc::channel(1);
++        let (_worker_tx, mut worker_rx) = mpsc::channel(1);
++        let (_cancel_tx, mut cancel_rx) = watch::channel(true);
++        let (_takeover_tx, mut takeover_rx) = mpsc::channel(1);
++        let exit = tokio::time::timeout(
++            Duration::from_secs(1),
++            connection.run(
++                &command_tx,
++                &mut playback_rx,
++                &mut control_rx,
++                &mut worker_rx,
++                &mut cancel_rx,
++                &mut takeover_rx,
++            ),
++        )
++        .await
++        .expect("Stop waited for a stalled cloud service");
++        assert!(matches!(exit, LoungeRunExit::Stopped));
++    }
++
++    #[tokio::test]
++    async fn discovery_identity_answers_requests_without_echoing_acknowledgements() {
++        let server = MockServer::start().await;
++        let mut connection = regression_connection(&server);
++        let request = parse_message(&[Value::from("getDiscoveryDeviceId")]);
++        assert!(matches!(
++            connection.handle_internal(&request),
++            Some(Outbound::DiscoveryDeviceId)
++        ));
++        let acknowledgement = parse_message(&[Value::from("onSetDiscoveryDeviceId")]);
++        assert!(connection.handle_internal(&acknowledgement).is_none());
++    }
++
++    #[tokio::test]
++    async fn discovery_identity_is_announced_on_each_bind_without_an_acknowledgement_loop() {
+         let server = MockServer::start().await;
+         Mock::given(method("POST"))
+-            .and(path("/api/lounge/bc/bind"))
+             .respond_with(ResponseTemplate::new(200))
+             .mount(&server)
+             .await;
++        // The real service acknowledges our announcement. A subsequent volume
++        // response is a barrier proving the whole batch has been processed.
+         Mock::given(method("GET"))
+-            .and(path("/api/lounge/bc/bind"))
++            .respond_with(ResponseTemplate::new(200).set_body_string(frame(
++                r#"[[5,["onSetDiscoveryDeviceId"]],[6,["getVolume"]]]"#,
++            )))
++            .up_to_n_times(1)
++            .with_priority(1)
++            .mount(&server)
++            .await;
++        Mock::given(method("GET"))
+             .respond_with(
+                 ResponseTemplate::new(200)
+-                    .set_body_string(frame(r#"[[5,["onSetDiscoveryDeviceId"]]]"#)),
++                    .set_body_string(frame("[]"))
++                    .set_delay(Duration::from_secs(10)),
+             )
++            .with_priority(2)
+             .mount(&server)
+             .await;
+ 
+-        let mut connection = LoungeConnection {
+-            volume_rx: None,
+-            http: reqwest::Client::new(),
+-            bind_url: Url::parse(&format!("{}/api/lounge/bc/bind", server.uri())).unwrap(),
+-            bound: BoundSession {
+-                sid: "SID".to_string(),
+-                gsession_id: "GSID".to_string(),
+-                aid: 0,
+-                rid: 1,
+-                ofs: 0,
+-            },
+-            screen_id: "screen-id".to_string(),
+-            device_id: "lounge-device".to_string(),
+-            discovery_device_id: "CAST-ID".to_string(),
+-            ownership_epoch: Arc::new(AtomicU64::new(0)),
+-            current: CurrentMedia::default(),
+-        };
+-        let (command_tx, _command_rx) = mpsc::channel(1);
+-        let (_playback_tx, mut playback_rx) = mpsc::channel(1);
+-        let (_output_control_tx, mut output_control_rx) = mpsc::channel(1);
+-        let (cancel_tx, mut cancel_rx) = watch::channel(false);
+-        let task = tokio::spawn(async move {
+-            connection
+-                .run_bound(
+-                    &command_tx,
+-                    &mut playback_rx,
+-                    &mut output_control_rx,
+-                    &mut cancel_rx,
+-                )
+-                .await
+-        });
+-
+-        tokio::time::timeout(Duration::from_secs(2), async {
+-            loop {
+-                if server
+-                    .received_requests()
++        let mut connection = regression_connection(&server);
++        for bind in 0..2 {
++            let (command_tx, _command_rx) = mpsc::channel(1);
++            let (_playback_tx, mut playback_rx) = mpsc::channel(1);
++            let (_control_tx, mut control_rx) = mpsc::channel(1);
++            let (cancel_tx, mut cancel_rx) = watch::channel(false);
++            let task = tokio::spawn(async move {
++                connection
++                    .run_bound(
++                        &command_tx,
++                        &mut playback_rx,
++                        &mut control_rx,
++                        &mut cancel_rx,
++                    )
+                     .await
+-                    .unwrap()
+-                    .iter()
+-                    .any(|request| {
+-                        String::from_utf8_lossy(&request.body)
+-                            .contains("req0__sc=setDiscoveryDeviceId")
+-                    })
+-                {
+-                    break;
+-                }
+-                tokio::task::yield_now().await;
+-            }
+-        })
+-        .await
+-        .expect("discovery response was not sent");
+-
+-        cancel_tx.send(true).unwrap();
+-        tokio::time::timeout(Duration::from_secs(1), task)
+-            .await
+-            .expect("Lounge loop did not stop after cancellation")
+-            .unwrap()
+-            .unwrap();
+-
+-        let requests = server.received_requests().await.unwrap();
+-        let sequence = requests
+-            .iter()
+-            .map(|request| {
+-                if request.method.as_str() == "GET" {
+-                    "poll"
+-                } else if String::from_utf8_lossy(&request.body).contains("req0__sc=nowPlaying") {
+-                    "nowPlaying"
+-                } else {
+-                    "setDiscoveryDeviceId"
++                    .unwrap();
++                connection
++            });
++            tokio::time::timeout(Duration::from_secs(2), async {
++                loop {
++                    let requests = server.received_requests().await.unwrap();
++                    let announcements = requests
++                        .iter()
++                        .filter(|r| {
++                            String::from_utf8_lossy(&r.body)
++                                .contains("req0__sc=setDiscoveryDeviceId")
++                        })
++                        .count();
++                    let volume = requests.iter().any(|r| {
++                        String::from_utf8_lossy(&r.body).contains("req0__sc=onVolumeChanged")
++                    });
++                    if announcements >= bind + 1 && volume {
++                        break;
++                    }
++                    tokio::task::yield_now().await;
+                 }
+             })
+-            .collect::<Vec<_>>();
+-        let discovery = sequence
+-            .iter()
+-            .position(|kind| *kind == "setDiscoveryDeviceId")
+-            .unwrap();
+-        assert!(sequence.iter().position(|kind| *kind == "poll").unwrap() < discovery);
+-        assert!(
+-            sequence
++            .await
++            .expect("bind did not announce its discovery identity and handle the acknowledgement");
++            cancel_tx.send(true).unwrap();
++            connection = tokio::time::timeout(Duration::from_secs(1), task)
++                .await
++                .unwrap()
++                .unwrap();
++            let requests = server.received_requests().await.unwrap();
++            let announcements: Vec<_> = requests
+                 .iter()
+-                .position(|kind| *kind == "nowPlaying")
+-                .unwrap()
+-                < discovery
+-        );
+-    }
+-}
++                .filter(|r| {
++                    String::from_utf8_lossy(&r.body).contains("req0__sc=setDiscoveryDeviceId")
++                })
++                .collect();
++            assert_eq!(
++                announcements.len(),
++                bind + 1,
++                "acknowledgement triggered another announcement"
++            );
++            for announcement in announcements {
++                let body: std::collections::HashMap<_, _> =
++                    url::form_urlencoded::parse(&announcement.body).collect();
++                assert_eq!(body.get("req0_discoveryDeviceId").unwrap(), "cast");
++                assert_eq!(body.get("req0_castCloudDeviceId").unwrap(), "cast");
++                assert_eq!(body.get("req0_loungeDeviceId").unwrap(), "device");
++            }
++        }
++    }
++}
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -864,7 +864,22 @@
+         let session_id = Uuid::new_v4().to_string();
+         let (credentials, credentials_type) = request.resolved_credentials();
+         let app_key = manifest.app_key;
+-        let data_dir = self.data_dir.join("apps").join(app_key);
++        // One installation serves several independent Cast receivers. Their
++        // app identities must never overwrite or inherit each other's state.
++        // Do not migrate the old shared apps directory: its owning receiver
++        // cannot be established, and copying it would duplicate identities.
++        let receiver_key: String = self
++            .identity
++            .device_id
++            .bytes()
++            .map(|b| format!("{b:02x}"))
++            .collect();
++        let data_dir = self
++            .data_dir
++            .join("receivers")
++            .join(receiver_key)
++            .join("apps")
++            .join(app_key);
+         let _ = std::fs::create_dir_all(&data_dir);
+ 
+         // The stored session context carries only data + a no-op sender; the
+--- a/crates/vibecast-core/src/tests.rs
++++ b/crates/vibecast-core/src/tests.rs
+@@ -91,6 +91,7 @@
+ 
+ struct FakeApp {
+     launched_setting: Arc<Mutex<Option<String>>>,
++    launched_data_dirs: Arc<Mutex<Vec<std::path::PathBuf>>>,
+     exclusive_sender_takeover: bool,
+     sender_attachments: Arc<Mutex<Vec<SenderAttachment>>>,
+     output_controls: Arc<Mutex<Vec<OutputControl>>>,
+@@ -130,6 +131,10 @@
+         ctx: &AppContext,
+         _credentials: LaunchCredentials,
+     ) -> Result<Arc<dyn AppSession>, LaunchError> {
++        self.launched_data_dirs
++            .lock()
++            .unwrap()
++            .push(ctx.receiver.data_dir.clone());
+         self.launched_owner_keys.lock().unwrap().push(
+             ctx.owner_continuity_key()
+                 .expect("hub supplies an owner continuity key")
+@@ -402,6 +407,7 @@
+     player: Arc<FakePlayer>,
+     proxy: Arc<FakeProxy>,
+     launched_setting: Arc<Mutex<Option<String>>>,
++    launched_data_dirs: Arc<Mutex<Vec<std::path::PathBuf>>>,
+     sender_attachments: Arc<Mutex<Vec<SenderAttachment>>>,
+     output_controls: Arc<Mutex<Vec<OutputControl>>>,
+     launched_owner_keys: Arc<Mutex<Vec<String>>>,
+@@ -476,6 +482,23 @@
+     exclusive_sender_takeover: bool,
+     capabilities: PlayerCapabilities,
+ ) -> Harness {
++    setup_with_receiver_storage(
++        player_settings,
++        exclusive_sender_takeover,
++        capabilities,
++        "dev-1",
++        std::env::temp_dir().join(format!("vibecast-core-tests-{}", uuid::Uuid::new_v4())),
++    )
++    .await
++}
++
++async fn setup_with_receiver_storage(
++    player_settings: PlayerSettings,
++    exclusive_sender_takeover: bool,
++    capabilities: PlayerCapabilities,
++    device_id: &str,
++    data_dir: std::path::PathBuf,
++) -> Harness {
+     let (server_end, client_end) = tokio::io::duplex(64 * 1024);
+     let (events_tx, mut events_rx) = mpsc::channel::<ServerEvent>(32);
+     tokio::spawn(run_connection(
+@@ -489,15 +512,17 @@
+     let player = Arc::new(FakePlayer::default());
+     let proxy = Arc::new(FakeProxy::default());
+     let launched_setting = Arc::new(Mutex::new(None));
++    let launched_data_dirs = Arc::new(Mutex::new(Vec::new()));
+     let sender_attachments = Arc::new(Mutex::new(Vec::new()));
+     let output_controls = Arc::new(Mutex::new(Vec::new()));
+     let launched_owner_keys = Arc::new(Mutex::new(Vec::new()));
+     let sender_owner_keys = Arc::new(Mutex::new(Vec::new()));
+     let fail_next_launch = Arc::new(std::sync::atomic::AtomicBool::new(false));
+     let hub = DeviceHub::new(HubConfig {
+-        identity: DeviceIdentity::new("Living Room".into(), "Chromecast".into(), "dev-1".into()),
++        identity: DeviceIdentity::new("Living Room".into(), "Chromecast".into(), device_id.into()),
+         registry: AppRegistry::new(vec![Arc::new(FakeApp {
+             launched_setting: launched_setting.clone(),
++            launched_data_dirs: launched_data_dirs.clone(),
+             exclusive_sender_takeover,
+             sender_attachments: sender_attachments.clone(),
+             output_controls: output_controls.clone(),
+@@ -510,8 +535,7 @@
+         proxy: proxy.clone(),
+         http: reqwest::Client::new(),
+         media_http: reqwest::Client::new(),
+-        data_dir: std::env::temp_dir()
+-            .join(format!("vibecast-core-tests-{}", uuid::Uuid::new_v4())),
++        data_dir,
+         volume: attenuation_volume(),
+         user_agent: String::new(),
+         cast_device_capabilities: String::new(),
+@@ -537,6 +561,7 @@
+         player,
+         proxy,
+         launched_setting,
++        launched_data_dirs,
+         sender_attachments,
+         output_controls,
+         launched_owner_keys,
+@@ -846,6 +871,73 @@
+         initial
+     );
+     harness.hub.shutdown().await;
++}
++
++#[tokio::test]
++async fn app_state_is_isolated_between_receivers_and_retained_after_relaunch() {
++    let root = std::env::temp_dir().join(format!("vibecast-shared-state-{}", uuid::Uuid::new_v4()));
++    let catalog = SettingsCatalog::new(vec![fake_manifest().settings]).unwrap();
++    let settings = SettingsService::new(catalog, Arc::new(MemorySettingsPersistence::default()))
++        .await
++        .unwrap();
++    let mut first = setup_with_receiver_storage(
++        settings.player("first").unwrap(),
++        false,
++        PlayerCapabilities::default(),
++        "receiver-a",
++        root.clone(),
++    )
++    .await;
++    let mut second = setup_with_receiver_storage(
++        settings.player("second").unwrap(),
++        false,
++        PlayerCapabilities::default(),
++        "receiver-b",
++        root.clone(),
++    )
++    .await;
++    let transport = launch_for_continuity(&mut first.client, "sender-a", "APP1", 1601).await;
++    let first_dir = first.launched_data_dirs.lock().unwrap()[0].clone();
++    let state_name = "receiver-identity.json";
++    std::fs::write(first_dir.join(state_name), b"first receiver").unwrap();
++
++    launch_for_continuity(&mut second.client, "sender-b", "APP1", 1602).await;
++    let second_dir = second.launched_data_dirs.lock().unwrap()[0].clone();
++    assert!(
++        !second_dir.join(state_name).exists(),
++        "another receiver inherited the first receiver's persisted app identity"
++    );
++    std::fs::write(second_dir.join(state_name), b"second receiver").unwrap();
++    assert_eq!(
++        std::fs::read(first_dir.join(state_name)).unwrap(),
++        b"first receiver"
++    );
++
++    stop_for_continuity(&mut first.client, &transport, 1603).await;
++    launch_for_continuity(&mut first.client, "sender-a", "APP1", 1604).await;
++    assert_eq!(first.launched_data_dirs.lock().unwrap()[1], first_dir);
++    assert_eq!(
++        std::fs::read(first_dir.join(state_name)).unwrap(),
++        b"first receiver"
++    );
++    first.hub.shutdown().await;
++    second.hub.shutdown().await;
++    let mut restarted = setup_with_receiver_storage(
++        settings.player("first").unwrap(),
++        false,
++        PlayerCapabilities::default(),
++        "receiver-a",
++        root.clone(),
++    )
++    .await;
++    launch_for_continuity(&mut restarted.client, "sender-c", "APP1", 1605).await;
++    assert_eq!(restarted.launched_data_dirs.lock().unwrap()[0], first_dir);
++    assert_eq!(
++        std::fs::read(first_dir.join(state_name)).unwrap(),
++        b"first receiver"
++    );
++    restarted.hub.shutdown().await;
++    std::fs::remove_dir_all(root).unwrap();
+ }
+ 
+ #[tokio::test]
+--- a/crates/vibecast-sdk/src/context.rs
++++ b/crates/vibecast-sdk/src/context.rs
+@@ -69,7 +69,7 @@
+     pub device_model: String,
+     /// Stable device id.
+     pub device_id: String,
+-    /// Per-app data directory.
++    /// Persistent data directory scoped to this receiver and app.
+     pub data_dir: PathBuf,
+     /// User-agent header apps should send.
+     pub user_agent: String,

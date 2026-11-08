@@ -1,0 +1,124 @@
+diff --git a/crates/vibecast-core/src/hub.rs b/crates/vibecast-core/src/hub.rs
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -481,8 +481,8 @@
+ }
+ 
+ fn prepare_volume_for_session(volume: &mut Volume) {
+-    if volume.level == 0.0 {
+-        volume.level = 0.1;
++    if volume.level == 0.0 || volume.muted {
++        volume.level = 0.25;
+         volume.muted = false;
+     }
+ }
+@@ -763,6 +763,7 @@
+                     session.coordinator.volume = self.volume.clone();
+                     self.player
+                         .send(PlayerCommand::Volume {
++                            initialize: false,
+                             session_id: id.clone(),
+                             level: self.volume.level,
+                             muted: self.volume.muted,
+@@ -889,6 +890,7 @@
+         let volume_revision = self.next_volume_revision();
+         self.player
+             .send(PlayerCommand::Volume {
++                initialize: true,
+                 session_id: session_id.clone(),
+                 level: self.volume.level,
+                 muted: self.volume.muted,
+@@ -1334,6 +1336,7 @@
+                 let volume_revision = self.next_volume_revision();
+                 self.player
+                     .send(PlayerCommand::Volume {
++                        initialize: false,
+                         session_id: transport.to_string(),
+                         level,
+                         muted,
+@@ -2859,18 +2862,22 @@
+ mod volume_tests {
+     use super::*;
+     #[test]
+-    fn zero_promotes_only_at_session_start() {
++    fn zero_or_muted_uses_safe_session_hint() {
+         let mut volume = Volume {
+             level: 0.0,
+             muted: true,
+             ..Default::default()
+         };
+         prepare_volume_for_session(&mut volume);
+-        assert_eq!(volume.level, 0.1);
++        assert_eq!(volume.level, 0.25);
+         assert!(!volume.muted);
+         volume.level = 0.5;
+         prepare_volume_for_session(&mut volume);
+         assert_eq!(volume.level, 0.5);
++        volume.muted = true;
++        prepare_volume_for_session(&mut volume);
++        assert_eq!(volume.level, 0.25);
++        assert!(!volume.muted);
+     }
+     #[test]
+     fn device_volume_paths_are_distinct_and_safe() {
+diff --git a/crates/vibecast-core/src/tests.rs b/crates/vibecast-core/src/tests.rs
+--- a/crates/vibecast-core/src/tests.rs
++++ b/crates/vibecast-core/src/tests.rs
+@@ -1592,11 +1592,14 @@
+     assert_eq!(playing["status"][0]["playerState"], "PLAYING");
+     assert_eq!(playing["status"][0]["supportedMediaCommands"], 15);
+ 
+-    // Restore receiver volume before Load/Play; register the manifest proxy.
++    // Initialize output volume before Load/Play; register the manifest proxy.
+     let commands = harness.player.commands();
+     assert!(matches!(
+         commands.first(),
+-        Some(PlayerCommand::Volume { .. })
++        Some(PlayerCommand::Volume {
++            initialize: true,
++            ..
++        })
+     ));
+     assert!(matches!(commands.last(), Some(PlayerCommand::Play { .. })));
+     if let Some(PlayerCommand::Load { media, .. }) = commands.get(1) {
+@@ -4309,8 +4312,10 @@
+     );
+ 
+     let commands = harness.player.commands();
+-    assert!(commands.iter().any(|command| matches!(command,
+-        PlayerCommand::Volume { level, muted, .. } if *level == 0.35 && *muted)));
++    assert!(
++        commands.iter().any(|command| matches!(command,
++        PlayerCommand::Volume { level, muted, initialize: false, .. } if *level == 0.35 && *muted))
++    );
+     assert!(commands
+         .iter()
+         .any(|command| matches!(command, PlayerCommand::Pause { .. })));
+diff --git a/crates/vibecast-player-api/src/protocol.rs b/crates/vibecast-player-api/src/protocol.rs
+--- a/crates/vibecast-player-api/src/protocol.rs
++++ b/crates/vibecast-player-api/src/protocol.rs
+@@ -161,6 +161,9 @@
+     },
+     /// Update player volume.
+     Volume {
++        /// Read the actual output level at app launch instead of restoring this hint.
++        #[serde(default)]
++        initialize: bool,
+         /// Output-wide command ordering, present for opted-in players.
+         #[serde(default, skip_serializing_if = "Option::is_none")]
+         volume_revision: Option<u64>,
+@@ -557,12 +560,14 @@
+         assert!(capable.volume_revisions);
+         for revision in [None, Some(7)] {
+             let command = PlayerCommand::Volume {
++                initialize: false,
+                 session_id: "s1".into(),
+                 level: 0.6,
+                 muted: true,
+                 volume_revision: revision,
+             };
+             let wire = serde_json::to_value(command).unwrap();
++            assert_eq!(wire["initialize"], false);
+             assert_eq!(
+                 wire.get("volumeRevision").and_then(|v| v.as_u64()),
+                 revision

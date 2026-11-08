@@ -100,3 +100,98 @@ class RelayTests(unittest.IsolatedAsyncioTestCase):
                     self.assertEqual(len(await response.read()), 16)
         finally:
             await relay.close(); await source.close()
+
+    @unittest.skipUnless(shutil.which('ffmpeg') and shutil.which('ffprobe'), 'FFmpeg/ffprobe required')
+    async def test_real_opus_webm_becomes_sonos_mp3_with_correct_format(self):
+        import json
+        from cast_audio_lab.sonos import SONOS_RELAY_MIME
+        generator = await asyncio.create_subprocess_exec(
+            'ffmpeg', '-nostdin', '-hide_banner', '-loglevel', 'error',
+            '-f', 'lavfi', '-i', 'sine=frequency=440:duration=2',
+            '-c:a', 'libopus', '-f', 'webm', 'pipe:1',
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        webm, errors = await generator.communicate()
+        self.assertEqual(generator.returncode, 0, errors.decode())
+        async def audio(request):
+            return web.Response(body=webm, content_type='audio/webm')
+        app = web.Application(); app.router.add_get('/audio', audio)
+        source = TestServer(app); await source.start_server()
+        relay = DlnaMediaRelay('127.0.0.1', bind_host='127.0.0.1')
+        try:
+            url, mime = await relay.prepare(str(source.make_url('/audio')), 'audio/webm; codecs=opus', SONOS_RELAY_MIME)
+            self.assertEqual(mime, 'audio/mpeg')
+            async with ClientSession() as client:
+                async with client.get(url) as response:
+                    mp3 = await response.read()
+                    self.assertEqual(response.headers['Content-Length'], str(len(mp3)))
+            with tempfile.TemporaryDirectory() as directory:
+                path = Path(directory) / 'result.mp3'; path.write_bytes(mp3)
+                probe = await asyncio.create_subprocess_exec('ffprobe', '-v', 'error', '-show_streams',
+                    '-show_format', '-of', 'json', str(path), stdout=asyncio.subprocess.PIPE)
+                result, _ = await probe.communicate()
+                self.assertEqual(probe.returncode, 0)
+                data = json.loads(result)
+                self.assertEqual(data['streams'][0]['codec_name'], 'mp3')
+                self.assertEqual(data['streams'][0]['sample_rate'], '44100')
+                self.assertEqual(data['streams'][0]['channels'], 2)
+                self.assertAlmostEqual(float(data['format']['duration']), 2, delta=.1)
+        finally:
+            await relay.close(); await source.close()
+
+
+class CleanupFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_http_cleanup_failure_removes_files_and_keeps_runner_for_retry(self):
+        from types import SimpleNamespace
+        relay = DlnaMediaRelay('127.0.0.1')
+        relay._temp = tempfile.TemporaryDirectory(prefix='cast-relay-test-')
+        directory = Path(relay._temp.name)
+        path = directory / 'track.mp3'; path.write_bytes(b'audio')
+        relay._files['track.mp3'] = (path, 'audio/mpeg', True)
+        relay._base = 'http://127.0.0.1:1234'
+        runner = SimpleNamespace(cleanup=AsyncMock(side_effect=[RuntimeError('close failed'), None]))
+        relay._runner = runner
+        with self.assertRaises(RuntimeError):
+            await relay.close()
+        self.assertFalse(directory.exists())
+        self.assertFalse(relay._files)
+        self.assertIsNone(relay._base)
+        self.assertIs(relay._runner, runner)
+        await relay.close()
+        self.assertIsNone(relay._runner)
+        self.assertEqual(runner.cleanup.await_count, 2)
+
+    async def test_next_start_retries_failed_http_cleanup_before_new_listener(self):
+        from types import SimpleNamespace
+        relay = DlnaMediaRelay('127.0.0.1', bind_host='127.0.0.1')
+        old = SimpleNamespace(cleanup=AsyncMock(side_effect=[RuntimeError('close failed'), None]))
+        relay._runner, relay._base = old, 'http://old'
+        with self.assertRaises(RuntimeError):
+            await relay.close()
+        try:
+            await relay._start()
+            self.assertEqual(old.cleanup.await_count, 2)
+            self.assertIsNot(relay._runner, old)
+            self.assertTrue(relay._base.startswith('http://127.0.0.1:'))
+        finally:
+            await relay.close()
+
+    async def test_sonos_and_dlna_stop_state_survives_relay_cleanup_failure(self):
+        from types import SimpleNamespace
+        from cast_audio_lab.sonos import SonosAudioBackend
+        from cast_audio_lab.dlna import DlnaAudioBackend
+        sonos = SonosAudioBackend('192.0.2.3', device_factory=lambda _: SimpleNamespace(stop=lambda: None))
+        dlna = DlnaAudioBackend('http://192.0.2.3/device.xml')
+        for backend in (sonos, dlna):
+            with self.subTest(backend=type(backend).__name__):
+                relay = SimpleNamespace(close=AsyncMock(side_effect=[RuntimeError('close failed'), None]))
+                backend._relay = relay
+                backend._status.state = 'PLAYING'
+                try:
+                    await backend.stop()
+                except RuntimeError:
+                    pass  # Sonos propagates; DLNA translates its Stop error.
+                self.assertEqual(backend.status().state, 'IDLE')
+                self.assertIs(backend._relay, relay)
+                await backend.shutdown()
+                self.assertIsNone(backend._relay)
+                self.assertEqual(relay.close.await_count, 2)

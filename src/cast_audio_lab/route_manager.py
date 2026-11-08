@@ -3,6 +3,8 @@
 import asyncio
 import contextlib
 import logging
+import json
+import uuid
 from logging.handlers import RotatingFileHandler
 import os
 from pathlib import Path
@@ -13,6 +15,7 @@ import time
 from urllib.parse import urlsplit
 
 from .output_registry import adapter_arguments
+from .settings_ipc import PREFIX as SETTINGS_PREFIX, TIMEOUT as SETTINGS_TIMEOUT, validate_update
 
 
 LOG = logging.getLogger(__name__)
@@ -30,6 +33,7 @@ class RouteManager:
         self.spawn = spawn or asyncio.create_subprocess_exec
         self.routes = []
         self.tasks, self.states = {}, {}
+        self.processes, self.settings_pending = {}, {}
         self.lock = asyncio.Lock()
         self.closed = False
         self.started_at = None
@@ -39,7 +43,7 @@ class RouteManager:
     def command(self, route):
         argv = [sys.executable, "-m", "cast_audio_lab.vibecast_player", "--bridge", self.bridge,
                 "--player-id", route.id, "--name="+route.name, "--backend", route.backend,
-                "--log-level", self.log_level]
+                "--log-level", self.log_level, "--settings-stdio"]
         if self.artwork_endpoint and self.artwork_public_url:
             argv += ['--artwork-endpoint', self.artwork_endpoint,
                      '--artwork-public-url', self.artwork_public_url]
@@ -87,6 +91,52 @@ class RouteManager:
     def public(self):
         return [dict(route.public(), process=self.states.get(route.id, {"state": "disabled", "pid": None, "restarts": 0}))
                 for route in self.routes]
+
+    async def settings_request(self, route_id, body=None):
+        if body is not None:
+            validate_update(body)
+        process = self.processes.get(route_id)
+        if (process is None or process.returncode is not None
+                or len(self.settings_pending) >= 32):
+            raise RuntimeError("settings unavailable")
+        ident = uuid.uuid4().hex
+        future = asyncio.get_running_loop().create_future()
+        self.settings_pending[ident] = (route_id, future)
+        request = {"requestId": ident, "operation": "get" if body is None else "update",
+                   "expiresAt": time.monotonic() + SETTINGS_TIMEOUT - .1}
+        if body is not None:
+            request["body"] = body
+        try:
+            async with asyncio.timeout(SETTINGS_TIMEOUT):
+                encoded = (json.dumps(request, ensure_ascii=False, separators=(",", ":")) + "\n").encode()
+                if len(encoded) > 32768:
+                    raise ValueError("settings request too large")
+                process.stdin.write(encoded)
+                await process.stdin.drain()
+                return await future
+        except (TimeoutError, ConnectionError) as error:
+            raise RuntimeError("settings unavailable") from error
+        finally:
+            self.settings_pending.pop(ident, None)
+
+    def _settings_response(self, route_id, message):
+        try:
+            response = json.loads(message)
+            owner, future = self.settings_pending.get(response.get("requestId"), (None, None))
+            if owner != route_id or future is None or future.done():
+                return
+            if "error" in response:
+                future.set_exception(RuntimeError("settings unavailable"))
+            elif isinstance(response.get("result"), dict):
+                future.set_result(response["result"])
+        except (ValueError, TypeError, AttributeError):
+            return
+
+    def _settings_disconnected(self, route_id):
+        self.processes.pop(route_id, None)
+        for owner, future in self.settings_pending.values():
+            if owner == route_id and not future.done():
+                future.set_exception(RuntimeError("settings unavailable"))
 
     async def _bridge_reachable(self, timeout=0.35):
         parsed = urlsplit(self.bridge)
@@ -177,6 +227,9 @@ class RouteManager:
     async def _drain(self, stream, handler, route_id=None):
         while chunk := await stream.readline():
             message = chunk.decode(errors="replace").rstrip()
+            if message.startswith(SETTINGS_PREFIX):
+                self._settings_response(route_id, message[len(SETTINGS_PREFIX):])
+                continue
             health_marker = message.find(_HEALTH_SOURCE)
             if health_marker >= 0 and route_id in self.states:
                 health = message[health_marker + len(_HEALTH_SOURCE):]
@@ -241,13 +294,14 @@ class RouteManager:
                                               maxBytes=1024*1024, backupCount=1, encoding="utf-8")
                 os.chmod(handler.baseFilename, 0o600)
                 handler.setFormatter(logging.Formatter("%(message)s"))
-                spawn = asyncio.create_task(self.spawn(*self.command(route), stdin=asyncio.subprocess.DEVNULL,
+                spawn = asyncio.create_task(self.spawn(*self.command(route), stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT, start_new_session=True))
                 try:
                     process = await asyncio.shield(spawn)
                 except asyncio.CancelledError:
                     process = await spawn
                     raise
+                self.processes[route.id] = process
                 self.states[route.id] = {"state": "running", "pid": process.pid, "restarts": restarts}
                 pump = asyncio.create_task(self._drain(process.stdout, handler, route.id))
                 waiter = asyncio.create_task(process.wait())
@@ -262,6 +316,7 @@ class RouteManager:
             except (OSError, ValueError):
                 self.states[route.id] = {"state": "backoff", "pid": None, "restarts": restarts, "error": failure}
             finally:
+                self._settings_disconnected(route.id)
                 try:
                     if process:
                         if pump is not None:

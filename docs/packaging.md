@@ -20,7 +20,8 @@ authentication bundle into an image layer.
 
 The image also installs the optional DLNA and Sonos adapter dependencies; those
 adapters remain opt-in. One older Samsung DLNA renderer is user-confirmed;
-Sonos and wider hardware acceptance remain unverified.
+Direct Sonos and wider hardware acceptance remain unverified. Contributor-reported
+Sonos AirPlay use is documented separately in [network outputs](network-outputs.md).
 
 The container starts through a minimal state bootstrap because Home Assistant
 and ordinary container engines may mount `/data` as root-owned. The bootstrap

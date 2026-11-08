@@ -45,6 +45,11 @@ build/runtime checks; physical ARM speaker acceptance remains untested.
 - Control the active YouTube Music session from Home Assistant with Play,
   Pause, Stop, Seek, volume, mute and real-queue Next/Previous without taking
   ownership away from the connected desktop, phone or tablet.
+- Home Assistant control policy: retain the standard Google Cast integration.
+  Repeat Off/One/All is the intended next control, pending upstream support and
+  receiver-side Cast command mapping. Displaying/browsing the active YouTube
+  Music playlist in Home Assistant is deliberately outside the current scope;
+  no separate HA integration is planned for that purpose.
 - Receive direct HTTP(S) media, radio and local/TTS URLs through the Cast
   Default Media Receiver path used by Home Assistant.
 - Play locally with mpv, forward to AirPlay with Music Assistant's
@@ -54,10 +59,16 @@ build/runtime checks; physical ARM speaker acceptance remains untested.
 - Report redacted health and support information without including credentials,
   target addresses or signed media URLs.
 
-Sonos output is implemented but has only mocked coverage, not a real-hardware
-acceptance test. Spotify Cast, Bluetooth and Google Home speaker groups are not
+Sonos through AirPlay is reported in daily use by contributor zero00zero (Era
+100 and “Play”). The direct Sonos output has automated tests and real FFmpeg
+conversion coverage, but no physical-device acceptance. See
+[network outputs and volume policy](docs/network-outputs.md). Spotify Cast, Bluetooth and Google Home speaker groups are not
 goals of this release. Spotify already has Spotify Connect; Google Home does not
 adopt this experimental device identity into native groups.
+
+The unreleased development candidate also includes a dedicated
+[TuneIn Radio receiver](docs/tunein-receiver.md). Its implementation and tests
+are tracked separately from the published version and stock-app acceptance.
 
 ## Why this is technically unusual
 
@@ -87,7 +98,7 @@ YouTube Music / Home Assistant / another DMR sender
              ├─ mpv → local audio
              ├─ FFmpeg → PCM → airplay-cli
              ├─ HTTP relay/remux → DLNA
-             └─ direct media URL → Sonos (experimental)
+             └─ direct URL or shared HTTP relay → Sonos (experimental)
 ```
 
 Read [How it works](docs/how-it-works.md) for the story behind discovery,
@@ -100,14 +111,29 @@ short maintainer map.
 | Path | Current evidence |
 | --- | --- |
 | YouTube Music → local audio | Extensively tested during development and through the published HA App. |
+| Regular YouTube → audio output | Candidate `0.7.0-dev3` adds a YouTube-only TV identity sharing the existing speaker's runtime. Android YouTube selection and actual mpv decoding are verified on the test laptop; Music retains the speaker. See [dual identities](docs/dual-cast-identities.md) and [validation](docs/TESTING.md). |
 | YouTube Music → AirPlay | Tested with the legacy AirReceiver reference target, including persistent sessions and controls. HomePod/native AirPlay 2 and Yamaha hardware still need acceptance tests. |
 | Home Assistant direct media / radio | Tested through the Default Media Receiver path. This does not imply support for every Cast app or DRM service. |
 | DLNA | Tested on an older Samsung TV, including its connection-approval flow; renderer compatibility still varies. |
-| Sonos | Implemented with deterministic tests; real hardware remains unverified. |
+| Sonos | AirPlay use reported by contributor; direct Sonos has automated/FFmpeg coverage, hardware acceptance pending. |
 | Parallel outputs / small devices / ARM | Useful community test and contribution areas, not release claims. |
 
 See the [working plan](docs/WORKING-PLAN.md) for the distinction between
 implemented, automated-tested, deployed and user-confirmed work.
+
+The `0.7.0-dev3` source candidate retains each original speaker UUID and adds a
+stable video alias named `<output name> (YT)`, advertised only through YouTube's app subtype. Both identities
+share one player, session owner and volume state, regardless of the output backend.
+Music and other clients respecting discovery/availability use the speaker; generic
+scanners can still expose both identities. Existing explicit browser launches on
+the original endpoint remain accepted. This is a test-laptop candidate, not a
+published update to existing Home Assistant installations.
+
+The [capability lab](docs/youtube-capability-lab.md) retains the earlier 25-profile
+and paired experiments across PR #18's four announcement layers. Its silent LOAD
+results are separate from the product's real-output validation. The tested dual
+profile changes mDNS and Cast capability masks only for the alias; Eureka and
+outgoing API display flags retain their audio defaults.
 
 ## Authentication and first start
 

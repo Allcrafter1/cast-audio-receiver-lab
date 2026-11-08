@@ -99,7 +99,12 @@ class DlnaMediaRelay:
 
     async def _start(self):
         if self._runner:
-            return
+            if self._base is not None:
+                return
+            # A failed close invalidates the old URL. Finish that cleanup
+            # before publishing another file on a replacement HTTP listener.
+            await self._runner.cleanup()
+            self._runner = None
         host = self.bind_host or await asyncio.to_thread(local_address_for, self.target_host)
         app = web.Application()
         app.router.add_get("/media/{name}", self._serve)
@@ -159,15 +164,20 @@ class DlnaMediaRelay:
                 path.unlink(missing_ok=True)
 
     async def close(self):
-        if self._process is not None and self._process.returncode is None:
-            with contextlib.suppress(ProcessLookupError):
-                self._process.kill()
-            await self._process.wait()
-        if self._runner:
-            runner, self._runner = self._runner, None
-            await runner.cleanup()
-        self._files.clear()
-        if self._temp:
-            self._temp.cleanup()
-            self._temp = None
-        self._base = None
+        try:
+            if self._process is not None and self._process.returncode is None:
+                with contextlib.suppress(ProcessLookupError):
+                    self._process.kill()
+                await self._process.wait()
+            if self._runner:
+                # Retain ownership on failure so a later shutdown can retry.
+                await self._runner.cleanup()
+                self._runner = None
+        finally:
+            self._files.clear()
+            try:
+                if self._temp:
+                    self._temp.cleanup()
+                    self._temp = None
+            finally:
+                self._base = None

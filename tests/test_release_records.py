@@ -13,6 +13,16 @@ ROOT = Path(__file__).parents[1]
 
 
 class ReleaseRecordTests(unittest.TestCase):
+    def test_container_python_matches_locked_wheel_abi(self):
+        container = (ROOT / "Containerfile").read_text()
+        images = re.findall(r"^FROM python:(\d+)\.(\d+)[^\s]*", container, re.MULTILINE)
+        self.assertTrue(images, "No explicit Python base images found")
+        locked = set(re.findall(r"container-[^\s/\"]+-cp(\d+)\.lock\.txt", container))
+        self.assertEqual(len(locked), 1, "Container must use one reviewed CPython lock ABI")
+        self.assertEqual({major + minor for major, minor in images}, locked,
+                         "Python base-image upgrade requires matching runtime wheels, hashes, "
+                         "source inventories and CI coverage; see docs/maintenance.md")
+
     def test_historical_receiver_is_outside_release_package(self):
         legacy_modules = {
             "auth.py",

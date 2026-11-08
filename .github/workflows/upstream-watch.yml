@@ -20,13 +20,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          pinned_vibecast=$(python -c 'import json; print(json.load(open("config/vibecast-0.6.0.dev12-source.lock.json"))["upstream_commit"])')
+          reviewed_vibecast=$(python -c 'import json; print(json.load(open("config/vibecast-upstream-review.json"))["reviewed_commit"])')
           latest_vibecast=$(git ls-remote https://github.com/emilsvennesson/vibecast.git refs/heads/main | cut -f1)
           pinned_airplay=$(python -c 'import json; print(json.load(open("config/cliairplay-linux-x86_64.lock.json"))["version"])')
           latest_airplay=$(gh api repos/music-assistant/airplay-cli/releases/latest --jq .tag_name)
           notes=""
-          if [ "$pinned_vibecast" != "$latest_vibecast" ]; then
-            notes="$notes\n- Vibecast: pinned $pinned_vibecast, upstream main $latest_vibecast"
+          if [ "$reviewed_vibecast" != "$latest_vibecast" ]; then
+            notes="$notes\n- Vibecast: last reviewed $reviewed_vibecast, upstream main $latest_vibecast"
           fi
           if [ "$pinned_airplay" != "$latest_airplay" ]; then
             notes="$notes\n- airplay-cli: pinned $pinned_airplay, latest release $latest_airplay"
@@ -37,10 +37,10 @@ jobs:
             --jq '.[] | select(.title == "Automated upstream review needed") | .number' \
             | head -n 1)
           if [ -z "$notes" ]; then
-            echo "Pinned upstreams are current." >> "$GITHUB_STEP_SUMMARY"
+            echo "No new upstream changes since the recorded Vibecast review and AirPlay release pin. Reviewed does not mean merged." >> "$GITHUB_STEP_SUMMARY"
             if [ -n "$issue_number" ]; then
               gh issue close "$issue_number" \
-                --comment "All watched upstream pins are current; closing the stale automated report."
+                --comment "No unreviewed watched upstream updates remain. Vibecast review decisions are documented separately; reviewed commits are not necessarily merged."
             fi
             exit 0
           fi

@@ -156,6 +156,13 @@ class DlnaAudioBackend(NullAudioBackend):
         )
         await super().seek(position)
 
+    async def read_volume(self):
+        profile = await self._connect()
+        await profile.async_update()
+        level = profile.volume_level
+        muted = profile.is_volume_muted if profile.has_volume_mute else False
+        return level, muted
+
     @upnp_command
     async def set_volume(self, level, muted):
         profile = await self._connect()
@@ -172,9 +179,12 @@ class DlnaAudioBackend(NullAudioBackend):
             if self._profile is not None:
                 await self._profile.async_stop()
         finally:
-            if self._relay is not None:
-                await self._relay.close()
-            await super().stop()
+            try:
+                if self._relay is not None:
+                    await self._relay.close()
+                    self._relay = None
+            finally:
+                await super().stop()
 
     def _start_polling(self):
         if self._poll_task is None or self._poll_task.done():
@@ -239,7 +249,7 @@ class DlnaAudioBackend(NullAudioBackend):
                     self._status.state = "IDLE"
                     self._status.idle_reason = "FINISHED" if finished else "CANCELLED"
                     self._emit_status()
-                    return
+                    # Keep receiver volume feedback alive until Cast Stop.
             except asyncio.CancelledError:
                 raise
             except Exception:

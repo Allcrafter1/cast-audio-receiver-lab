@@ -2,11 +2,138 @@
 import asyncio
 import math
 import unittest
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 from cast_audio_lab.mpv_backend import MpvAudioBackend
 
 
 class MpvEventTests(unittest.IsolatedAsyncioTestCase):
+    async def test_pending_cache_seek_reopens_once_with_latest_pause_intent(self):
+        b = MpvAudioBackend()
+        b._status.url = "http://127.0.0.1:8010/manifest/id/cache-audio"
+        b._status.content_type = "audio/webm"
+        b._status.state = "PLAYING"
+        b._status.volume, b._status.muted = .37, True
+        b._command, b._start = AsyncMock(), AsyncMock()
+        entered, release = asyncio.Event(), asyncio.Event()
+        async def wait(delay):
+            self.assertEqual(delay, 1)
+            entered.set()
+            await release.wait()
+        with patch("cast_audio_lab.mpv_backend.asyncio.sleep", wait):
+            await b.seek(61)
+            task = b._seek_fallback
+            await entered.wait()
+            await b.pause()
+            release.set()
+            await task
+        calls = [call.args for call in b._command.await_args_list if call.args[0] == "loadfile"]
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][1], b._status.url)
+        self.assertEqual(calls[0][-1]["start"], "61")
+        self.assertFalse(b._autoplay)
+        self.assertEqual((b.status().volume, b.status().muted), (.37, True))
+        self.assertIsNone(b._seek_fallback)
+
+    async def test_pending_seek_recovery_is_cancelled_by_latest_selection_or_stop(self):
+        for replacement in ("seek", "load", "stop", "shutdown", "restart"):
+            with self.subTest(replacement=replacement):
+                b = MpvAudioBackend()
+                b._status.url = "http://127.0.0.1:8010/manifest/id/cache-audio"
+                b._status.state = "PLAYING"
+                b._command, b._start, b._dispose = AsyncMock(), AsyncMock(), AsyncMock()
+                entered, release = asyncio.Event(), asyncio.Event()
+                async def wait(delay):
+                    entered.set()
+                    await release.wait()
+                with patch("cast_audio_lab.mpv_backend.asyncio.sleep", wait):
+                    await b.seek(61)
+                    old = b._seek_fallback
+                    await entered.wait()
+                    if replacement == "seek":
+                        await b.seek(22)
+                    elif replacement == "load":
+                        await b.load("https://example.test/new", "audio/mp4", True, 0)
+                    elif replacement == "restart":
+                        await b._event({"event": "playback-restart"})
+                    else:
+                        await getattr(b, replacement)()
+                    newest = b._seek_fallback
+                    release.set()
+                    await asyncio.gather(old, *([newest] if newest is not None and newest is not old else []), return_exceptions=True)
+                calls = [call.args for call in b._command.await_args_list if call.args[0] == "loadfile"]
+                if replacement == "seek":
+                    self.assertEqual(len(calls), 1)
+                    self.assertEqual(calls[0][-1]["start"], "22")
+                elif replacement == "load":
+                    self.assertEqual(len(calls), 1)
+                    self.assertEqual(calls[0][1], "https://example.test/new")
+                else:
+                    self.assertEqual(calls, [])
+
+    async def test_pending_seek_reopen_in_flight_is_cancelled_before_stop(self):
+        b = MpvAudioBackend()
+        b._status.url = "http://127.0.0.1:8010/manifest/id/cache-audio"
+        b._status.state = "PLAYING"
+        entered = asyncio.Event()
+        async def command(*args):
+            if args[0] == "loadfile":
+                entered.set()
+                await asyncio.Future()
+        b._command, b._start = command, AsyncMock()
+        with patch("cast_audio_lab.mpv_backend.asyncio.sleep", AsyncMock()):
+            await b.seek(61)
+            task = b._seek_fallback
+            await entered.wait()
+            await b.stop()
+            self.assertTrue(task.cancelled())
+            self.assertEqual(b.status().state, "IDLE")
+            self.assertFalse(b._seeking)
+
+    async def test_rejected_seek_without_url_restores_active_state(self):
+        b = MpvAudioBackend()
+        b._status.state = "PLAYING"
+        b._set_position(10)
+        b._command = AsyncMock(side_effect=ValueError("not seekable"))
+        with self.assertRaises(ValueError):
+            await b.seek(61)
+        self.assertEqual(b.status().state, "PLAYING")
+        self.assertEqual(b.status().current_time, 10)
+        self.assertFalse(b._seeking)
+
+    async def test_seek_fallback_is_only_for_owned_cache_urls(self):
+        for url in (None, "https://example.test/manifest/a/cache-x",
+                    "http://127.0.0.1:8010/manifest/audio"):
+            b = MpvAudioBackend()
+            b._status.url, b._status.state = url, "PLAYING"
+            b._command = AsyncMock()
+            await b.seek(12)
+            self.assertIsNone(b._seek_fallback)
+
+
+    async def test_seek_ack_is_not_playback_ready(self):
+        for autoplay in (True, False):
+            with self.subTest(autoplay=autoplay):
+                b = MpvAudioBackend()
+                b._autoplay = autoplay
+                b._status.state = "PLAYING" if autoplay else "PAUSED"
+                b._command = AsyncMock()
+                await b.seek(79)
+                self.assertEqual(b.status().state, "BUFFERING" if autoplay else "PAUSED")
+                await b._event({"event": "property-change", "name": "paused-for-cache", "data": False})
+                self.assertEqual(b.status().state, "BUFFERING" if autoplay else "PAUSED")
+                await b._event({"event": "playback-restart"})
+                self.assertEqual(b.status().state, "PLAYING" if autoplay else "PAUSED")
+
+    async def test_file_loaded_waits_for_decoder_restart_before_playing(self):
+        b = MpvAudioBackend()
+        b._start = AsyncMock()
+        b._command = AsyncMock()
+        await b.load("https://example.test/audio", "audio/webm", True, 140)
+        await b._event({"event": "file-loaded"})
+        self.assertEqual(b.status().state, "BUFFERING")
+        await b._event({"event": "playback-restart"})
+        self.assertEqual(b.status().state, "PLAYING")
+
     async def test_malformed_ipc_object_is_contained_as_decoder_error(self):
         b = MpvAudioBackend()
         reader = asyncio.StreamReader()
@@ -281,11 +408,95 @@ class MpvEventTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(b.status().state, "PAUSED")
         self.assertFalse(b._autoplay)
 
+    async def test_cache_pause_survives_unpause_and_restart_in_either_order(self):
+        for first in ("pause", "paused-for-cache"):
+            with self.subTest(first=first):
+                b = MpvAudioBackend()
+                b._status.state = "PLAYING"
+                b._command = AsyncMock()
+                names = [first, "paused-for-cache" if first == "pause" else "pause"]
+                for name in names:
+                    await b._event({"event": "property-change", "name": name,
+                                    "data": name == "paused-for-cache"})
+                self.assertEqual(b.status().state, "BUFFERING")
+                await b._event({"event": "playback-restart"})
+                self.assertEqual(b.status().state, "BUFFERING")
+                await b.pause()
+                await b._event({"event": "property-change", "name": "paused-for-cache", "data": True})
+                await b._event({"event": "playback-restart"})
+                self.assertEqual(b.status().state, "PAUSED")
+                await b.play()
+                self.assertEqual(b.status().state, "BUFFERING")
+                await b._event({"event": "property-change", "name": "paused-for-cache", "data": False})
+                self.assertEqual(b.status().state, "PLAYING")
+
+    async def test_cache_flag_during_load_is_applied_at_file_loaded(self):
+        for autoplay in (True, False):
+            with self.subTest(autoplay=autoplay):
+                b = MpvAudioBackend()
+                b._start = AsyncMock()
+                b._command = AsyncMock()
+                await b.load("https://example.test/audio", "audio/mp4", autoplay, 0)
+                b._emit_status = Mock()
+                await b._event({"event": "property-change", "name": "paused-for-cache", "data": True})
+                await b._event({"event": "property-change", "name": "pause", "data": autoplay})
+                b._emit_status.assert_not_called()
+                await b._event({"event": "file-loaded"})
+                self.assertEqual(b.status().state, "BUFFERING" if autoplay else "PAUSED")
+                await b._event({"event": "property-change", "name": "paused-for-cache", "data": False})
+                self.assertEqual(b.status().state, "BUFFERING" if autoplay else "PAUSED")
+                await b._event({"event": "playback-restart"})
+                self.assertEqual(b.status().state, "PLAYING" if autoplay else "PAUSED")
+
+    async def test_seek_keeps_latest_cache_flag_without_publishing_stale_feedback(self):
+        for cache_before, cache_after in ((False, True), (True, False)):
+            with self.subTest(cache_before=cache_before):
+                b = MpvAudioBackend()
+                b._status.state = "PLAYING"
+                b._command = AsyncMock()
+                await b._event({"event": "property-change", "name": "paused-for-cache", "data": cache_before})
+                await b.seek(42)
+                b._emit_status = Mock()
+                await b._event({"event": "property-change", "name": "paused-for-cache", "data": cache_after})
+                await b._event({"event": "property-change", "name": "pause", "data": True})
+                await b._event({"event": "property-change", "name": "time-pos", "data": 5})
+                b._emit_status.assert_not_called()
+                self.assertEqual(b.status().current_time, 42)
+                await b._event({"event": "playback-restart"})
+                self.assertEqual(b.status().state, "BUFFERING" if cache_after else "PLAYING")
+
+    async def test_cache_flag_clears_at_playback_boundaries(self):
+        for boundary in ("load", "stop", "eof", "error", "dispose"):
+            with self.subTest(boundary=boundary):
+                b = MpvAudioBackend()
+                b._start = AsyncMock()
+                b._command = AsyncMock()
+                b._status.state = "PLAYING"
+                await b._event({"event": "property-change", "name": "paused-for-cache", "data": True})
+                if boundary == "load":
+                    await b.load("https://example.test/new", "audio/mp4", True, 0)
+                    await b._event({"event": "file-loaded"})
+                    self.assertEqual(b.status().state, "BUFFERING")
+                    await b._event({"event": "playback-restart"})
+                    self.assertEqual(b.status().state, "PLAYING")
+                elif boundary == "dispose":
+                    await b.shutdown()
+                else:
+                    if boundary == "stop":
+                        await b.stop()
+                    else:
+                        await b._event({"event": "end-file", "reason": boundary})
+                    await b._event({"event": "property-change", "name": "paused-for-cache", "data": True})
+                    await b._event({"event": "playback-restart"})
+                    self.assertEqual(b.status().state, "IDLE")
+                self.assertFalse(b._paused_for_cache)
+
     async def test_rejected_seek_reopens_paused_media(self):
         b = MpvAudioBackend()
         b._status.url = "https://example.invalid/audio"
         b._status.content_type = "audio/webm"
         b._status.state = "PAUSED"
+        b._autoplay = False
         b._command = AsyncMock(side_effect=ValueError("not seekable"))
         b.load = AsyncMock()
         await b.seek(42)

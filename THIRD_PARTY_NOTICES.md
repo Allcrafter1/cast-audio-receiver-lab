@@ -14,11 +14,12 @@ material, executables or authentication artifacts.
 
 | Project / author | Actual role here | Recorded source / license status |
 | --- | --- | --- |
+| [mdns-sd](https://github.com/keepsimple1/mdns-sd), keepsimple and contributors | Rust Cast discovery; local multi-subtype and subtype-only browse support | v0.20.1, Apache-2.0 OR MIT. Original texts in `licenses/mdns-sd-APACHE.txt` and `licenses/mdns-sd-MIT.txt`; modified sources and change notice in the frontend's `vendor/mdns-sd`. Upstream crate SHA-256 `fb75febbe5fa1837a52fdbd1c735e168286c5c645fc2ddd31526f65c49941c2e`. |
 | [Vibecast](https://github.com/emilsvennesson/vibecast), Nils Emil Svensson and contributors | Active Cast frontend, application/player architecture and YouTube implementation, maintained in our [reviewable fork](https://github.com/Allcrafter1/vibecast/commit/f28befe02fe930db300294d6bf49cdf5fec5a747) | Fork commit `f28befe02fe930db300294d6bf49cdf5fec5a747`, based on upstream `b4616f8f399be706a1409ed21922aa2df892e303`; MIT. Preserve upstream copyright/license; copy in `licenses/Vibecast-MIT.txt`. |
 | [ffindog/ytm-cast-receiver](https://github.com/ffindog/ytm-cast-receiver) and [Vibecast PR #1](https://github.com/Allcrafter1/vibecast/pull/1), ffindog | Behavioural reference, iOS reconnect reproduction and a narrower session-ownership proposal reviewed while designing the independent hub-level reconnect/takeover fix | MIT reference project. The PR is unmerged and is not an ancestor of this release; no implementation source was imported. |
 | [patrickkfkan/yt-cast-receiver](https://github.com/patrickkfkan/yt-cast-receiver), Patrick K. F. Kan | Behavioural reference for YouTube Lounge `/next`, CTT and queue-context request shapes | MIT as declared upstream. Protocol behaviour was compared; no implementation source was imported. |
 | [Shanocast](https://github.com/rgerganov/shanocast), rgerganov and contributors | Earlier compatibility research and externally supplied format input supported by an independently written importer | Local research checkout `1b57813f2a92c5dbb68c916263127b75e9c8164f`; README links [the author's explanation](https://xakcop.com/post/shanocast/). No standalone license file exists in the checked tree, so its code is treated as all rights reserved. No Shanocast source, patch, key or signature table is included here; see the dated audit. |
-| [Music Assistant airplay-cli](https://github.com/music-assistant/airplay-cli) and contributors | Actual persistent AirPlay output executable | v0.5.4, commit `431c5c582eef9307c4e39c50a0ea65e970bc1128`; combined binary declared GPLv3 by upstream. Exact x86_64 artifact hash in `config/cliairplay-linux-x86_64.lock.json`; preserved notices in `licenses/airplay-cli-THIRD_PARTY_NOTICES.md`. |
+| [Music Assistant airplay-cli](https://github.com/music-assistant/airplay-cli) and contributors | Actual persistent AirPlay output executable | v0.5.9, commit `0a58c239d5fb3cf8927b9707a71c6fe897266b6a`; combined binary declared GPLv3 by upstream. Exact x86_64 artifact hash in `config/cliairplay-linux-x86_64.lock.json`; preserved notices in `licenses/airplay-cli-THIRD_PARTY_NOTICES.md`. |
 | [Chromium](https://chromium.googlesource.com/chromium/src/), The Chromium Authors | `cast_channel.proto` envelope schema incorporated through Vibecast | File copyright 2014; BSD-3-Clause notice in `licenses/Chromium-BSD.txt`. This protocol file is not the Google Cast SDK. |
 | [philippe44/libraop](https://github.com/philippe44/libraop), Shiro Ninomiya and other authors listed upstream | RAOP/transport work incorporated by airplay-cli, not independently reimplemented here | Retain airplay-cli's full third-party notices and component texts; see caveat below. |
 | [FFmpeg](https://ffmpeg.org/) contributors | Audio decode/PCM normalization and bounded artwork conversion | External host executable; exact enabled-component/build license must be inventoried for the shipped artifact. No single blanket license claim for every FFmpeg build. |
@@ -41,12 +42,15 @@ reproducible finding is not a blanket legal guarantee.
 
 Current maintained Vibecast build input is public base commit
 `83ba470158189de3bc223701decdc4c502d47644` plus the hash-locked cumulative
-`0.7.0.dev1` snapshot recorded in `config/vibecast-frontend.lock.json`. It
-includes the accepted YouTube resolver/session and Home Assistant control work.
+`0.7.0.dev2` snapshot recorded in `config/vibecast-frontend.lock.json`. It
+includes the accepted YouTube resolver/session and Home Assistant control work,
+TuneIn, volume integration and shared-runtime dual Cast identities.
 The older commit in the provenance table remains the integration base; all
 Vibecast files and modifications remain MIT and its notices are unchanged.
+Vendored dependencies retain their own terms; in particular the patched mDNS
+sources remain Apache-2.0 OR MIT rather than being relicensed by the patch file.
 
-The airplay-cli v0.5.4 notice records mixed component licences. Its statement that
+The airplay-cli v0.5.9 notice records mixed component licences. Its statement that
 libraop has no licence is now stale: upstream commit
 `4fe461a809eadd5230e3b587a3b3c948f90d9617` adds Philippe's MIT statement while
 explicitly preserving third-party conditions. We retain both the unmodified

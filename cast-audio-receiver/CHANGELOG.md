@@ -1,5 +1,16 @@
 # App changelog
 
+## 0.7.0-dev2 — candidate source, not yet in the App store
+
+- Add a YouTube-specific video identity beside each existing Cast speaker.
+  YouTube and Music share one playback/session/volume runtime, including output
+  takeover; Music and normal Cast discovery retain the speaker identity.
+- Include safe startup-volume adoption with 25% fallback, Sonos metadata and
+  event monitoring with polling fallback, shared media conversion, TuneIn and
+  the previously accepted playback/reconnect fixes.
+- See the repository's TESTING record for the laptop candidate. This entry is
+  release preparation, not a hardware claim or promotion of the installed App.
+
 ## 0.7.0-dev1 — resilient YouTube sessions and full Home Assistant controls
 
 - Keep an active YouTube Music session alive for up to 60 seconds after an

@@ -1,0 +1,256 @@
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -726,8 +726,13 @@
+                     .await;
+             }
+             ReceiverRequest::GetAppAvailability(r) => {
+-                let response =
++                let mut response =
+                     vibecast_messages::AppAvailabilityResponse::available(r.request_id, &r.app_id);
++                for (app_id, availability) in &mut response.availability {
++                    if self.registry.get(app_id).is_none() {
++                        *availability = "APP_UNAVAILABLE".to_owned();
++                    }
++                }
+                 self.send_to(conn_id, RECEIVER_0, source, ns::RECEIVER, &response)
+                     .await;
+             }
+--- a/crates/vibecast-core/src/tests.rs
++++ b/crates/vibecast-core/src/tests.rs
+@@ -3873,7 +3873,7 @@
+ }
+ 
+ #[tokio::test]
+-async fn platform_app_availability_marks_registered_app() {
++async fn platform_app_availability_matches_launch_support_and_preserves_request_ids() {
+     let mut harness = setup().await;
+     let client = &mut harness.client;
+     send(
+@@ -3887,12 +3887,34 @@
+         client,
+         ns::RECEIVER,
+         "receiver-0",
+-        r#"{"type":"GET_APP_AVAILABILITY","requestId":4,"appId":["APP1"]}"#,
++        r#"{"type":"GET_APP_AVAILABILITY","requestId":4,"appId":["APP1","CC1AD845","UNREGISTERED"]}"#,
+     )
+     .await;
+     let reply = next_json(client).await;
+     assert_eq!(reply["type"], "GET_APP_AVAILABILITY");
++    assert_eq!(reply["requestId"], 4);
++    assert_eq!(reply["availability"].as_object().unwrap().len(), 3);
+     assert_eq!(reply["availability"]["APP1"], "APP_AVAILABLE");
++    assert_eq!(reply["availability"]["CC1AD845"], "APP_AVAILABLE");
++    assert_eq!(reply["availability"]["UNREGISTERED"], "APP_UNAVAILABLE");
++    assert!(harness.player.commands().is_empty());
++
++    send(
++        client,
++        ns::RECEIVER,
++        "receiver-0",
++        r#"{"type":"LAUNCH","requestId":5,"appId":"UNREGISTERED"}"#,
++    )
++    .await;
++    let rejected = next_json(client).await;
++    assert_eq!(rejected["type"], "LAUNCH_ERROR");
++    assert_eq!(rejected["requestId"], 5);
++    assert!(harness.player.commands().is_empty());
++
++    // An unsupported launch must leave the advertised supported app usable.
++    let transport = launch(client).await;
++    assert!(!transport.is_empty());
++    harness.hub.shutdown().await;
+ }
+ 
+ #[tokio::test]
+--- a/crates/vibecast-apps-youtube/src/lounge.rs
++++ b/crates/vibecast-apps-youtube/src/lounge.rs
+@@ -532,12 +532,8 @@
+             theme,
+         )?;
+         let bound = initial_bind(&http, &bind_url).await?;
+-        match screen_is_online(&http, &base, &lounge_token).await {
+-            Ok(online) => tracing::debug!(online, "YouTube Lounge screen visibility after bind"),
+-            Err(error) => {
+-                tracing::debug!(%error, "YouTube Lounge screen visibility check failed")
+-            }
+-        }
++        // A valid initial bind is the readiness boundary. The optional screen
++        // visibility probe must not delay the MDX identity sent to the client.
+ 
+         Ok(Self {
+             volume_rx: None,
+@@ -1292,30 +1288,6 @@
+     Ok(())
+ }
+ 
+-async fn screen_is_online(
+-    http: &reqwest::Client,
+-    base: &Url,
+-    lounge_token: &str,
+-) -> Result<bool, LoungeError> {
+-    let body = url::form_urlencoded::Serializer::new(String::new())
+-        .append_pair("lounge_token", lounge_token)
+-        .finish();
+-    let response: ScreenAvailabilityResponse = http
+-        .post(join(base, "pairing/get_screen_availability")?)
+-        .header("User-Agent", USER_AGENT)
+-        .header("Content-Type", "application/x-www-form-urlencoded")
+-        .body(body)
+-        .send()
+-        .await?
+-        .error_for_status()?
+-        .json()
+-        .await?;
+-    Ok(response
+-        .screens
+-        .iter()
+-        .any(|screen| screen.lounge_token == lounge_token && screen.status == "online"))
+-}
+-
+ /// At most one unsent snapshot of each feedback kind. Playback transitions are
+ /// applied to CurrentMedia before entering this queue; HTTP never gates them.
+ #[derive(Default)]
+@@ -2387,18 +2359,6 @@
+     screen_id: String,
+     #[serde(rename = "loungeToken")]
+     lounge_token: String,
+-}
+-
+-#[derive(Deserialize)]
+-struct ScreenAvailabilityResponse {
+-    screens: Vec<ScreenAvailability>,
+-}
+-
+-#[derive(Deserialize)]
+-struct ScreenAvailability {
+-    #[serde(rename = "loungeToken")]
+-    lounge_token: String,
+-    status: String,
+ }
+ 
+ #[cfg(test)]
+@@ -3941,13 +3901,31 @@
+             .mount(&server)
+             .await;
+ 
++        // A diagnostic endpoint can be slow even though the actual Lounge
++        // bind is ready. It must not hold up the sender's MDX screen response.
++        Mock::given(method("POST"))
++            .and(path("/api/lounge/pairing/get_screen_availability"))
++            .respond_with(
++                ResponseTemplate::new(200)
++                    .set_delay(Duration::from_secs(3))
++                    .set_body_json(serde_json::json!({
++                        "screens": [{"loungeToken": "lounge-token", "status": "online"}]
++                    })),
++            )
++            .mount(&server)
++            .await;
++
+         let receiver = ReceiverContext::new("Living Room", "Model", "device-1", PathBuf::new());
+-        let mut connection = LoungeConnection::establish_at(
+-            reqwest::Client::new(),
+-            &receiver,
+-            &format!("{}/api/lounge", server.uri()),
++        let mut connection = tokio::time::timeout(
++            Duration::from_secs(1),
++            LoungeConnection::establish_at(
++                reqwest::Client::new(),
++                &receiver,
++                &format!("{}/api/lounge", server.uri()),
++            ),
+         )
+         .await
++        .expect("ready Lounge bind waited for the optional availability probe")
+         .unwrap();
+ 
+         let identity = connection.identity();
+--- a/crates/vibecast-discovery/src/eureka.rs
++++ b/crates/vibecast-discovery/src/eureka.rs
+@@ -23,7 +23,7 @@
+ /// Device capability flags advertised in eureka `device_info.capabilities`.
+ ///
+ /// Also deserialized directly from the `[device.capabilities]` config table
+-/// (missing keys fall back to the Chromecast-like defaults).
++/// (missing keys retain the audio-speaker defaults).
+ #[derive(Debug, Clone, Serialize, Deserialize)]
+ #[serde(default, deny_unknown_fields)]
+ #[allow(missing_docs)]
+@@ -61,7 +61,7 @@
+             cast_connect_supported: true,
+             cloud_groups_supported: false,
+             cloudcast_supported: true,
+-            display_supported: true,
++            display_supported: false,
+             fdr_supported: false,
+             hdmi_prefer_50hz_supported: false,
+             hdmi_prefer_high_fps_supported: false,
+@@ -507,6 +507,7 @@
+             .unwrap()
+             .is_empty());
+         assert_eq!(device_info["capabilities"]["cast_connect_supported"], true);
++        assert_eq!(device_info["capabilities"]["display_supported"], false);
+ 
+         assert_eq!(body["multizone"]["max_static_groups"], 100);
+     }
+--- a/crates/vibecast-platform/src/config.rs
++++ b/crates/vibecast-platform/src/config.rs
+@@ -186,7 +186,7 @@
+ impl Default for CastDeviceCapabilities {
+     fn default() -> Self {
+         Self {
+-            display_supported: true,
++            display_supported: false,
+             hi_res_audio_supported: false,
+             remote_control_input_supported: true,
+             touch_input_supported: false,
+@@ -234,6 +234,40 @@
+         assert_eq!(config.volume.level, 1.0);
+         assert!(config.cast.user_agent.contains("CrKey"));
+         assert!(config.device.capabilities.cast_connect_supported);
++    }
++
++    #[test]
++    fn speaker_identity_is_consistent_without_manually_installed_config() {
++        use vibecast_discovery::CastAdvertisement;
++        use vibecast_messages::DeviceInfoResponse;
++
++        for config in [
++            Config::default(),
++            toml::from_str::<Config>("").unwrap(),
++            toml::from_str::<Config>(
++                "[device.capabilities]\nmultizone_supported = false\n\
++                 [cast.device_capabilities]\nhi_res_audio_supported = true",
++            )
++            .unwrap(),
++        ] {
++            let advertisement = CastAdvertisement::new("Speaker", "Audio Speaker", "test", 8009, "");
++            let advertised: i64 = advertisement.txt().ca.parse().unwrap();
++            let device_info = DeviceInfoResponse::new(
++                1,
++                "test".into(),
++                "Audio Speaker".into(),
++                "Speaker".into(),
++            );
++            assert_eq!(advertised & 1, 0, "speaker must not advertise VIDEO_OUT");
++            assert_eq!(device_info.device_capabilities, advertised);
++            assert!(
++                !config.device.capabilities.display_supported,
++                "Eureka must agree with speaker discovery"
++            );
++            let header: serde_json::Value =
++                serde_json::from_str(&config.cast.device_capabilities.header_value()).unwrap();
++            assert_eq!(header["display_supported"], false);
++        }
+     }
+ 
+     #[test]
+@@ -266,7 +300,7 @@
+         let header = CastDeviceCapabilities::default().header_value();
+         assert_eq!(
+             header,
+-            r#"{"display_supported":true,"hi_res_audio_supported":false,"remote_control_input_supported":true,"touch_input_supported":false}"#
++            r#"{"display_supported":false,"hi_res_audio_supported":false,"remote_control_input_supported":true,"touch_input_supported":false}"#
+         );
+     }
+ }

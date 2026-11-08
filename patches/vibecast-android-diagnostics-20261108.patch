@@ -1,0 +1,38 @@
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -678,6 +678,13 @@
+             ns::CONNECTION => match serde_json::from_value::<ConnectionMessage>(payload) {
+                 Ok(ConnectionMessage::Connect(request)) => {
+                     self.record_sender_connect_profile(conn_id, &source, &request);
++                    tracing::debug!(
++                        conn_id,
++                        sdk_type = ?request.sender_info.as_ref().and_then(|info| info.sdk_type),
++                        platform = ?request.sender_info.as_ref().and_then(|info| info.platform),
++                        active_controller = self.sender_is_active_controller(conn_id, &source),
++                        "receiver sender profile"
++                    );
+                     self.platform_subscriptions.insert((conn_id, source));
+                 }
+                 _ => {
+@@ -746,6 +753,21 @@
+                     if self.registry.get(app_id).is_none() {
+                         *availability = "APP_UNAVAILABLE".to_owned();
+                     }
++                    // Log only bounded public app identifiers, never arbitrary sender data.
++                    let diagnostic_app_id = if app_id.len() == 8
++                        && app_id.bytes().all(|byte| byte.is_ascii_hexdigit())
++                    {
++                        app_id.as_str()
++                    } else {
++                        "nonstandard"
++                    };
++                    tracing::debug!(
++                        conn_id,
++                        request_id = r.request_id,
++                        app_id = diagnostic_app_id,
++                        available = availability == "APP_AVAILABLE",
++                        "Cast app availability response"
++                    );
+                 }
+                 self.send_to(conn_id, RECEIVER_0, source, ns::RECEIVER, &response)
+                     .await;

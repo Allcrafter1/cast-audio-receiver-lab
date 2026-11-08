@@ -21,7 +21,7 @@ cp -a "$cast_output/openssl/include/openssl" libraop/libopenssl/targets/linux/x8
 cp "$cast_output/openssl/libcrypto.a" libraop/libopenssl/targets/linux/x86_64/libopenssl.a
 cp libraop/libcodecs/alac/codec/obj/libalac.a libraop/libcodecs/targets/linux/x86_64/libcodecs.a
 cp libraop/libmdns/mdnssd/lib/linux/x86_64/libmdnssd.a libraop/libmdns/targets/linux/x86_64/libmdns.a
-make -j"${CAST_BUILD_JOBS:-4}" STATIC=1 HOST=linux PLATFORM=x86_64 CC=gcc CXX=g++ VERSION=0.5.4-source-candidate
-make test STATIC=1 HOST=linux PLATFORM=x86_64 CC=gcc CXX=g++ VERSION=0.5.4-source-candidate
+make -j"${CAST_BUILD_JOBS:-4}" STATIC=1 HOST=linux PLATFORM=x86_64 CC=gcc CXX=g++ VERSION=0.5.9-source-candidate
+make test STATIC=1 HOST=linux PLATFORM=x86_64 CC=gcc CXX=g++ VERSION=0.5.9-source-candidate
 bin/cliairplay-linux-x86_64 --check
 sha256sum bin/cliairplay-linux-x86_64

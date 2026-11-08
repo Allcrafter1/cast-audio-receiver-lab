@@ -1,0 +1,1114 @@
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -18,6 +18,7 @@
+     "crates/vibecast-apps-primevideo",
+     "crates/vibecast-apps-youtube",
+     "crates/vibecast-apps-default-media",
++    "crates/vibecast-apps-tunein",
+     "crates/vibecast-core",
+     "crates/vibecast-receiver",
+     "crates/vibecast-platform",
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -3196,6 +3196,19 @@
+ ]
+ 
+ [[package]]
++name = "vibecast-apps-tunein"
++version = "0.1.0"
++dependencies = [
++ "async-trait",
++ "reqwest",
++ "serde",
++ "serde_json",
++ "tokio",
++ "url",
++ "vibecast-sdk",
++]
++
++[[package]]
+ name = "vibecast-apps-tv4play"
+ version = "0.1.0"
+ dependencies = [
+@@ -3383,6 +3396,7 @@
+  "vibecast-apps-default-media",
+  "vibecast-apps-primevideo",
+  "vibecast-apps-svtplay",
++ "vibecast-apps-tunein",
+  "vibecast-apps-tv4play",
+  "vibecast-apps-viaplay",
+  "vibecast-apps-youtube",
+--- a/crates/vibecast-platform/Cargo.toml
++++ b/crates/vibecast-platform/Cargo.toml
+@@ -31,6 +31,7 @@
+ vibecast-apps-primevideo = { path = "../vibecast-apps-primevideo" }
+ vibecast-apps-youtube = { path = "../vibecast-apps-youtube" }
+ vibecast-apps-default-media = { path = "../vibecast-apps-default-media" }
++vibecast-apps-tunein = { path = "../vibecast-apps-tunein" }
+ 
+ tokio = { workspace = true }
+ tokio-util = { workspace = true, features = ["rt"] }
+--- a/crates/vibecast-platform/src/lib.rs
++++ b/crates/vibecast-platform/src/lib.rs
+@@ -35,6 +35,7 @@
+ use vibecast_apps_default_media::DefaultMedia;
+ use vibecast_apps_primevideo::PrimeVideo;
+ use vibecast_apps_svtplay::SvtPlay;
++use vibecast_apps_tunein::TuneIn;
+ use vibecast_apps_tv4play::Tv4Play;
+ use vibecast_apps_viaplay::Viaplay;
+ use vibecast_apps_youtube::YouTube;
+@@ -415,6 +416,7 @@
+         Arc::new(PrimeVideo::new()),
+         Arc::new(YouTube::new()),
+         Arc::new(DefaultMedia),
++        Arc::new(TuneIn),
+     ]
+ }
+ 
+@@ -884,6 +886,7 @@
+         assert!(keys.contains(&"primevideo"));
+         assert!(keys.contains(&"youtube"));
+         assert!(keys.contains(&"default_media"));
++        assert!(keys.contains(&"tunein"));
+     }
+ 
+     #[tokio::test]
+--- /dev/null
++++ b/crates/vibecast-apps-tunein/Cargo.toml
+@@ -0,0 +1,20 @@
++[package]
++name = "vibecast-apps-tunein"
++description = "TuneIn live radio Cast application"
++version.workspace = true
++edition.workspace = true
++rust-version.workspace = true
++license.workspace = true
++repository.workspace = true
++publish.workspace = true
++
++[dependencies]
++vibecast-sdk = { path = "../vibecast-sdk" }
++async-trait = { workspace = true }
++reqwest = { workspace = true }
++serde = { workspace = true }
++serde_json = { workspace = true }
++url = { workspace = true }
++
++[dev-dependencies]
++tokio = { workspace = true }
+--- /dev/null
++++ b/crates/vibecast-apps-tunein/src/lib.rs
+@@ -0,0 +1,440 @@
++//! TuneIn's CAF media LOAD protocol for live radio.
++//!
++//! The sender provides its station and request context in top-level customData.
++//! Station lookup is confined to TuneIn's APIs; credentials never accompany
++//! requests to station streams or TuneIn's stream-wrapper URLs.
++
++#![forbid(unsafe_code)]
++
++use std::sync::Arc;
++use std::time::{Duration, SystemTime, UNIX_EPOCH};
++
++use async_trait::async_trait;
++use serde::{Deserialize, Deserializer};
++use serde_json::{json, Value};
++use url::Url;
++use vibecast_sdk::{
++    normalize_stream_type, AppContext, AppManifest, AppProvider, AppSession, LaunchCredentials,
++    LaunchError, LoadRequest, MediaImage, MediaMetadata, MediaResolveCode, MediaResolveError,
++    PlaybackMedia, PlaybackStream, StreamSource, StreamType,
++};
++
++const TUNE_URL: &str = "https://opml.tunein.com/Tune.ashx";
++const FEED_URL: &str = "https://feed.tunein.com";
++const API_TIMEOUT: Duration = Duration::from_secs(5);
++const MAX_JSON_BYTES: usize = 512 * 1024;
++const MAX_STREAMS: usize = 32;
++const MAX_WRAPPER_REQUESTS: usize = 3;
++
++/// TuneIn live-radio application, using the sender's normal Cast media channel.
++#[derive(Debug, Default)]
++pub struct TuneIn;
++
++#[async_trait]
++impl AppProvider for TuneIn {
++    fn manifest(&self) -> AppManifest {
++        AppManifest::without_settings("tunein", &["12F05308"], "TuneIn")
++    }
++
++    async fn launch(
++        &self,
++        _ctx: &AppContext,
++        _credentials: LaunchCredentials,
++    ) -> Result<Arc<dyn AppSession>, LaunchError> {
++        Ok(Arc::new(TuneInSession {
++            tune_url: TUNE_URL.into(),
++            feed_url: FEED_URL.into(),
++            timeout: API_TIMEOUT,
++        }))
++    }
++}
++
++struct TuneInSession {
++    tune_url: String,
++    feed_url: String,
++    timeout: Duration,
++}
++
++// Deliberately does not implement Debug: accessToken and serial stay private.
++#[derive(Deserialize)]
++#[serde(rename_all = "camelCase")]
++struct TuneRequest {
++    guide_id: String,
++    serial: Option<String>,
++    partner_id: Option<String>,
++    #[serde(default, deserialize_with = "deserialize_version")]
++    version: Option<String>,
++    access_token: Option<String>,
++}
++
++fn deserialize_version<'de, D: Deserializer<'de>>(
++    deserializer: D,
++) -> Result<Option<String>, D::Error> {
++    match Option::<Value>::deserialize(deserializer)? {
++        None => Ok(None),
++        Some(Value::String(value)) => Ok(Some(value)),
++        Some(Value::Number(value)) => Ok(Some(value.to_string())),
++        _ => Err(serde::de::Error::custom("invalid version")),
++    }
++}
++
++impl TuneRequest {
++    fn parse(data: &Value) -> Result<Self, MediaResolveError> {
++        let request: Self = serde_json::from_value(data.clone())
++            .map_err(|_| MediaResolveError::invalid_request("INVALID_TUNEIN_REQUEST"))?;
++        if request.guide_id.len() > 32
++            || !request.guide_id.starts_with('s')
++            || request.guide_id.len() < 2
++            || !request.guide_id[1..].bytes().all(|c| c.is_ascii_digit())
++        {
++            return Err(MediaResolveError::invalid_request("UNSUPPORTED_GUIDE_ID"));
++        }
++        for value in [&request.serial, &request.partner_id, &request.version]
++            .into_iter()
++            .flatten()
++        {
++            if value.len() > 512 || value.chars().any(char::is_control) {
++                return Err(MediaResolveError::invalid_request("INVALID_TUNEIN_CONTEXT"));
++            }
++        }
++        if request.access_token.as_ref().is_some_and(|value| {
++            value.len() > 16 * 1024 || value.bytes().any(|c| !c.is_ascii_graphic())
++        }) {
++            return Err(MediaResolveError::invalid_request("INVALID_TUNEIN_CONTEXT"));
++        }
++        Ok(request)
++    }
++
++    fn query(&self) -> Vec<(&str, &str)> {
++        let mut query = vec![
++            ("formats", "mp3,aac,ogg,wav,hls"),
++            (
++                "partnerId",
++                self.partner_id
++                    .as_deref()
++                    .filter(|v| !v.is_empty())
++                    .unwrap_or("qZjjnm85"),
++            ),
++            ("itemUrlScheme", "secure"),
++            ("mode", "chromecast"),
++            ("render", "json"),
++        ];
++        if let Some(serial) = &self.serial {
++            query.push(("serial", serial));
++        }
++        if let Some(version) = &self.version {
++            query.push(("version", version));
++        }
++        query
++    }
++}
++
++#[async_trait]
++impl AppSession for TuneInSession {
++    async fn resolve_media(
++        &self,
++        ctx: &AppContext,
++        request: &LoadRequest,
++    ) -> Result<PlaybackMedia, MediaResolveError> {
++        validate_time(request)?;
++        let Some(data) = request
++            .custom_data
++            .as_ref()
++            .filter(|v| v.get("guideId").is_some())
++        else {
++            return resolve_direct(&ctx.session_id, request);
++        };
++        let tune = TuneRequest::parse(data)?;
++        if request.current_time > 0.0 {
++            return Err(MediaResolveError::invalid_request("LIVE_SEEK_UNSUPPORTED"));
++        }
++        let listen_id = SystemTime::now()
++            .duration_since(UNIX_EPOCH)
++            .unwrap_or_default()
++            .as_secs()
++            .to_string();
++        let mut query = tune.query();
++        query.extend([
++            ("id", tune.guide_id.as_str()),
++            ("listenId", listen_id.as_str()),
++        ]);
++        let response = self
++            .api_json(ctx, &self.tune_url, &query, tune.access_token.as_deref())
++            .await?;
++        check_tune_status(&response)?;
++        let candidates = response
++            .get("body")
++            .and_then(Value::as_array)
++            .ok_or_else(|| upstream("INVALID_TUNEIN_RESPONSE"))?;
++        if candidates.len() > MAX_STREAMS {
++            return Err(upstream("TOO_MANY_TUNEIN_STREAMS"));
++        }
++        // Prerolls require a sequential ad/content player. Do not silently turn
++        // an ad into the whole radio station or drop it from the sequence.
++        if candidates.iter().any(|item| flag(item.get("is_preroll"))) {
++            return Err(MediaResolveError::content_unavailable(
++                "TUNEIN_PREROLL_UNSUPPORTED",
++            ));
++        }
++        let mut streams = Vec::new();
++        let mut wrapper_requests = 0;
++        for candidate in candidates {
++            if candidate.get("element").and_then(Value::as_str) != Some("audio") {
++                continue;
++            }
++            let Some(source) = candidate
++                .get("url")
++                .and_then(Value::as_str)
++                .filter(|v| valid_url(v))
++            else {
++                continue;
++            };
++            if flag(candidate.get("is_proxy")) {
++                if wrapper_requests == MAX_WRAPPER_REQUESTS {
++                    return Err(upstream("TOO_MANY_TUNEIN_WRAPPERS"));
++                }
++                wrapper_requests += 1;
++                let wrapper = self
++                    .api_json(ctx, source, &[("render", "json")], None)
++                    .await?;
++                let unwrapped = wrapper
++                    .get("Streams")
++                    .and_then(Value::as_array)
++                    .ok_or_else(|| upstream("INVALID_TUNEIN_WRAPPER"))?;
++                if unwrapped.len() > MAX_STREAMS {
++                    return Err(upstream("TOO_MANY_TUNEIN_STREAMS"));
++                }
++                for item in unwrapped {
++                    if let Some(stream) = stream(item, "Url", "MediaType") {
++                        streams.push(stream);
++                    }
++                }
++            } else if let Some(stream) = stream(candidate, "url", "media_type") {
++                streams.push(stream);
++            }
++            // The bridge selects the first stream. Avoid extra wrapper requests
++            // for alternate bitrates once a playable candidate is available.
++            if !streams.is_empty() {
++                break;
++            }
++        }
++        if streams.is_empty() {
++            return Err(MediaResolveError::content_unavailable("NO_TUNEIN_STREAMS"));
++        }
++        let metadata_url = format!("{}/profiles/{}/nowPlaying", self.feed_url, tune.guide_id);
++        let now_playing = self
++            .api_json(
++                ctx,
++                &metadata_url,
++                &tune.query(),
++                tune.access_token.as_deref(),
++            )
++            .await
++            .unwrap_or(Value::Null);
++        if flag(now_playing.pointer("/Classification/IsOnDemand")) {
++            return Err(MediaResolveError::content_unavailable(
++                "TUNEIN_ON_DEMAND_UNSUPPORTED",
++            ));
++        }
++        let metadata = radio_metadata(&now_playing, request.media.metadata.as_ref());
++        let mut media = PlaybackMedia::new(&ctx.session_id, streams, StreamType::Live);
++        media.content_id = media.streams[0].source.as_url().map(str::to_owned);
++        media.title = metadata.title.clone();
++        media.subtitle = metadata.subtitle.clone();
++        media.images = metadata.images.clone();
++        media.metadata = Some(metadata);
++        media.autoplay = request.autoplay;
++        media.custom_data = Some(json!({"guideId": tune.guide_id, "contentId": tune.guide_id}));
++        Ok(media)
++    }
++}
++
++impl TuneInSession {
++    async fn api_json(
++        &self,
++        ctx: &AppContext,
++        source: &str,
++        query: &[(&str, &str)],
++        token: Option<&str>,
++    ) -> Result<Value, MediaResolveError> {
++        let mut request = ctx.http.get(source).query(query).timeout(self.timeout);
++        if let Some(token) = token.filter(|v| !v.is_empty()) {
++            request = request.bearer_auth(token);
++        }
++        let mut response = request
++            .send()
++            .await
++            .map_err(|_| upstream("TUNEIN_HTTP_ERROR"))?;
++        if !response.status().is_success() {
++            return Err(MediaResolveError::from_http_status(
++                response.status().as_u16(),
++                Some("TUNEIN_HTTP_STATUS".into()),
++            ));
++        }
++        if response
++            .content_length()
++            .is_some_and(|len| len > MAX_JSON_BYTES as u64)
++        {
++            return Err(upstream("TUNEIN_RESPONSE_TOO_LARGE"));
++        }
++        let mut bytes = Vec::new();
++        while let Some(chunk) = response
++            .chunk()
++            .await
++            .map_err(|_| upstream("TUNEIN_HTTP_ERROR"))?
++        {
++            if chunk.len() > MAX_JSON_BYTES.saturating_sub(bytes.len()) {
++                return Err(upstream("TUNEIN_RESPONSE_TOO_LARGE"));
++            }
++            bytes.extend_from_slice(&chunk);
++        }
++        serde_json::from_slice(&bytes).map_err(|_| upstream("INVALID_TUNEIN_JSON"))
++    }
++}
++
++fn upstream(detail: &'static str) -> MediaResolveError {
++    MediaResolveError::new(MediaResolveCode::UpstreamFailure, detail)
++}
++
++fn check_tune_status(response: &Value) -> Result<(), MediaResolveError> {
++    let status = response.pointer("/head/status");
++    let status = status.and_then(|v| v.as_u64().or_else(|| v.as_str()?.parse().ok()));
++    match status {
++        Some(200) => Ok(()),
++        Some(code @ 400..=599) => Err(MediaResolveError::from_http_status(
++            code as u16,
++            Some("TUNEIN_API_STATUS".into()),
++        )),
++        _ => Err(upstream("INVALID_TUNEIN_RESPONSE")),
++    }
++}
++
++fn flag(value: Option<&Value>) -> bool {
++    value.is_some_and(|v| v == true || v.as_str().is_some_and(|v| v.eq_ignore_ascii_case("true")))
++}
++
++fn valid_url(source: &str) -> bool {
++    !source.chars().any(char::is_control)
++        && Url::parse(source).is_ok_and(|url| {
++            matches!(url.scheme(), "http" | "https")
++                && url.host_str().is_some()
++                && url.username().is_empty()
++                && url.password().is_none()
++        })
++}
++
++fn stream(value: &Value, url_key: &str, format_key: &str) -> Option<PlaybackStream> {
++    let source = value.get(url_key)?.as_str().filter(|v| valid_url(v))?;
++    let format = value
++        .get(format_key)
++        .and_then(Value::as_str)
++        .unwrap_or("mp3")
++        .to_ascii_lowercase();
++    let mime = if source.to_ascii_lowercase().contains(".m3u8") {
++        "application/x-mpegURL"
++    } else {
++        match format.as_str() {
++            "mp3" => "audio/mpeg",
++            "aac" => "audio/mp4",
++            "ogg" => "audio/ogg",
++            "wav" => "audio/vnd.wav",
++            "hls" => "application/x-mpegURL",
++            _ => return None,
++        }
++    };
++    Some(PlaybackStream {
++        source: StreamSource::Url(source.into()),
++        content_type: mime.into(),
++        drm: None,
++    })
++}
++
++fn radio_metadata(value: &Value, fallback: Option<&MediaMetadata>) -> MediaMetadata {
++    let text = |path| {
++        value
++            .pointer(path)
++            .and_then(Value::as_str)
++            .filter(|v| !v.is_empty())
++            .map(str::to_owned)
++    };
++    let station = text("/Header/Title");
++    let mut metadata = fallback.cloned().unwrap_or_default();
++    metadata.metadata_type = 3;
++    metadata.title = text("/Header/Subtitle")
++        .or_else(|| station.clone())
++        .or(metadata.title);
++    metadata.subtitle = station.clone().or(metadata.subtitle);
++    metadata.artist = station.or(metadata.artist);
++    if let Some(image) = text("/Secondary/Image")
++        .or_else(|| text("/Primary/Image"))
++        .filter(|v| valid_url(v))
++    {
++        metadata.images = vec![MediaImage {
++            url: image,
++            height: None,
++            width: None,
++        }];
++    }
++    metadata
++}
++
++fn validate_time(request: &LoadRequest) -> Result<(), MediaResolveError> {
++    if !request.current_time.is_finite()
++        || request.current_time < 0.0
++        || request
++            .media
++            .duration
++            .is_some_and(|v| !v.is_finite() || v < 0.0)
++    {
++        return Err(MediaResolveError::invalid_request("INVALID_MEDIA_TIME"));
++    }
++    Ok(())
++}
++
++fn resolve_direct(
++    session_id: &str,
++    request: &LoadRequest,
++) -> Result<PlaybackMedia, MediaResolveError> {
++    let info = &request.media;
++    let source = info.content_url.as_deref().unwrap_or(&info.content_id);
++    if !valid_url(source) {
++        return Err(MediaResolveError::invalid_request("INVALID_MEDIA_URL"));
++    }
++    if info.content_type.trim().is_empty() || info.content_type.chars().any(char::is_control) {
++        return Err(MediaResolveError::invalid_request("INVALID_CONTENT_TYPE"));
++    }
++    let stream_type = if info.is_live_media == Some(true) {
++        StreamType::Live
++    } else {
++        normalize_stream_type(info.stream_type)
++    };
++    if stream_type == StreamType::Live && request.current_time > 0.0 {
++        return Err(MediaResolveError::invalid_request("LIVE_SEEK_UNSUPPORTED"));
++    }
++    let mut media = PlaybackMedia::new(
++        session_id,
++        vec![PlaybackStream {
++            source: StreamSource::Url(source.into()),
++            content_type: info.content_type.clone(),
++            drm: None,
++        }],
++        stream_type,
++    );
++    media.content_id = Some(info.content_id.clone());
++    media.metadata = info.metadata.clone();
++    media.title = info.metadata.as_ref().and_then(|v| v.title.clone());
++    media.subtitle = info.metadata.as_ref().and_then(|v| v.subtitle.clone());
++    media.images = info
++        .metadata
++        .as_ref()
++        .map(|v| v.images.clone())
++        .unwrap_or_default();
++    media.duration = info.duration;
++    media.autoplay = request.autoplay;
++    media.start_time = request.current_time;
++    media.custom_data = info.custom_data.clone();
++    Ok(media)
++}
++
++#[cfg(test)]
++mod tests;
+--- /dev/null
++++ b/crates/vibecast-apps-tunein/src/tests.rs
+@@ -0,0 +1,569 @@
++use super::*;
++use std::collections::HashMap;
++use tokio::io::{AsyncReadExt, AsyncWriteExt};
++use tokio::net::{TcpListener, TcpStream};
++use tokio::task::JoinHandle;
++use vibecast_sdk::{NoopSenderChannel, ReceiverContext};
++
++struct Reply {
++    status: u16,
++    body: Vec<u8>,
++}
++
++impl Reply {
++    fn json(value: Value) -> Self {
++        Self {
++            status: 200,
++            body: serde_json::to_vec(&value).unwrap(),
++        }
++    }
++}
++
++async fn read_request(socket: &mut TcpStream) -> String {
++    let mut request = Vec::new();
++    loop {
++        let mut byte = [0];
++        socket.read_exact(&mut byte).await.unwrap();
++        request.push(byte[0]);
++        if request.ends_with(b"\r\n\r\n") {
++            return String::from_utf8(request).unwrap();
++        }
++        assert!(request.len() < 32 * 1024);
++    }
++}
++
++async fn fixture(
++    make: impl FnOnce(&str) -> Vec<Reply>,
++) -> (TuneInSession, JoinHandle<Vec<String>>) {
++    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
++    let base = format!("http://{}", listener.local_addr().unwrap());
++    let replies = make(&base);
++    let server = tokio::spawn(async move {
++        let mut requests = Vec::new();
++        for reply in replies {
++            let (mut socket, _) = listener.accept().await.unwrap();
++            requests.push(read_request(&mut socket).await);
++            let header = format!("HTTP/1.1 {} Response\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", reply.status, reply.body.len());
++            socket.write_all(header.as_bytes()).await.unwrap();
++            let _ = socket.write_all(&reply.body).await;
++        }
++        requests
++    });
++    (
++        TuneInSession {
++            tune_url: format!("{base}/Tune.ashx"),
++            feed_url: base,
++            timeout: Duration::from_secs(1),
++        },
++        server,
++    )
++}
++
++fn context() -> AppContext {
++    AppContext::new(
++        "session",
++        "transport",
++        "12F05308",
++        reqwest::Client::new(),
++        ReceiverContext::new("Radio", "Model", "private-device", Default::default()),
++        Arc::new(NoopSenderChannel),
++    )
++}
++
++fn load() -> LoadRequest {
++    serde_json::from_value(json!({
++        "requestId": 1,
++        "media": {"contentId": "tunein-radio", "contentType": "", "streamType": "BUFFERED"},
++        "customData": {"guideId": "s123", "serial": "test-serial", "partnerId": "test-partner", "version": 1.6201, "accessToken": "test-token"}
++    })).unwrap()
++}
++
++fn station(source: &str) -> Value {
++    json!({"head": {"status": "200"}, "body": [{"element": "audio", "url": source,
++        "media_type": "mp3", "guide_id": "e456", "is_direct": true}]})
++}
++
++fn request_url(request: &str) -> Url {
++    Url::parse(&format!(
++        "http://fixture{}",
++        request.split_whitespace().nth(1).unwrap()
++    ))
++    .unwrap()
++}
++
++#[test]
++fn advertises_the_native_tunein_app() {
++    assert_eq!(TuneIn.manifest().app_ids, &["12F05308"]);
++    assert!(TuneIn.manifest().namespaces.is_empty());
++}
++
++#[tokio::test]
++async fn native_load_uses_top_level_context_and_pascal_case_station_metadata() {
++    let source = "https://radio.example/live%2fa?signature=a%2Bb&x=1";
++    let (session, server) = fixture(|_| {
++        vec![
++            Reply::json(station(source)),
++            Reply::json(json!({
++                "Header": {"Title": "Station", "Subtitle": "Current programme"},
++                "Primary": {"GuideId": "s123", "Image": "https://radio.example/logo.png"},
++                "Classification": {"IsOnDemand": false}, "Token": "metadata-must-not-be-echoed"
++            })),
++        ]
++    })
++    .await;
++    let mut request = load();
++    request.autoplay = false;
++    // A sender's stale URL must not override its selected TuneIn station.
++    request.media.content_url = Some("https://stale.example/old.mp3".into());
++    let media = session.resolve_media(&context(), &request).await.unwrap();
++    assert_eq!(media.streams[0].source.as_url(), Some(source));
++    assert_eq!(media.stream_type, StreamType::Live);
++    assert_eq!(media.title.as_deref(), Some("Current programme"));
++    assert_eq!(media.subtitle.as_deref(), Some("Station"));
++    assert_eq!(
++        media.metadata.as_ref().unwrap().artist.as_deref(),
++        Some("Station")
++    );
++    assert_eq!(media.images[0].url, "https://radio.example/logo.png");
++    assert_eq!(media.duration, None);
++    assert_eq!(media.start_time, 0.0);
++    assert!(!media.autoplay);
++    assert_eq!(
++        media.custom_data,
++        Some(json!({"guideId":"s123","contentId":"s123"}))
++    );
++    let requests = server.await.unwrap();
++    assert_eq!(requests.len(), 2);
++    let tune_url = request_url(&requests[0]);
++    assert_eq!(tune_url.path(), "/Tune.ashx");
++    let query: HashMap<_, _> = tune_url.query_pairs().collect();
++    for (key, expected) in [
++        ("id", "s123"),
++        ("serial", "test-serial"),
++        ("partnerId", "test-partner"),
++        ("version", "1.6201"),
++        ("render", "json"),
++        ("mode", "chromecast"),
++        ("formats", "mp3,aac,ogg,wav,hls"),
++        ("itemUrlScheme", "secure"),
++    ] {
++        assert_eq!(query.get(key).map(|v| v.as_ref()), Some(expected));
++    }
++    assert!(query["listenId"].parse::<u64>().unwrap() > 0);
++    assert_eq!(
++        request_url(&requests[1]).path(),
++        "/profiles/s123/nowPlaying"
++    );
++    for request in requests {
++        assert!(request
++            .to_ascii_lowercase()
++            .contains("authorization: bearer test-token\r\n"));
++        assert!(!request.lines().next().unwrap().contains("test-token"));
++    }
++}
++
++#[tokio::test]
++async fn unwraps_tunein_proxy_without_forwarding_credentials() {
++    let source = "https://radio.example/live.aac?signature=a%2Bb";
++    let (session, server) = fixture(|base| vec![
++        Reply::json(json!({"head":{"status":200},"body":[{"element":"audio","url":format!("{base}/wrapper?station=123"),"media_type":"aac","is_proxy":"true"}]})),
++        Reply::json(json!({"Streams":[{"Url":"file:///private","MediaType":"mp3"},{"Url":source,"MediaType":"aac","StreamId":42}]})),
++        Reply::json(json!({"Header":{"Title":"Station"},"Primary":{"Image":"https://radio.example/station.png"},"Secondary":{"Image":"https://radio.example/album.png"}})),
++    ]).await;
++    let media = session.resolve_media(&context(), &load()).await.unwrap();
++    assert_eq!(media.streams[0].source.as_url(), Some(source));
++    assert_eq!(media.streams[0].content_type, "audio/mp4");
++    assert_eq!(media.images[0].url, "https://radio.example/album.png");
++    let requests = server.await.unwrap();
++    let wrapper = request_url(&requests[1]);
++    let query: HashMap<_, _> = wrapper.query_pairs().collect();
++    assert_eq!(query.len(), 2);
++    assert_eq!(query["station"], "123");
++    assert_eq!(query["render"], "json");
++    assert!(!requests[1].to_ascii_lowercase().contains("authorization:"));
++    assert!(!requests[1].contains("test-serial"));
++}
++
++#[tokio::test]
++async fn optional_metadata_failure_keeps_sender_fallback_and_partner_default() {
++    let (session, server) = fixture(|_| {
++        vec![
++            Reply::json(station("https://radio.example/live")),
++            Reply {
++                status: 503,
++                body: Vec::new(),
++            },
++        ]
++    })
++    .await;
++    let mut request = load();
++    request.custom_data = Some(json!({"guideId":"s123"}));
++    request.media.metadata = Some(
++        serde_json::from_value(
++            json!({"title":"Sender station","images":[{"url":"https://radio.example/logo.png"}]}),
++        )
++        .unwrap(),
++    );
++    let media = session.resolve_media(&context(), &request).await.unwrap();
++    assert_eq!(media.title.as_deref(), Some("Sender station"));
++    assert_eq!(media.images.len(), 1);
++    let requests = server.await.unwrap();
++    let url = request_url(&requests[0]);
++    let query: HashMap<_, _> = url.query_pairs().collect();
++    assert_eq!(query["partnerId"], "qZjjnm85");
++    assert!(!query.contains_key("serial"));
++    assert!(!query.contains_key("version"));
++    assert!(!requests[0].to_ascii_lowercase().contains("authorization:"));
++}
++
++#[tokio::test]
++async fn maps_http_and_tune_api_errors_without_exposing_response_data() {
++    for (http_status, body, code) in [
++        (
++            401,
++            json!({"private":"sensitive-value"}),
++            MediaResolveCode::AuthRequired,
++        ),
++        (403, json!({}), MediaResolveCode::AccessDenied),
++        (429, json!({}), MediaResolveCode::UpstreamFailure),
++        (
++            200,
++            json!({"head":{"status":"404","fault":"sensitive-value"},"body":[]}),
++            MediaResolveCode::ContentUnavailable,
++        ),
++    ] {
++        let (session, server) = fixture(|_| {
++            vec![Reply {
++                status: http_status,
++                body: serde_json::to_vec(&body).unwrap(),
++            }]
++        })
++        .await;
++        let error = session
++            .resolve_media(&context(), &load())
++            .await
++            .unwrap_err();
++        assert_eq!(error.code, code);
++        assert!(!error.to_string().contains("sensitive-value"));
++        assert!(!error.to_string().contains("test-token"));
++        server.await.unwrap();
++    }
++}
++
++#[tokio::test]
++async fn rejects_malformed_empty_or_unsafe_station_responses() {
++    let mut replies = vec![
++        Reply {
++            status: 200,
++            body: b"not JSON".to_vec(),
++        },
++        Reply::json(json!({"body":[]})),
++        Reply::json(json!({"head":{"status":200},"body":[]})),
++        Reply::json(station("file:///private")),
++        Reply::json(station("https://user:secret@radio.example/live")),
++        Reply::json(station("https://radio.example/live\n")),
++        Reply::json(
++            json!({"head":{"status":200},"body":[{"element":"audio","url":"https://radio.example/live","media_type":"flash"}]}),
++        ),
++    ];
++    for reply in replies.drain(..) {
++        let (session, server) = fixture(|_| vec![reply]).await;
++        assert!(session.resolve_media(&context(), &load()).await.is_err());
++        server.await.unwrap();
++    }
++}
++
++#[tokio::test]
++async fn rejects_oversized_json_and_unsupported_preroll_sequences() {
++    for (reply, expected) in [
++        (
++            Reply {
++                status: 200,
++                body: vec![b' '; MAX_JSON_BYTES + 1],
++            },
++            "TUNEIN_RESPONSE_TOO_LARGE",
++        ),
++        (
++            Reply::json(
++                json!({"head":{"status":200},"body":[{"element":"audio","url":"https://radio.example/ad","is_preroll":true}]}),
++            ),
++            "TUNEIN_PREROLL_UNSUPPORTED",
++        ),
++    ] {
++        let (session, server) = fixture(|_| vec![reply]).await;
++        let error = session
++            .resolve_media(&context(), &load())
++            .await
++            .unwrap_err();
++        assert_eq!(error.detail_code.as_deref(), Some(expected));
++        server.await.unwrap();
++    }
++}
++
++#[tokio::test]
++async fn validates_native_context_and_timing_before_any_request() {
++    let session = TuneInSession {
++        tune_url: "http://invalid.invalid".into(),
++        feed_url: "http://invalid.invalid".into(),
++        timeout: Duration::from_secs(1),
++    };
++    for data in [
++        json!({"guideId":null}),
++        json!({"guideId":123}),
++        json!({"guideId":""}),
++        json!({"guideId":"s12/../other"}),
++        json!({"guideId":"t123"}),
++        json!({"guideId":"s123","serial":"bad\nserial"}),
++        json!({"guideId":"s123","accessToken":"bad\r\nsecret"}),
++        json!({"guideId":"s123","version":{"invalid":"value"}}),
++        json!({"guideId":"s123","version":false}),
++    ] {
++        let mut request = load();
++        request.custom_data = Some(data);
++        let error = session
++            .resolve_media(&context(), &request)
++            .await
++            .unwrap_err();
++        assert_eq!(error.code, MediaResolveCode::InvalidRequest);
++    }
++    for time in [-1.0, 1.0, f64::NAN, f64::INFINITY] {
++        let mut request = load();
++        request.current_time = time;
++        assert_eq!(
++            session
++                .resolve_media(&context(), &request)
++                .await
++                .unwrap_err()
++                .code,
++            MediaResolveCode::InvalidRequest
++        );
++    }
++    let mut request = load();
++    request.media.duration = Some(f64::NAN);
++    assert_eq!(
++        session
++            .resolve_media(&context(), &request)
++            .await
++            .unwrap_err()
++            .code,
++        MediaResolveCode::InvalidRequest
++    );
++    // Placing native context inside media.customData is not the CAF protocol.
++    request = load();
++    request.media.custom_data = request.custom_data.take();
++    assert_eq!(
++        session
++            .resolve_media(&context(), &request)
++            .await
++            .unwrap_err()
++            .code,
++        MediaResolveCode::InvalidRequest
++    );
++}
++
++#[tokio::test]
++async fn direct_url_load_preserves_signatures_metadata_and_explicit_playback_intent() {
++    let source = "https://radio.example/a%2fb?signature=a%2Bb&x=1";
++    let session = TuneInSession {
++        tune_url: "unused".into(),
++        feed_url: "unused".into(),
++        timeout: API_TIMEOUT,
++    };
++    let mut request = load();
++    request.custom_data = None;
++    request.media.content_id = "logical-id".into();
++    request.media.content_url = Some(source.into());
++    request.media.content_type = "audio/mpeg".into();
++    request.media.metadata = Some(serde_json::from_value(json!({"metadataType":3,"title":"Track","artist":"Artist","images":[{"url":"https://radio.example/logo.png"}]})).unwrap());
++    request.autoplay = false;
++    request.current_time = 12.5;
++    request.media.duration = Some(40.0);
++    let media = session.resolve_media(&context(), &request).await.unwrap();
++    assert_eq!(media.streams[0].source.as_url(), Some(source));
++    assert_eq!(media.content_id.as_deref(), Some("logical-id"));
++    assert_eq!(media.metadata, request.media.metadata);
++    assert_eq!(media.start_time, 12.5);
++    assert_eq!(media.duration, Some(40.0));
++    assert!(!media.autoplay);
++    assert_eq!(media.stream_type, StreamType::Buffered);
++    request.media.is_live_media = Some(true);
++    assert!(session.resolve_media(&context(), &request).await.is_err());
++    request.current_time = 0.0;
++    assert_eq!(
++        session
++            .resolve_media(&context(), &request)
++            .await
++            .unwrap()
++            .stream_type,
++        StreamType::Live
++    );
++    for source in [
++        "file:///private",
++        "pipe:0",
++        "https://user:secret@radio.example/live",
++        "https://radio.example/live\n",
++    ] {
++        request.media.content_url = Some(source.into());
++        assert!(session.resolve_media(&context(), &request).await.is_err());
++    }
++    request.media.content_url = Some("https://radio.example/live".into());
++    request.media.content_type = "audio/mpeg\r\nheader: value".into();
++    assert!(session.resolve_media(&context(), &request).await.is_err());
++}
++
++#[tokio::test]
++async fn stalled_api_response_is_bounded() {
++    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
++    let address = listener.local_addr().unwrap();
++    let server = tokio::spawn(async move {
++        let (_socket, _) = listener.accept().await.unwrap();
++        tokio::time::sleep(Duration::from_millis(100)).await;
++    });
++    let session = TuneInSession {
++        tune_url: format!("http://{address}/Tune.ashx"),
++        feed_url: "unused".into(),
++        timeout: Duration::from_millis(25),
++    };
++    let error = session
++        .resolve_media(&context(), &load())
++        .await
++        .unwrap_err();
++    assert_eq!(error.detail_code.as_deref(), Some("TUNEIN_HTTP_ERROR"));
++    server.await.unwrap();
++}
++
++#[tokio::test]
++async fn accepts_string_version_and_rejects_on_demand_metadata() {
++    let (session, server) = fixture(|_| {
++        vec![
++            Reply::json(station("https://radio.example/live")),
++            Reply::json(json!({"Classification":{"IsOnDemand":true}})),
++        ]
++    })
++    .await;
++    let mut request = load();
++    request.custom_data.as_mut().unwrap()["version"] = json!("1.6201");
++    let error = session
++        .resolve_media(&context(), &request)
++        .await
++        .unwrap_err();
++    assert_eq!(
++        error.detail_code.as_deref(),
++        Some("TUNEIN_ON_DEMAND_UNSUPPORTED")
++    );
++    let requests = server.await.unwrap();
++    let url = request_url(&requests[0]);
++    assert!(url
++        .query_pairs()
++        .any(|(key, value)| key == "version" && value == "1.6201"));
++}
++
++#[tokio::test]
++async fn all_declared_audio_formats_and_manifest_override_reach_the_player() {
++    for (format, path, expected) in [
++        ("mp3", "live", "audio/mpeg"),
++        ("aac", "live", "audio/mp4"),
++        ("ogg", "live", "audio/ogg"),
++        ("wav", "live", "audio/vnd.wav"),
++        ("hls", "manifest", "application/x-mpegURL"),
++        ("mp3", "live.m3u8?signature=a%2Bb", "application/x-mpegURL"),
++    ] {
++        let source = format!("https://radio.example/{path}");
++        let (session, server) = fixture(|_| {
++            let mut response = station(&source);
++            response["body"][0]["media_type"] = json!(format);
++            vec![Reply::json(response), Reply::json(json!({}))]
++        })
++        .await;
++        let media = session.resolve_media(&context(), &load()).await.unwrap();
++        assert_eq!(media.streams[0].source.as_url(), Some(source.as_str()));
++        assert_eq!(media.streams[0].content_type, expected);
++        server.await.unwrap();
++    }
++}
++
++#[tokio::test]
++async fn enforces_body_bound_when_content_length_is_missing() {
++    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
++    let address = listener.local_addr().unwrap();
++    let server = tokio::spawn(async move {
++        let (mut socket, _) = listener.accept().await.unwrap();
++        read_request(&mut socket).await;
++        socket
++            .write_all(b"HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
++            .await
++            .unwrap();
++        let _ = socket.write_all(&vec![b' '; MAX_JSON_BYTES + 1]).await;
++    });
++    let session = TuneInSession {
++        tune_url: format!("http://{address}/Tune.ashx"),
++        feed_url: "unused".into(),
++        timeout: Duration::from_secs(1),
++    };
++    let error = session
++        .resolve_media(&context(), &load())
++        .await
++        .unwrap_err();
++    assert_eq!(
++        error.detail_code.as_deref(),
++        Some("TUNEIN_RESPONSE_TOO_LARGE")
++    );
++    server.await.unwrap();
++}
++
++#[tokio::test]
++async fn stalled_optional_metadata_does_not_fail_resolved_audio() {
++    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
++    let address = listener.local_addr().unwrap();
++    let server = tokio::spawn(async move {
++        let (mut tune_socket, _) = listener.accept().await.unwrap();
++        read_request(&mut tune_socket).await;
++        let body = serde_json::to_vec(&station("https://radio.example/live")).unwrap();
++        let header = format!(
++            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
++            body.len()
++        );
++        tune_socket.write_all(header.as_bytes()).await.unwrap();
++        tune_socket.write_all(&body).await.unwrap();
++        let (_metadata_socket, _) = listener.accept().await.unwrap();
++        tokio::time::sleep(Duration::from_millis(100)).await;
++    });
++    let session = TuneInSession {
++        tune_url: format!("http://{address}/Tune.ashx"),
++        feed_url: format!("http://{address}"),
++        timeout: Duration::from_millis(25),
++    };
++    let media = session.resolve_media(&context(), &load()).await.unwrap();
++    assert_eq!(
++        media.streams[0].source.as_url(),
++        Some("https://radio.example/live")
++    );
++    assert_eq!(media.stream_type, StreamType::Live);
++    server.await.unwrap();
++}
++
++#[tokio::test]
++async fn bounds_empty_proxy_wrapper_attempts() {
++    let (session, server) = fixture(|base| {
++        let streams: Vec<Value> = (0..MAX_STREAMS)
++            .map(|index| {
++                json!({
++                    "element":"audio","url":format!("{base}/wrapper-{index}"),"is_proxy":true,
++                })
++            })
++            .collect();
++        let mut replies = vec![Reply::json(json!({"head":{"status":200},"body":streams}))];
++        replies.extend((0..MAX_WRAPPER_REQUESTS).map(|_| Reply::json(json!({"Streams":[]}))));
++        replies
++    })
++    .await;
++    let error = session
++        .resolve_media(&context(), &load())
++        .await
++        .unwrap_err();
++    assert_eq!(
++        error.detail_code.as_deref(),
++        Some("TOO_MANY_TUNEIN_WRAPPERS")
++    );
++    assert_eq!(server.await.unwrap().len(), 1 + MAX_WRAPPER_REQUESTS);
++}

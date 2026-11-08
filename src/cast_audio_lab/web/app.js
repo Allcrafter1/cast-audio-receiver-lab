@@ -2,6 +2,7 @@
 "use strict";
 const translations = {
   de: {
+    app_settings: "App-Einstellungen", settings_hint: "Für diese Ausgabe. Änderungen werden im Empfänger gespeichert; die Wiedergabe wird nicht neu gestartet.", settings_disabled: "Aktiviere die Ausgabe, um ihre App-Einstellungen zu ändern.", settings_conflict: "Die Einstellungen wurden inzwischen geändert. Aktuellen Stand laden und erneut versuchen.", settings_saved: "Einstellung gespeichert.", settings_empty: "Keine Einstellungen verfügbar.", web_volume_label: "Lautstärkekorrektur für YouTube Music im Browser", web_volume_hint: "Gleicht die zusätzliche Browser-Lautstärkekurve aus. Andere Sender behalten ihr bisheriges Verhalten.",
     page_title: "Audio Lab · Speaker", language: "Sprache", title: "Deine Speaker.", subtitle: "Ausgaben verwalten. Feste Identitäten behalten.",
     outputs: "Konfigurierte Ausgaben", refresh: "Aktualisieren", outputs_hint: "Umbenennen oder Deaktivieren startet nur die betroffene Ausgabe neu bzw. beendet sie. Laufende Musik wird dabei unterbrochen.",
     local: "Lokale Ausgabe", local_loading: "Lokale Ausgabe wird geladen …", cast_name: "Cast-Name", add: "Hinzufügen",
@@ -20,6 +21,7 @@ const translations = {
     added: "Ausgabe hinzugefügt; noch deaktiviert.", network_added: "Experimentelle Ausgabe hinzugefügt; noch deaktiviert.", searching: "Suche {protocol}-Ziele …", import_name: "Name für importierten Speaker", imported: "Bereits importiert", import_disabled: "Deaktiviert importieren", import_done: "Importiert. Zum Aktivieren die konfigurierte Ausgabe verwenden.", found: "{count} Endpunkte gefunden. Auswahl ist 3 Minuten gültig."
   },
   en: {
+    app_settings: "App settings", settings_hint: "For this output. Changes are saved by the receiver without restarting playback.", settings_disabled: "Enable this output to change its app settings.", settings_conflict: "Settings changed elsewhere. Reload the current values and try again.", settings_saved: "Setting saved.", settings_empty: "No settings available.", web_volume_label: "YouTube Music browser volume correction", web_volume_hint: "Compensates the extra browser volume curve. Other senders keep their existing behavior.",
     page_title: "Audio Lab · Speakers", language: "Language", title: "Your speakers.", subtitle: "Manage outputs. Keep their identities.",
     outputs: "Configured outputs", refresh: "Refresh", outputs_hint: "Renaming or disabling restarts or stops only that output. Its playback will be interrupted.",
     local: "Local output", local_loading: "Loading local output …", cast_name: "Cast name", add: "Add",
@@ -80,7 +82,7 @@ async function api(path, method = "GET", body) {
   const data = await response.json();
   if (!response.ok) {
     const errors = {"Discovery expired; scan again": "discovery_expired", "Scan already running": "scan_running", "Discovery timed out": "scan_timeout", "DLNA discovery timed out": "scan_timeout", "DLNA dependency unavailable": "dlna_unavailable", "Diese lokale Ausgabe existiert bereits. Bitte die vorhandene Ausgabe verwenden.": "local_exists_error"};
-    const statuses = {400: "invalid_request", 404: "not_found", 503: "operation_failed", 504: "scan_timeout"};
+    const statuses = {400: "invalid_request", 409: "settings_conflict", 404: "not_found", 503: "operation_failed", 504: "scan_timeout"};
     throw new UiError(errors[data.error] || statuses[response.status] || "request_error");
   }
   return data;
@@ -94,6 +96,72 @@ function status(route) {
   const key = "state_" + route.process.state;
   return t("process_status", {state: t(Object.hasOwn(translations.en, key) ? key : "state_unknown"), count: route.process.restarts || 0});
 }
+function settingsPanel(route) {
+  const panel = node("details", "", "app-settings");
+  panel.append(text(node("summary", ""), "app_settings"));
+  const content = node("div", "");
+  panel.append(content);
+  let loading = false;
+  async function load() {
+    if (loading) return;
+    loading = true;
+    try {
+      const snapshot = await api("/api/routes/" + route.id + "/settings");
+      content.replaceChildren(text(node("p", "", "meta"), "settings_hint"));
+      if (!snapshot.apps.length) content.append(text(node("p", ""), "settings_empty"));
+      for (const app of snapshot.apps) {
+        if (!app.settings.length) continue;
+        content.append(node("h3", app.displayName));
+        for (const setting of app.settings) {
+          const row = node("div", "", "setting-row");
+          const caption = node("span", setting.label);
+          const webVolume = app.appKey === "youtube" && setting.key === "web_volume_compatibility";
+          if (webVolume) text(caption, "web_volume_label");
+          const input = document.createElement(setting.kind === "choice" ? "select" : "input");
+          if (setting.kind === "choice") {
+            for (const option of setting.options) {
+              const element = node("option", option.label); element.value = option.value; input.append(element);
+            }
+            input.value = setting.value;
+          } else if (setting.kind === "boolean") {
+            input.type = "checkbox"; input.checked = setting.value;
+          } else {
+            input.type = ["number", "integer"].includes(setting.kind) ? "number" : "text";
+            if (input.type === "number") input.step = setting.kind === "integer" ? "1" : "any";
+            input.value = setting.value;
+          }
+          input.disabled = !setting.writable;
+          const field = node("label", ""); field.append(input, caption); row.append(field);
+          if (setting.description) {
+            const help = node("p", setting.description, "meta");
+            if (webVolume) text(help, "web_volume_hint");
+            row.append(help);
+          }
+          input.onchange = async () => {
+            input.disabled = true;
+            const value = setting.kind === "boolean" ? input.checked
+              : ["number", "integer"].includes(setting.kind) ? Number(input.value) : input.value;
+            try {
+              await api("/api/routes/" + route.id + "/settings", "PATCH", {
+                appKey: app.appKey, expectedRevision: app.revision, changes: {[setting.key]: value}
+              });
+              message("settings_saved");
+            } catch (error) { showError(error); }
+            finally { await load().catch(showError); }
+          };
+          content.append(row);
+        }
+      }
+    } finally { loading = false; }
+  }
+  panel.ontoggle = () => {
+    if (!panel.open) return;
+    if (!route.enabled) content.replaceChildren(text(node("p", "", "meta"), "settings_disabled"));
+    else load().catch(showError);
+  };
+  return panel;
+}
+
 function renderRoutes(data) {
   renderedConfig = configKey(data.routes);
   const localExists = data.routes.some(route => route.backend === "mpv");
@@ -129,6 +197,7 @@ function renderRoutes(data) {
         await refresh();
       }, true), text(node("p", "", "meta"), "dlna_url_hint"));
     }
+    card.append(settingsPanel(route));
     $("routes").append(card);
   }
 }

@@ -1,6 +1,7 @@
 # AirPlay native-source evidence (dev17)
 
-The runtime continues to use the already tested airplay-cli v0.5.4 asset.
+The running laptop retains its previously tested airplay-cli asset. The next
+source candidate uses v0.5.9; see [the dated review](upstream-review-20261108.md).
 This audit does not change the deployed executable or declare release clearance.
 
 ## What the history establishes
@@ -46,7 +47,7 @@ bash tools/build_airplay_source_candidate.sh /path/to/airplay-cli /new/build/dir
 
 It exports immutable source objects, selects OpenSSL 3.5.4 explicitly and
 rebuilds the linked ALAC, mdnssd and libcrypto archives rather than taking their
-prebuilt contents. It labels its result `0.5.4-source-candidate`; this is not
+prebuilt contents. It labels its result `0.5.9-source-candidate`; this is not
 the original upstream artifact or a deployed replacement. The tested local
 candidate SHA-256 is
 `054121676576a7c5a89a02609b96db224a65d9f98cb3fd7c2633b87be3651c79`.

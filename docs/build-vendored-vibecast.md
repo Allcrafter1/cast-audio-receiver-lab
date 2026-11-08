@@ -7,6 +7,10 @@ their crates. `SOURCE-METADATA.json` records package licences/source identities;
 it is an inventory, not a legal compatibility verdict. Dependencies used only
 by other workspace members or platforms may be included too.
 
+Registry sources are written into `registry-vendor`; the separately patched
+`vendor/mdns-sd` remains an explicit source input from the cumulative frontend
+patch. Do not overwrite that directory with registry-vendoring output.
+
 The top-level frontend remains MIT. The Chromium BSD notice is additionally
 placed beside its protocol schema (documentation-only addition to the pinned
 source). `SOURCE-PIN.json` identifies the original immutable revision. Private

@@ -6,6 +6,10 @@ receiver. Use [current-runbook.md](current-runbook.md) and the complete source
 snapshot documented in [source-reconstruction.md](source-reconstruction.md).
 Do not apply the old patch sequence to an existing working tree.
 
+The [PR #18 investigation](youtube-discovery-pr18.md) checks current installed
+variants and preserves this speaker-identity decision. Its local candidate makes
+the display flags false by default even without the historical manual TOML copy.
+
 The product path uses Vibecast as the upstream CastV2, device-auth, app and
 YouTube implementation. `cast-vibecast-player` is our small external-player
 adapter. It registers one named output with Vibecast, receives normalized

@@ -1,7 +1,13 @@
-# Current architecture (dev18)
+# Current architecture
 
 This document describes the active product path. Historical experiments live
 under `research/` and are not installed with the runtime wheel.
+
+The `0.7.0-dev3` desktop candidate has two Cast identities per output: the
+original speaker plus an app-specific YouTube video alias. Both feed one hub,
+session owner, output adapter and volume state. This is discovery composition,
+not a second playback pipeline. See [dual Cast identities](dual-cast-identities.md)
+for endpoint policies, lifecycle, compatibility and validation limits.
 
 The player bridge is a separate loopback listener; only the Python management
 interface is user-facing. The inherited browser player is an explicitly enabled

@@ -45,7 +45,7 @@ jobs:
           set -euo pipefail
           cd "$RUNNER_TEMP/vibecast-sources"
           mkdir -p .cargo
-          cargo +1.98.1 vendor --locked --versioned-dirs vendor > .cargo/config.toml
+          cargo +1.98.1 vendor --locked --versioned-dirs registry-vendor > .cargo/config.toml
           cargo +1.98.1 metadata --offline --locked --format-version 1 > SOURCE-METADATA.json
       - name: Prove CLI builds from vendored source without dependency downloads
         shell: bash

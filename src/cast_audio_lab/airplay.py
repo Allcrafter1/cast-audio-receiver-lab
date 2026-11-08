@@ -337,6 +337,53 @@ class AirPlayAudioBackend(NullAudioBackend):
         self._decode_failed = asyncio.Event()
         self._start_lead_ms = 2250  # RAOP 2000ms + libraop minimum; replaced by reported latency
         self._route_protocol = target.protocol
+        self._pcm_read_pending = False
+        self._reset_starvation_evidence()
+
+    def _reset_starvation_evidence(self) -> None:
+        self._native_elapsed = None
+        self._native_advanced_at = None
+        self._input_starved = False
+
+    def _observe_native_progress(self, elapsed: float) -> None:
+        if not math.isfinite(elapsed) or elapsed < 0:
+            return  # A malformed sample cannot clear ownership of BUFFERING.
+        if (not self._track_started or not self._autoplay
+                or self._status.state not in {"PLAYING", "BUFFERING"}):
+            self._reset_starvation_evidence()
+            return
+        decoded = self._decoded_bytes / 176400
+        if elapsed > decoded + .05:
+            return  # Stale clock from another track, not current PCM evidence.
+        now = time.monotonic()
+        previous = self._native_elapsed
+        if previous is None or elapsed != previous:
+            self._native_elapsed = elapsed
+            self._native_advanced_at = now
+            if self._input_starved and previous is not None and elapsed > previous:
+                self._input_starved = False
+                self._set_position(max(self._position_at_change,
+                                       self._track_start + min(elapsed, decoded)))
+                self._status.state = "PLAYING"
+                _diagnostic(logging.INFO, "pcm_input_recovered",
+                            elapsed_ms=round(elapsed * 1000))
+                self._emit_status()
+            return
+        # Native elapsed counts sent PCM minus transport lag; it freezes BEFORE
+        # the last queued sample becomes audible. Allow the whole remaining
+        # decoded runway plus two seconds before inferring source starvation.
+        # Waiting on destination.drain is normal backpressure, never this signal.
+        runway = max(0.0, decoded - elapsed)
+        if (not self._input_finished and self._pcm_read_pending and not self._input_starved
+                and self._status.state == "PLAYING"
+                and now - self._native_advanced_at >= runway + 2):
+            self._input_starved = True
+            self._set_position(self._track_start + decoded)
+            self._status.state = "BUFFERING"
+            _diagnostic(logging.WARNING, "pcm_input_starved",
+                        decoded_ms=round(decoded * 1000), elapsed_ms=round(elapsed * 1000),
+                        frozen_ms=round((now - self._native_advanced_at) * 1000))
+            self._emit_status()
 
     async def load(
         self, url: str, content_type: str, autoplay: bool, start_time: float
@@ -356,6 +403,7 @@ class AirPlayAudioBackend(NullAudioBackend):
             )
             self._track_started = False
             self._start_pending = False
+            self._reset_starvation_evidence()
             self._status.state = "BUFFERING"
             self._status.idle_reason = None
             self._set_position(max(0.0, start_time))
@@ -417,6 +465,7 @@ class AirPlayAudioBackend(NullAudioBackend):
         if self._status.state == "IDLE":
             return
         await self._command("ACTION=PLAY")
+        self._reset_starvation_evidence()
         self._autoplay = True
         await super().play()
         await self._send_progress()
@@ -425,6 +474,7 @@ class AirPlayAudioBackend(NullAudioBackend):
         if self._status.state == "IDLE":
             return
         await self._command("ACTION=PAUSE")
+        self._reset_starvation_evidence()
         self._autoplay = False
         if self._status.state == "BUFFERING":
             self._status.state = "PAUSED"
@@ -858,12 +908,14 @@ class AirPlayAudioBackend(NullAudioBackend):
                 self._audio_ready = True
                 self._pcm_ready.set()
                 await self._send_progress()
-            if event.kind == "status" and event.name == "playing" and self.persistent:
+            if event.kind == "status" and event.name == "playing":
                 try:
                     elapsed = float(event.values.get("elapsed_ms", "nan")) / 1000
                 except ValueError:
                     elapsed = math.nan
-                if (self._track_started and self._input_finished and self._status.state == "PLAYING"
+                self._observe_native_progress(elapsed)
+                if (self.persistent and self._track_started and self._input_finished
+                        and self._autoplay and self._status.state in {"PLAYING", "BUFFERING"}
                         and math.isfinite(elapsed) and elapsed >= self._decoded_bytes / 176400):
                     # The transport's elapsed clock subtracts its audible lag.
                     # Tail silence keeps it running past the final music frame.
@@ -871,6 +923,7 @@ class AirPlayAudioBackend(NullAudioBackend):
                     self._set_position(self._track_start + self._decoded_bytes / 176400)
                     self._status.state = "IDLE"
                     self._status.idle_reason = "FINISHED"
+                    self._reset_starvation_evidence()
                     LOG.info("AirPlay track drained decoded_s=%.3f elapsed_s=%.3f",
                              self._decoded_bytes / 176400, elapsed)
                     _diagnostic(
@@ -927,19 +980,32 @@ class AirPlayAudioBackend(NullAudioBackend):
 
     async def _apply_remote_command(self, command: str) -> None:
         command = command.lower()
+        if command in {"play", "pause", "toggle_play_pause", "stop"}:
+            self._reset_starvation_evidence()
         if command == "play":
             if self._status.state != "IDLE":
+                self._autoplay = True
                 await super().play()
             self._emit_control(ControlRequest("play"))
         elif command == "pause":
+            self._autoplay = False
+            if self._status.state == "BUFFERING":
+                self._status.state = "PAUSED"
+                self._emit_status()
             await super().pause()
             self._emit_control(ControlRequest("pause"))
         elif command == "toggle_play_pause":
-            if self._status.state == "PLAYING":
+            if self._status.state == "PLAYING" or (
+                    self._status.state == "BUFFERING" and self._autoplay):
+                self._autoplay = False
+                if self._status.state == "BUFFERING":
+                    self._status.state = "PAUSED"
+                    self._emit_status()
                 await super().pause()
                 self._emit_control(ControlRequest("pause"))
             else:
                 if self._status.state != "IDLE":
+                    self._autoplay = True
                     await super().play()
                 self._emit_control(ControlRequest("play"))
         elif command == "stop":
@@ -952,7 +1018,14 @@ class AirPlayAudioBackend(NullAudioBackend):
         self, source: asyncio.StreamReader, destination: asyncio.StreamWriter
     ) -> None:
         try:
-            while chunk := await source.read(64 * 1024):
+            while True:
+                self._pcm_read_pending = True
+                try:
+                    chunk = await source.read(64 * 1024)
+                finally:
+                    self._pcm_read_pending = False
+                if not chunk:
+                    break
                 destination.write(chunk)
                 await destination.drain()
                 self._decoded_bytes += len(chunk)
@@ -1006,6 +1079,7 @@ class AirPlayAudioBackend(NullAudioBackend):
         await asyncio.shield(self._track_cleanup_task)
 
     async def _stop_track_resources(self) -> None:
+        self._reset_starvation_evidence()
         self._input_finished = False
         self._audio_ready = False
         for task in self._aux_tasks:
