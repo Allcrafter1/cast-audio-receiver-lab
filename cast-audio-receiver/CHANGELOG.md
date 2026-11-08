@@ -1,5 +1,13 @@
 # App changelog
 
+## 0.8.0-dev2 — TuneIn Radio Pro
+
+- Add TuneIn Radio Pro's separate Cast app ID to the existing TuneIn receiver.
+  Free and Pro use the same official receiver URL and supported live-radio flow.
+- Keep TuneIn Free, native autostart, artwork and playback controls unchanged.
+- Receiver-level Cast tests cover both IDs. A real Pro-app retest is still
+  requested in issue #8; this does not claim TuneIn Premium/DRM support.
+
 ## 0.8.0-dev1 — dual Cast identities, safer volume and more outputs
 
 - Every configured output now appears as its normal audio receiver and as a

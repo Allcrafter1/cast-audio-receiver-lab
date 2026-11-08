@@ -6,6 +6,41 @@ requested workflow is casting from the existing TuneIn Android app, including
 TuneIn Radio Pro. Pro and a Premium subscription are different products; Premium
 acceptance is not established by implementing public live radio.
 
+## TuneIn Radio Pro — 0.8.0-dev2
+
+The issue reporter confirmed Free works but Pro does not with 0.8.0-dev1.
+Research on 2026-11-08 identified the separate Pro Cast application ID:
+
+| Android app | Cast application ID | Official receiver URL |
+| --- | --- | --- |
+| TuneIn Free (`tunein.player`) | `12F05308` | `https://prod-cast.tunein.com` |
+| TuneIn Radio Pro (`radiotime.player`) | `8DD9AEA2` | `https://prod-cast.tunein.com` |
+
+Primary evidence is Google's public registry entry for
+[Free](https://clients3.google.com/cast/chromecast/device/app?a=12F05308&cap=262149)
+and [Pro](https://clients3.google.com/cast/chromecast/device/app?a=8DD9AEA2&cap=262149).
+The latter explicitly names **TuneIn Pro**, and both use the identical URL.
+The Pro ID was found by reading the published audio-capable app catalogue, then
+independently fetching both entries again. The development receiver is excluded.
+
+Version 0.8.0-dev2 registers both IDs with the same existing TuneIn provider.
+There is no Android-package-name allowlist to change. Station resolution,
+autostart, credentials, metadata and playback controls retain the existing flow.
+Use the normal audio endpoint, rather than its YouTube-only `(YT)` alias.
+
+Local verification passes: all 15 TuneIn unit tests, 16 isolated Cast checks
+for each app ID and the complete Python suite (437 run, 13 environment skips).
+Pro LAUNCH fails on the previous binary and succeeds on the corrected binary.
+The optimized binary was built locally; all 136 frontend source files match
+the independently reconstructed release snapshot.
+
+The isolated smoke accepts `--app-id 8DD9AEA2 --tunein-only --live-station` to
+exercise Pro availability, LAUNCH, live LOAD, metadata and controls.
+These receiver-level tests do not substitute for a real Pro app. No Pro licence
+or Premium subscription was available for a physical sender test; the reporter
+is asked to retest after updating. Pro and Premium remain distinct products;
+see [TuneIn's explanation](https://help.tunein.com/support/solutions/articles/151000172107-what-s-the-difference-between-tunein-and-tunein-pro-).
+
 ## Integrated release
 
 TuneIn and its autostart fix are included together with the volume/Sonos work
@@ -57,7 +92,8 @@ python tools/test_tunein.py --tunein-only \
 
 ## Protocol and scope
 
-The dedicated app provider handles Cast application ID `12F05308`. The current
+The dedicated app provider handles Cast application IDs `12F05308` (Free) and
+`8DD9AEA2` (Pro, added in 0.8.0-dev2). The current
 [official receiver](https://prod-cast.tunein.com) uses the Cast media namespace:
 its LOAD interceptor takes `guideId`, `serial`, `partnerId`, `version` and an
 optional `accessToken` from **top-level** `customData`. The station identifier is

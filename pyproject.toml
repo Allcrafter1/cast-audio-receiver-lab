@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "cast-audio-receiver-lab"
-version = "0.8.0.dev1"
+version = "0.8.0.dev2"
 description = "A Google Cast audio receiver for local, AirPlay, DLNA and Sonos outputs"
 license = "MPL-2.0"
 license-files = ["LICENSE", "LICENSING.md", "THIRD_PARTY_NOTICES.md", "licenses/*"]

@@ -207,8 +207,13 @@ async def log_port(process, path, pattern):
 
 
 async def exercise(sender, player, fixture_url, live_station, guide_id, switch_guide_id,
-                   tunein_only=False):
-    transport = await sender.launch("12F05308")
+                   tunein_only=False, app_id="12F05308"):
+    availability = await sender.request("receiver", "receiver-0",
+                                        {"type": "GET_APP_AVAILABILITY", "appId": [app_id]})
+    require(availability.get("availability", {}).get(app_id) == "APP_AVAILABLE",
+            "tunein-app-not-available")
+    print("PASS tunein-app-availability", flush=True)
+    transport = await sender.launch(app_id)
     print("PASS tunein-app-launch", flush=True)
     media = {"contentId": fixture_url, "contentType": "audio/wav", "streamType": "LIVE",
              "metadata": {"metadataType": 0, "title": "TuneIn smoke fixture"}}
@@ -310,7 +315,7 @@ async def exercise(sender, player, fixture_url, live_station, guide_id, switch_g
 
 
 async def run(binary, live_station=False, guide_id="s24861", switch_guide_id=None,
-              tunein_only=False):
+              tunein_only=False, app_id="12F05308"):
     from websockets.asyncio.client import connect
 
     data = io.BytesIO()
@@ -370,7 +375,7 @@ async def run(binary, live_station=False, guide_id="s24861", switch_guide_id=Non
                 sender = Sender(reader, cast_writer, player)
                 await sender.send("tp.connection", "receiver-0", {"type": "CONNECT"})
                 await exercise(sender, player, fixture_url, live_station, guide_id,
-                               switch_guide_id, tunein_only)
+                               switch_guide_id, tunein_only, app_id)
                 print("PASS isolated-tunein-smoke-no-audio", flush=True)
         finally:
             if cast_writer is not None:
@@ -402,6 +407,8 @@ async def run(binary, live_station=False, guide_id="s24861", switch_guide_id=Non
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True, help="candidate frontend executable")
+    parser.add_argument("--app-id", choices=("12F05308", "8DD9AEA2"), default="12F05308",
+                        help="TuneIn Free (default) or TuneIn Pro Cast receiver ID")
     parser.add_argument("--live-station", action="store_true",
                         help="opt in to public TuneIn station resolution; never plays audio")
     parser.add_argument("--guide-id", default="s24861", help="station for --live-station")
@@ -419,7 +426,7 @@ def main():
         parser.error("binary must be an existing executable file")
     try:
         asyncio.run(run(args.binary, args.live_station, args.guide_id, args.switch_guide_id,
-                        args.tunein_only))
+                        args.tunein_only, args.app_id))
     except SmokeFailure as error:
         print("FAIL", error, file=sys.stderr)
         return 1

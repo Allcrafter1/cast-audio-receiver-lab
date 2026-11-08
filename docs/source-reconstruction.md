@@ -1,19 +1,22 @@
 # Reconstructing the Rust frontend
 
-## Current 0.7.0.dev3 cumulative source
+## Current 0.8.0.dev2 cumulative source
 
 Start at public commit `83ba470158189de3bc223701decdc4c502d47644` from
 `https://github.com/Allcrafter1/vibecast.git` and apply only
-`patches/vibecast-0.7.0.dev3-current.patch`. The exact digest is in
+`patches/vibecast-0.8.0.dev2-current.patch`. The exact digest is in
 `config/vibecast-frontend.lock.json`. Containerfile and CI use this same patch.
 Do not stack any of the historical overlays below on top of it.
 
-The same 139 inventoried inputs are now committed at
+The previous dev3 source's 139 inventoried inputs were committed at
 `1a040ed9483745e4532e1c79ec32138198be5710` and published as the source-only
 [cast-audio-0.7.0-dev3 prerelease](https://github.com/Allcrafter1/vibecast/releases/tag/cast-audio-0.7.0-dev3).
-`published_source_commit` records this equivalence; the current build recipe
-continues to use the verified base plus snapshot. This source publication does
-not publish or promote the product image.
+`previous_source_commit` and `previous_source_prerelease` retain that provenance.
+The current base-plus-snapshot recipe adds only the TuneIn Pro manifest ID and
+its registration regression to those frontend inputs. The dev3 source release
+does not claim byte equivalence with this updated frontend.
+The updated inventoried source is committed at
+[`475562194a9e06fcb1192238c2d6591c6b309e55`](https://github.com/Allcrafter1/vibecast/commit/475562194a9e06fcb1192238c2d6591c6b309e55).
 
 The cumulative source includes the accepted dev1 work, TuneIn, PR #16/#17
 frontend integration, the PR #18 follow-ups and the shared-runtime dual identity

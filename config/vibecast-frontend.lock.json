@@ -3,13 +3,14 @@
   "commit": "83ba470158189de3bc223701decdc4c502d47644",
   "branch_for_review": "cast-audio-receiver",
   "rust_toolchain": "1.98.1",
-  "development_snapshot": "patches/vibecast-0.7.0.dev3-current.patch",
-  "development_snapshot_sha256": "4dbaa7f90f43348181c7af16cb8d64da598d25d09682a1b6d0c9d1640cc5c323",
+  "development_snapshot": "patches/vibecast-0.8.0.dev2-current.patch",
+  "development_snapshot_sha256": "afbb9f5086641c3e2546e5e2bb79f4cbfcc7c4dfffb7fed4b9ebc19be1916434",
   "previous_local_version_commit": "85918111ac68cbf837bf58835b5fd066615963ad",
   "reconstruction_base": "f28befe02fe930db300294d6bf49cdf5fec5a747",
   "reconstruction_overlay": "patches/vibecast-dev13-internal-bridge.patch",
   "reconstruction_overlay_sha256": "660e536d026cb57681c3ea0534cb331ec91da8a75df08849d2f62819d74ed7c1",
-  "note": "The public commit is the dev26 base. Apply the hash-locked 0.7.0.dev3 cumulative snapshot exactly once. It includes all accepted dev1 playback/reconnect work, PR16/17 volume integration, TuneIn, PR18 discovery/control corrections and shared-runtime dual identities, EOF Replay and the video endpoint name suffix. The previous_local_version_commit is historical, not the current dirty source revision. Reconstruction base/overlay describe the historical dev13 baseline only. The published_source_commit has identical inventoried source inputs; the existing base-plus-snapshot recipe remains supported.",
-  "published_source_commit": "1a040ed9483745e4532e1c79ec32138198be5710",
-  "source_prerelease": "https://github.com/Allcrafter1/vibecast/releases/tag/cast-audio-0.7.0-dev3"
+  "note": "Apply the hash-locked 0.8.0.dev2 cumulative snapshot exactly once to the public dev26 base. It retains the complete accepted dev3 frontend and adds the officially registered TuneIn Pro Cast ID 8DD9AEA2 to the existing TuneIn provider. The previous source commit/prerelease are historical dev3 provenance, not an equivalence claim for this updated source.",
+  "previous_source_commit": "1a040ed9483745e4532e1c79ec32138198be5710",
+  "previous_source_prerelease": "https://github.com/Allcrafter1/vibecast/releases/tag/cast-audio-0.7.0-dev3",
+  "published_source_commit": "475562194a9e06fcb1192238c2d6591c6b309e55"
 }

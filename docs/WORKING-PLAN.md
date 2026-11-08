@@ -1,5 +1,28 @@
 # Working plan
 
+## TuneIn Radio Pro follow-up — 2026-11-08
+
+- Issue #8 confirms Free works with the published 0.8.0-dev1, while Pro does not.
+  User authorizes research and a small release plus issue update if unambiguous.
+- Google's public audio-capable Cast catalogue identifies TuneIn Pro as
+  8DD9AEA2. Independent direct lookups confirm that Pro and Free (12F05308)
+  both point to https://prod-cast.tunein.com. Their Android package names differ,
+  but the receiver has no package-name allowlist; the missing Cast ID is the
+  concrete registration gap. No paid APK or subscription was obtained.
+- Register Pro as a second ID of the existing provider. Keep resolution,
+  autoplay, metadata, credentials, ownership and all output adapters unchanged.
+  The development Cast app is deliberately excluded. All work uses isolated
+  product/frontend worktrees, retaining unrelated unpublished files.
+- Prepare 0.8.0-dev2 with one hash-locked cumulative frontend snapshot, using
+  the same public base as dev1; CI, container and source-review pins agree.
+  The smoke now selects Free/Pro and checks Cast availability before LAUNCH.
+- Local verification: all 15 TuneIn unit tests, 16 Cast checks for Pro and
+  16 for Free pass. Previous binary rejects Pro LAUNCH; corrected binary works.
+  Full Python suite: 437 run, 13 environment skips, no failures. Optimized local
+  build, formatting and exact reconstruction of 136 frontend files pass.
+- Real Pro-app acceptance remains for the issue reporter. This establishes
+  receiver registration/protocol support, not Premium/DRM compatibility.
+
 ## Upstream review and source publication — 2026-11-08
 
 The verified dev3 frontend is committed and published as source prerelease

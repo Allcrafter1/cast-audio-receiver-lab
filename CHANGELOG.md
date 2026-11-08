@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.8.0.dev2 — 2026-11-08
+
+- Register TuneIn Radio Pro's separate Cast application ID `8DD9AEA2` alongside
+  TuneIn Free (`12F05308`). Google's public registry points both to the same
+  official receiver, so they share the existing live-radio implementation.
+- Extend the isolated Cast test with app selection and availability checks.
+  Premium content and a physical Pro-app test are not established by this fix.
+
 ## 0.8.0.dev1 — 2026-11-08
 
 - Announce every output as two stable Cast endpoints: the normal audio receiver
