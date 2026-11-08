@@ -19,7 +19,8 @@ RUN cargo build --locked --release -p vibecast-cli
 FROM python:3.12-slim-bookworm AS python-builder
 WORKDIR /src
 COPY config/container-build-cp312.lock.txt /tmp/build-requirements.txt
-RUN python -m pip install --no-cache-dir --disable-pip-version-check \
+RUN python -c 'import sys; assert sys.version_info[:2] == (3, 12), "Python image and reviewed cp312 locks disagree; update wheel/source inventories together"' \
+    && python -m pip install --no-cache-dir --disable-pip-version-check \
       --require-hashes -r /tmp/build-requirements.txt
 COPY pyproject.toml README.md LICENSE LICENSING.md ./
 COPY THIRD_PARTY_NOTICES.md ./
@@ -29,9 +30,9 @@ RUN python -m pip wheel --no-deps --no-build-isolation --wheel-dir /tmp/wheels .
 
 FROM debian:bookworm-slim AS airplay-fetch
 ARG TARGETARCH
-ARG CLIAIRPLAY_VERSION=v0.5.4
-ARG CLIAIRPLAY_SHA256=1ac56a15fb548f07a1dae94be16d4bea308420a0ec0cd04238023e44345fc1c9
-ARG CLIAIRPLAY_ARM64_SHA256=1ce9160a8a9abb1b2263dfbf5ed59551dd1205b2336a024e9e33c903c201a310
+ARG CLIAIRPLAY_VERSION=v0.5.9
+ARG CLIAIRPLAY_SHA256=affa85c5b3edff370f7c08f921d6a3095444acbc10579a3d12713e3b1ebe0425
+ARG CLIAIRPLAY_ARM64_SHA256=37fcc7dc59e4878f465afd2520923baefeb2c9b761c29f4d7fe5b2815bb3b354
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl \
     && rm -rf /var/lib/apt/lists/*
@@ -54,7 +55,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/cast-audio-receiver
 COPY config/container-linux-*-cp312.lock.txt /tmp/runtime-locks/
-RUN case "$TARGETARCH" in \
+RUN python -c 'import sys; assert sys.version_info[:2] == (3, 12), "Python image and reviewed cp312 locks disagree; update wheel/source inventories together"' \
+    && case "$TARGETARCH" in \
       amd64) wheel_arch=x86_64 ;; \
       arm64) wheel_arch=aarch64 ;; \
       *) echo "Unsupported target architecture" >&2; exit 1 ;; \

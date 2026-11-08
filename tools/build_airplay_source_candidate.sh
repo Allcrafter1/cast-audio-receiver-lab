@@ -28,7 +28,7 @@ export_source() {
   git -C "$cast_source/$component" archive "$revision" | tar -x -C "$destination"
 }
 mkdir -p "$cast_output"
-export_source . 431c5c582eef9307c4e39c50a0ea65e970bc1128 "$cast_output/airplay"
+export_source . 0a58c239d5fb3cf8927b9707a71c6fe897266b6a "$cast_output/airplay"
 export_source libraop 81c2182649da8645ac2a58b78e9f370c79a4165b "$cast_output/airplay/libraop"
 export_source libraop/crosstools 41544c653760a205cbf6cebfdeda4a9394cc6455 "$cast_output/airplay/libraop/crosstools"
 export_source libraop/dmap-parser 2f8ee61e2427a177beea919d72dde8931084fe51 "$cast_output/airplay/libraop/dmap-parser"

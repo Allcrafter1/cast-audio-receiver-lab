@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — upstream maintenance review
+
+- Prepare AirPlay CLI 0.5.9 for both Linux architectures with verified release
+  hashes, rebuilt source artifact and native protocol tests. Physical playback
+  acceptance remains separate; no running installation is changed by this PR.
+- Reject Python base-image changes that disagree with the reviewed CPython
+  wheel ABI. Keep Python 3.12 and Dependabot monitoring; diagnose PR #19.
+- Track the last reviewed Vibecast upstream commit separately from historical
+  build provenance; record the independent audio-fork source prerelease.
+
 ## 0.7.0.dev1 — resilient YouTube sessions and Home Assistant controls
 
 - Preserve an active YouTube Music session for up to 60 seconds after an
