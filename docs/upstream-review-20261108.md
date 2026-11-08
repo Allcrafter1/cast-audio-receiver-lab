@@ -9,7 +9,7 @@ and [Python PR #19](https://github.com/Allcrafter1/cast-audio-receiver-lab/pull/
 | --- | --- | --- |
 | Maintained Vibecast | Commit and publish the verified dev3 source as a prerelease | Does not publish a product image or upgrade an installation |
 | Vibecast upstream main | Review through `4cde20b3f49b296debec8cb9a2badb51c7bae940`; no wholesale merge | Overlapping YouTube/discovery changes require separate regression work |
-| AirPlay CLI | Prepare v0.5.9 with both Linux asset hashes and rebuilt source evidence | Physical AirPlay 2 acceptance and native ARM64 execution remain unverified; deployed laptop runtime is unchanged |
+| AirPlay CLI | Prepare v0.5.9 with both Linux asset hashes and rebuilt source evidence | Physical AirPlay 2 acceptance remains unverified; native amd64/ARM64 container build and startup pass CI; deployed laptop runtime is unchanged |
 | Python image | Retain the coherent 3.12 environment; do not merge PR #19 as written | A 3.15 migration needs new dependency/wheel/source inventories and matching CI coverage |
 
 ## Vibecast publication and upstream comparison
@@ -105,5 +105,8 @@ dev3 development tree passes 433 tests (435 discovered, the same two skips).
 The source-export validation and shell syntax check pass. The x86_64 release
 binary also passes `--check` in the existing laptop container image with no
 network; the active sender's hash is unchanged before/after that isolated test.
-GitHub's native ARM64 container job is a separate pending gate when this review
-is initially submitted; physical AirPlay playback is still not claimed.
+GitHub [CI run 42479420900](https://github.com/Allcrafter1/cast-audio-receiver-lab/actions/runs/42479420900)
+passes all seven jobs at functional commit `a9f1d8224cfd0ae1753d7f0e52b2895342873f42`: Python
+3.11/3.12/3.13, Rust, browser, and native amd64/ARM64 container build plus
+runtime startup checks. This closes the native ARM64 execution gate; physical
+AirPlay playback is still not claimed.
