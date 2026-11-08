@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: MPL-2.0
 """Shared startup policy and both directions of output volume feedback."""
 import asyncio
+import time
 import unittest
 from unittest.mock import AsyncMock, patch
 from types import SimpleNamespace
 
 from cast_audio_lab.backend import NullAudioBackend, CommandAudioBackend
 from cast_audio_lab.vibecast_player import VibecastAudioPlayer
-from cast_audio_lab.sonos import SonosAudioBackend
+from cast_audio_lab.sonos import SonosAudioBackend, VOLUME_EVENT_WATCHDOG
 from cast_audio_lab.dlna import DlnaAudioBackend
 from cast_audio_lab.mpv_backend import MpvAudioBackend
 
@@ -233,8 +234,9 @@ class SonosEventsTests(unittest.IsolatedAsyncioTestCase):
             await backend._refresh_volume()
             self.assertEqual(backend.status().volume, .43)
             backend._events_ready = True
-            backend._last_volume_event = 0
-            backend._subscription_started = 0
+            expired = time.monotonic() - VOLUME_EVENT_WATCHDOG - 1
+            backend._last_volume_event = expired
+            backend._subscription_started = expired
             queue = self.event_queue
             await backend._refresh_volume()
             self.assertIsNot(self.event_queue, queue, 'watchdog must renew a silent event path')
