@@ -307,23 +307,29 @@ class DlnaMediaRelay:
         LOGGER.info("DLNA sized mp3 request range=%s position=%.1f", rng or "-", position)
         remaining = size - first
         try:
-            while remaining > 0:
-                chunk = await process.stdout.read(min(STREAM_CHUNK, remaining))
-                if not chunk:
-                    break
-                await response.write(chunk)
-                remaining -= len(chunk)
-            # A CBR estimate may exceed the real output by a few frames: pad with silence-equivalent zeros.
-            while 0 < remaining:
-                pad = min(STREAM_CHUNK, remaining)
-                await response.write(b"\x00" * pad)
-                remaining -= pad
+            await self._pump_sized(response, process, remaining)
+        except ConnectionError:
+            # Renderers drop the old connection on every seek/track change: expected, not an error.
+            LOGGER.debug("DLNA renderer closed sized mp3 connection")
         finally:
             if process.returncode is None:
                 with contextlib.suppress(ProcessLookupError):
                     process.kill()
                 await process.wait()
         return response
+
+    async def _pump_sized(self, response, process, remaining):
+        while remaining > 0:
+            chunk = await process.stdout.read(min(STREAM_CHUNK, remaining))
+            if not chunk:
+                break
+            await response.write(chunk)
+            remaining -= len(chunk)
+        # A CBR estimate may exceed the real output by a few frames: pad up to the announced length.
+        while remaining > 0:
+            pad = min(STREAM_CHUNK, remaining)
+            await response.write(b"\x00" * pad)
+            remaining -= pad
 
     async def _trimmed_hls(self, url, start_time):
         """Fetch the HLS playlist, trim it to `start_time`, store it locally."""
