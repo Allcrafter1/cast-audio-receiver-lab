@@ -68,10 +68,10 @@ index 0000000..8223e1e
 +tokio = { workspace = true }
 diff --git a/crates/vibecast-apps-soundcloud/src/lib.rs b/crates/vibecast-apps-soundcloud/src/lib.rs
 new file mode 100644
-index 0000000..d7417d0
+index 0000000..f6de59d
 --- /dev/null
 +++ b/crates/vibecast-apps-soundcloud/src/lib.rs
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,295 @@
 +//! SoundCloud's Cast LOAD protocol (receiver app `B143C57E`).
 +//!
 +//! The Android sender loads `soundcloud:tracks:<id>` and passes the listener's
@@ -308,7 +308,12 @@ index 0000000..d7417d0
 +        // playing and never follows up with PLAY (observed 22.11.2026); SoundCloud's
 +        // own receiver starts playback, so do the same. Pause stays a sender command.
 +        media.autoplay = true;
-+        media.start_time = request.current_time;
++        // On a track change the Android sender keeps the previous track's position
++        // in currentTime (observed 22.11.2026: 4694 s for a 4-minute track).
++        media.start_time = match media.duration {
++            Some(total) if request.current_time >= total - 1.0 => 0.0,
++            _ => request.current_time,
++        };
 +        // Echo only non-secret sender data; the authorization stays in this session.
 +        media.custom_data = Some(json!({ "track": { "urn": urn } }));
 +        Ok(media)
@@ -364,10 +369,10 @@ index 0000000..d7417d0
 +mod tests;
 diff --git a/crates/vibecast-apps-soundcloud/src/tests.rs b/crates/vibecast-apps-soundcloud/src/tests.rs
 new file mode 100644
-index 0000000..b49bdea
+index 0000000..0330c34
 --- /dev/null
 +++ b/crates/vibecast-apps-soundcloud/src/tests.rs
-@@ -0,0 +1,210 @@
+@@ -0,0 +1,225 @@
 +use super::*;
 +use tokio::io::{AsyncReadExt, AsyncWriteExt};
 +use tokio::net::{TcpListener, TcpStream};
@@ -577,6 +582,21 @@ index 0000000..b49bdea
 +    assert_eq!(err.detail_code.as_deref(), Some("SOUNDCLOUD_HTTP_404_STREAM"));
 +    let heads = server.await.unwrap();
 +    assert!(heads[1].contains("/stream/prog?") && heads[2].contains("/stream/abr?"), "{heads:?}");
++}
++
++#[tokio::test]
++async fn stale_position_beyond_track_end_starts_at_zero() {
++    let (session, _base, _server) = fixture(|base| {
++        vec![
++            (200, track(base, json!([tc(base, "hls", "hls", "audio/mpeg")]))),
++            (200, json!({"url": "https://cf-hls-media.sndcdn.com/playlist/x.m3u8"})),
++        ]
++    })
++    .await;
++    let mut request = load("soundcloud:tracks:42", Some(AUTH));
++    request.current_time = 4694.695; // previous track's position, track lasts 185 s
++    let media = session.resolve_media(&context(), &request).await.unwrap();
++    assert_eq!(media.start_time, 0.0);
 +}
 diff --git a/crates/vibecast-core/src/hub.rs b/crates/vibecast-core/src/hub.rs
 index e8775b5..9586d4d 100644
