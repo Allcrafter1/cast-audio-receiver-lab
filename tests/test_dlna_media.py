@@ -195,3 +195,132 @@ class CleanupFailureTests(unittest.IsolatedAsyncioTestCase):
                 await backend.shutdown()
                 self.assertIsNone(backend._relay)
                 self.assertEqual(relay.close.await_count, 2)
+
+
+# --- progressive streaming (instant start for HLS / long items) ---
+from cast_audio_lab.dlna import should_stream
+from cast_audio_lab.dlna_media import stream_encoding
+
+
+class StreamPolicyTests(unittest.TestCase):
+    def test_stream_encoding_copies_supported_codecs_and_transcodes_the_rest(self):
+        self.assertEqual(stream_encoding("aac", {"audio/aac", "audio/mpeg"})[:2], ("audio/aac", "adts"))
+        self.assertEqual(stream_encoding("aac", {"audio/aac"})[2], ["-c:a", "copy"])
+        self.assertEqual(stream_encoding("mp3", {"audio/mpeg"})[:2], ("audio/mpeg", "mp3"))
+        self.assertEqual(stream_encoding("aac", {"audio/mpeg"})[2][:2], ["-c:a", "libmp3lame"])
+        # unknown/unsupported codec: transcode to AAC when accepted (Yamaha rejects length-less MP3)
+        self.assertEqual(stream_encoding("opus", {"audio/aac", "audio/mpeg"})[:3],
+                         ("audio/aac", "adts", ["-c:a", "aac", "-b:a", "192k", "-ar", "44100", "-ac", "2"]))
+        self.assertEqual(stream_encoding("", {"audio/mpeg"})[0], "audio/mpeg")
+
+    def test_hls_long_and_unbounded_items_stream_short_files_stay_prepared(self):
+        self.assertTrue(should_stream("application/x-mpegURL", 180.0))
+        self.assertFalse(should_stream("audio/mp4", None))  # unknown length keeps the file path
+        self.assertTrue(should_stream("audio/mp4", 9700.0))
+        self.assertFalse(should_stream("audio/mpeg", 240.0))
+
+
+@unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "needs ffmpeg")
+class StreamRelayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_relay_streams_aac_immediately_and_bit_exact(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "tone.aac"
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=3",
+                            "-c:a", "aac", "-b:a", "96k", "-f", "adts", str(source)], check=True)
+            app = web.Application()
+            calls = {"n": 0}
+
+            async def late(request):  # 404 twice, like a just-registered bridge manifest
+                if request.method == "HEAD":  # like the CDN behind the bridge: HEAD never succeeds
+                    raise web.HTTPNotFound()
+                calls["n"] += 1
+                if calls["n"] <= 2:
+                    raise web.HTTPNotFound()
+                return web.FileResponse(source)
+            app.router.add_route("*", "/tone.aac", late)
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, "127.0.0.1", 0)
+            await site.start()
+            port = site._server.sockets[0].getsockname()[1]
+            relay = DlnaMediaRelay("127.0.0.1", bind_host="127.0.0.1")
+            try:
+                url, mime, codec = await relay.stream(f"http://127.0.0.1:{port}/tone.aac", {"audio/aac", "audio/mpeg"})
+                self.assertEqual((mime, codec), ("audio/aac", "aac"))
+                async with ClientSession() as http:
+                    async with http.get(url) as response:
+                        self.assertEqual(response.headers["Content-Type"], "audio/aac")
+                        self.assertNotIn("Content-Length", response.headers)
+                        self.assertNotIn("chunked", response.headers.get("Transfer-Encoding", ""))
+                        self.assertIn("DLNA.ORG_OP=00", response.headers["contentFeatures.dlna.org"])
+                        body = await response.read()
+                    self.assertEqual(body, source.read_bytes())  # copied, not re-encoded
+                    async with http.get(url.replace("/stream/", "/stream/x")) as response:
+                        self.assertEqual(response.status, 404)
+            finally:
+                await relay.close()
+                await runner.cleanup()
+
+
+class HlsTrimTests(unittest.TestCase):
+    PLAYLIST = "\n".join([
+        "#EXTM3U", "#EXT-X-VERSION:7", "#EXT-X-TARGETDURATION:10", "#EXT-X-MEDIA-SEQUENCE:0",
+        "#EXT-X-PLAYLIST-TYPE:VOD", '#EXT-X-MAP:URI="https://cdn/init.mp4"',
+        "#EXTINF:10.0,", "https://cdn/s0.m4s", "#EXTINF:10.0,", "https://cdn/s1.m4s",
+        "#EXTINF:10.0,", "https://cdn/s2.m4s", "#EXTINF:4.5,", "https://cdn/s3.m4s", "#EXT-X-ENDLIST"])
+
+    def test_trims_to_the_segment_containing_start_and_keeps_init_map(self):
+        from cast_audio_lab.dlna_media import trim_hls
+        text, skipped = trim_hls(self.PLAYLIST, 26.0)
+        self.assertEqual(skipped, 20.0)
+        self.assertIn('#EXT-X-MAP:URI="https://cdn/init.mp4"', text)
+        self.assertNotIn("s0.m4s", text)
+        self.assertNotIn("s1.m4s", text)
+        self.assertIn("https://cdn/s2.m4s", text)
+        self.assertIn("#EXT-X-MEDIA-SEQUENCE:2", text)
+        self.assertTrue(text.rstrip().endswith("#EXT-X-ENDLIST"))
+
+    def test_start_zero_beyond_end_and_non_media_playlists(self):
+        from cast_audio_lab.dlna_media import trim_hls
+        self.assertEqual(trim_hls(self.PLAYLIST, 0)[1], 0.0)
+        self.assertIn("s3.m4s", trim_hls(self.PLAYLIST, 9999)[0])  # never trims away the last segment
+        self.assertIsNone(trim_hls("not a playlist", 5))
+        self.assertIsNone(trim_hls("#EXTM3U\n#EXT-X-STREAM-INF:BANDWIDTH=1\nv.m3u8", 5))
+
+
+@unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "needs ffmpeg")
+class SizedMp3Tests(unittest.IsolatedAsyncioTestCase):
+    async def test_sized_cbr_mp3_announces_length_and_serves_ranges(self):
+        import subprocess
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "tone.aac"
+            subprocess.run(["ffmpeg", "-loglevel", "error", "-f", "lavfi", "-i", "sine=frequency=220:duration=4",
+                            "-c:a", "aac", "-f", "adts", str(source)], check=True)
+            app = web.Application()
+            app.router.add_get("/tone.aac", lambda request: web.FileResponse(source))
+            runner = web.AppRunner(app)
+            await runner.setup()
+            site = web.TCPSite(runner, "127.0.0.1", 0)
+            await site.start()
+            port = site._server.sockets[0].getsockname()[1]
+            relay = DlnaMediaRelay("127.0.0.1", bind_host="127.0.0.1")
+            try:
+                url, mime, codec = await relay.stream(f"http://127.0.0.1:{port}/tone.aac", {"audio/mpeg"}, 0.0, 4.0)
+                self.assertEqual((mime, codec), ("audio/mpeg", "mp3-cbr"))
+                async with ClientSession() as http:
+                    async with http.head(url) as response:
+                        self.assertEqual(response.headers["Content-Length"], "160000")
+                        self.assertIn("DLNA.ORG_OP=01", response.headers["contentFeatures.dlna.org"])
+                    async with http.get(url) as response:
+                        self.assertEqual(response.status, 200)
+                        body = await response.read()
+                    self.assertEqual(len(body), 160000)
+                    self.assertEqual(body[:2][0], 0xFF)  # MP3 frame sync, no ID3 header
+                    async with http.get(url, headers={"Range": "bytes=80000-"}) as response:
+                        self.assertEqual(response.status, 206)
+                        self.assertEqual(response.headers["Content-Range"], "bytes 80000-159999/160000")
+                        self.assertEqual(len(await response.read()), 80000)
+            finally:
+                await relay.close()
+                await runner.cleanup()

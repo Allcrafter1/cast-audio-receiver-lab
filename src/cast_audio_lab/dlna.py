@@ -55,6 +55,12 @@ async def _create_profile(description_url: str):
     return DmrDevice(device, event_handler=None)
 
 
+def should_stream(content_type: str, duration) -> bool:
+    """HLS and long items start instantly as a progressive stream."""
+    mime = (content_type or "").lower()
+    return "mpegurl" in mime or (duration is not None and duration > 600)
+
+
 class DlnaAudioBackend(NullAudioBackend):
     """Control a pull-based DMR; signed source URLs remain device-visible."""
 
@@ -70,6 +76,8 @@ class DlnaAudioBackend(NullAudioBackend):
         self._relay = None
         self._relay_factory = relay_factory
         self._ffmpeg = ffmpeg
+        self._stream_offset = 0.0
+        self._stream_source = None  # (url, content_type) of a progressive stream
 
     async def _connect(self):
         if self._profile is None:
@@ -95,7 +103,21 @@ class DlnaAudioBackend(NullAudioBackend):
         from .dlna_media import DlnaMediaRelay, needs_relay, renderer_mime_types
         supported = renderer_mime_types(profile)
         use_relay = needs_relay(url, content_type, supported)
-        if use_relay:
+        self._stream_offset = 0.0
+        self._stream_source = None
+        if use_relay and should_stream(content_type, self.metadata.duration):
+            if self._relay is None:
+                factory = self._relay_factory or DlnaMediaRelay
+                self._relay = factory(urlsplit(self.description_url).hostname, ffmpeg=self._ffmpeg)
+            started = time.monotonic()
+            self._stream_source = (url, content_type)
+            url, content_type, codec = await self._relay.stream(
+                url, supported, max(0, start_time), self.metadata.duration)
+            self._stream_offset = max(0, start_time)
+            start_time = 0
+            LOGGER.info("DLNA progressive stream mime=%s codec=%s offset=%.1f elapsed_ms=%d",
+                        content_type, codec, self._stream_offset, (time.monotonic() - started) * 1000)
+        elif use_relay:
             if self._relay is None:
                 factory = self._relay_factory or DlnaMediaRelay
                 self._relay = factory(urlsplit(self.description_url).hostname, ffmpeg=self._ffmpeg)
@@ -151,6 +173,12 @@ class DlnaAudioBackend(NullAudioBackend):
 
     @upnp_command
     async def seek(self, position):
+        if self._stream_source is not None:
+            # A progressive stream has no byte ranges: restart it at the target.
+            url, content_type = self._stream_source
+            await self.load.__wrapped__(self, url, content_type, True, max(0, position))
+            await super().seek(position)
+            return
         await (await self._connect()).async_seek_abs_time(
             timedelta(seconds=max(0, position))
         )
@@ -206,7 +234,7 @@ class DlnaAudioBackend(NullAudioBackend):
                 state = getattr(self._profile.transport_state, "name", "")
                 position = self._profile.media_position
                 if position is not None and state in {"PLAYING", "PAUSED_PLAYBACK"}:
-                    self._set_position(float(position))
+                    self._set_position(float(position) + self._stream_offset)
                 if self._profile.volume_level is not None:
                     self._status.volume = float(self._profile.volume_level)
                 if self._profile.is_volume_muted is not None:
