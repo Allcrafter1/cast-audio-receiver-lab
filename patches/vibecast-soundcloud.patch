@@ -1,0 +1,681 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index 05e8c8d..c5e3e50 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -3177,6 +3177,18 @@ dependencies = [
+  "wiremock",
+ ]
+
++[[package]]
++name = "vibecast-apps-soundcloud"
++version = "0.1.0"
++dependencies = [
++ "async-trait",
++ "reqwest",
++ "serde_json",
++ "tokio",
++ "url",
++ "vibecast-sdk",
++]
++
+ [[package]]
+ name = "vibecast-apps-svtplay"
+ version = "0.1.0"
+@@ -3393,6 +3405,7 @@ dependencies = [
+  "uuid",
+  "vibecast-apps-default-media",
+  "vibecast-apps-primevideo",
++ "vibecast-apps-soundcloud",
+  "vibecast-apps-svtplay",
+  "vibecast-apps-tunein",
+  "vibecast-apps-tv4play",
+diff --git a/Cargo.toml b/Cargo.toml
+index 31e8684..69c54fe 100644
+--- a/Cargo.toml
++++ b/Cargo.toml
+@@ -19,6 +19,7 @@ members = [
+     "crates/vibecast-apps-primevideo",
+     "crates/vibecast-apps-youtube",
+     "crates/vibecast-apps-default-media",
++    "crates/vibecast-apps-soundcloud",
+     "crates/vibecast-apps-tunein",
+     "crates/vibecast-core",
+     "crates/vibecast-receiver",
+diff --git a/crates/vibecast-apps-soundcloud/Cargo.toml b/crates/vibecast-apps-soundcloud/Cargo.toml
+new file mode 100644
+index 0000000..8223e1e
+--- /dev/null
++++ b/crates/vibecast-apps-soundcloud/Cargo.toml
+@@ -0,0 +1,19 @@
++[package]
++name = "vibecast-apps-soundcloud"
++description = "SoundCloud Cast application (unencrypted streams only)"
++version.workspace = true
++edition.workspace = true
++rust-version.workspace = true
++license.workspace = true
++repository.workspace = true
++publish.workspace = true
++
++[dependencies]
++vibecast-sdk = { path = "../vibecast-sdk" }
++async-trait = { workspace = true }
++reqwest = { workspace = true }
++serde_json = { workspace = true }
++url = { workspace = true }
++
++[dev-dependencies]
++tokio = { workspace = true }
+diff --git a/crates/vibecast-apps-soundcloud/src/lib.rs b/crates/vibecast-apps-soundcloud/src/lib.rs
+new file mode 100644
+index 0000000..d7417d0
+--- /dev/null
++++ b/crates/vibecast-apps-soundcloud/src/lib.rs
+@@ -0,0 +1,290 @@
++//! SoundCloud's Cast LOAD protocol (receiver app `B143C57E`).
++//!
++//! The Android sender loads `soundcloud:tracks:<id>` and passes the listener's
++//! own API authorization in top-level `customData.credentials.authorization`.
++//! The track is resolved through SoundCloud's api-v2 exactly as SoundCloud's
++//! web receiver does it. Only unencrypted transcodings are used: encrypted
++//! (Widevine/CENC/CBC) variants are skipped and never decrypted. The
++//! authorization is sent to api-v2 only, never to media hosts.
++
++#![forbid(unsafe_code)]
++
++use std::sync::Arc;
++use std::time::Duration;
++
++use async_trait::async_trait;
++use serde_json::{json, Value};
++use url::Url;
++use vibecast_sdk::{
++    AppContext, AppManifest, AppProvider, AppSession, LaunchCredentials, LaunchError, LoadRequest,
++    MediaImage, MediaMetadata, MediaResolveCode, MediaResolveError, PlaybackMedia, PlaybackStream,
++    StreamSource, StreamType,
++};
++
++const API_URL: &str = "https://api-v2.soundcloud.com";
++// Public client id and app id of SoundCloud's own Cast web receiver (cast-new.soundcloud.com).
++const CLIENT_ID: &str = "6721db99c15d087ffd251162ac08fca6";
++const APP_ID: &str = "soundcloud:applications:140141";
++const API_TIMEOUT: Duration = Duration::from_secs(8);
++const MAX_JSON_BYTES: usize = 2 * 1024 * 1024;
++
++/// SoundCloud application.
++#[derive(Debug, Default)]
++pub struct SoundCloud;
++
++#[async_trait]
++impl AppProvider for SoundCloud {
++    fn manifest(&self) -> AppManifest {
++        AppManifest::without_settings("soundcloud", &["B143C57E"], "SoundCloud")
++    }
++
++    async fn launch(
++        &self,
++        _ctx: &AppContext,
++        _credentials: LaunchCredentials,
++    ) -> Result<Arc<dyn AppSession>, LaunchError> {
++        Ok(Arc::new(SoundCloudSession {
++            api_url: API_URL.into(),
++            timeout: API_TIMEOUT,
++        }))
++    }
++}
++
++struct SoundCloudSession {
++    api_url: String,
++    timeout: Duration,
++}
++
++/// `soundcloud:tracks:<digits>` -> `<digits>`.
++fn track_id(urn: &str) -> Option<&str> {
++    let id = urn.strip_prefix("soundcloud:tracks:")?;
++    (!id.is_empty() && id.len() <= 20 && id.bytes().all(|c| c.is_ascii_digit())).then_some(id)
++}
++
++fn authorization(request: &LoadRequest) -> Result<String, MediaResolveError> {
++    let auth = request
++        .custom_data
++        .as_ref()
++        .and_then(|v| v.pointer("/credentials/authorization"))
++        .and_then(Value::as_str)
++        .unwrap_or("");
++    if auth.is_empty() {
++        return Err(MediaResolveError::invalid_request("SOUNDCLOUD_AUTH_MISSING"));
++    }
++    if auth.len() > 4096 || auth.bytes().any(|c| c.is_ascii_control()) {
++        return Err(MediaResolveError::invalid_request("SOUNDCLOUD_AUTH_INVALID"));
++    }
++    Ok(auth.to_owned())
++}
++
++/// Encrypted SoundCloud protocols need a DRM license; they are never selected.
++fn encrypted(protocol: &str) -> bool {
++    protocol.contains("encrypted") || protocol.contains("cenc")
++}
++
++/// Unencrypted transcodings in preference order: HLS MP3, HLS AAC (sq before
++/// lq), progressive MP3, then the adaptive `audio/mpegurl` playlist, which
++/// api-v2 currently answers with 404. Encrypted protocols are never returned.
++fn candidates(transcodings: &[Value]) -> Vec<(&str, &'static str)> {
++    let fmt = |t: &Value, key: &str| {
++        t.pointer(&format!("/format/{key}"))
++            .and_then(Value::as_str)
++            .unwrap_or("")
++            .to_ascii_lowercase()
++    };
++    let rank = |t: &Value| -> Option<(u8, &'static str)> {
++        let (protocol, mime) = (fmt(t, "protocol"), fmt(t, "mime_type"));
++        let lq = t.get("quality").and_then(Value::as_str) == Some("lq");
++        match (protocol.as_str(), mime.split(';').next().unwrap_or("").trim()) {
++            ("hls", "audio/mpeg") => Some((0, "application/x-mpegURL")),
++            ("hls", "audio/mp4") => Some((if lq { 2 } else { 1 }, "application/x-mpegURL")),
++            ("progressive", "audio/mpeg") => Some((3, "audio/mpeg")),
++            ("hls", "audio/mpegurl") => Some((4, "application/x-mpegURL")),
++            _ => None,
++        }
++    };
++    let mut ranked: Vec<(u8, &str, &'static str)> = transcodings
++        .iter()
++        .filter(|t| {
++            !encrypted(&fmt(t, "protocol"))
++                && !t.get("snipped").is_some_and(|v| v == true)
++                && t.get("url").and_then(Value::as_str).is_some_and(valid_url)
++        })
++        .filter_map(|t| rank(t).map(|(r, ct)| (r, t["url"].as_str().unwrap_or(""), ct)))
++        .collect();
++    ranked.sort_by_key(|(r, _, _)| *r);
++    ranked.into_iter().map(|(_, url, ct)| (url, ct)).collect()
++}
++
++fn valid_url(source: &str) -> bool {
++    !source.chars().any(char::is_control)
++        && Url::parse(source).is_ok_and(|url| {
++            matches!(url.scheme(), "http" | "https")
++                && url.host_str().is_some()
++                && url.username().is_empty()
++                && url.password().is_none()
++        })
++}
++
++fn text(value: &Value, path: &str) -> Option<String> {
++    value
++        .pointer(path)
++        .and_then(Value::as_str)
++        .filter(|v| !v.is_empty())
++        .map(str::to_owned)
++}
++
++#[async_trait]
++impl AppSession for SoundCloudSession {
++    async fn resolve_media(
++        &self,
++        ctx: &AppContext,
++        request: &LoadRequest,
++    ) -> Result<PlaybackMedia, MediaResolveError> {
++        if !request.current_time.is_finite() || request.current_time < 0.0 {
++            return Err(MediaResolveError::invalid_request("INVALID_MEDIA_TIME"));
++        }
++        let urn = request.media.content_id.as_str();
++        let id = track_id(urn)
++            .ok_or_else(|| MediaResolveError::invalid_request("UNSUPPORTED_SOUNDCLOUD_URN"))?;
++        let auth = authorization(request)?;
++        let tracks = self
++            .api_json(ctx, &format!("{}/tracks", self.api_url), &[("ids", id)], &auth, "TRACKS")
++            .await?;
++        let track = tracks
++            .as_array()
++            .and_then(|items| items.iter().find(|t| t.get("urn").and_then(Value::as_str) == Some(urn)))
++            .ok_or_else(|| MediaResolveError::content_unavailable("SOUNDCLOUD_TRACK_NOT_FOUND"))?;
++        let transcodings = track
++            .pointer("/media/transcodings")
++            .and_then(Value::as_array)
++            .map(Vec::as_slice)
++            .unwrap_or(&[]);
++        let options = candidates(transcodings);
++        if options.is_empty() {
++            return Err(MediaResolveError::content_unavailable(
++                "SOUNDCLOUD_NO_UNENCRYPTED_STREAM",
++            ));
++        }
++        let mut resolved = None;
++        let mut last_error = None;
++        for (transcoding_url, content_type) in options {
++            // The transcoding endpoint lives on api-v2; only follow it there.
++            if !transcoding_url.starts_with(&format!("{}/", self.api_url)) {
++                last_error = Some(upstream("SOUNDCLOUD_UNEXPECTED_TRANSCODING_HOST"));
++                continue;
++            }
++            match self
++                .api_json(ctx, transcoding_url, &[("app_id", APP_ID)], &auth, "STREAM")
++                .await
++            {
++                Ok(stream) => {
++                    let source = stream
++                        .get("url")
++                        .and_then(Value::as_str)
++                        .filter(|v| valid_url(v))
++                        .ok_or_else(|| upstream("SOUNDCLOUD_NO_STREAM_URL"))?;
++                    resolved = Some((source.to_owned(), content_type));
++                    break;
++                }
++                // A retired variant answers 404; the next candidate may still work.
++                Err(err) if err.detail_code.as_deref() == Some("SOUNDCLOUD_HTTP_404_STREAM") => {
++                    last_error = Some(err);
++                }
++                Err(err) => return Err(err),
++            }
++        }
++        let (source, content_type) = resolved
++            .ok_or_else(|| last_error.unwrap_or_else(|| upstream("SOUNDCLOUD_NO_STREAM_URL")))?;
++
++        let title = text(track, "/title");
++        let artist = text(track, "/user/username");
++        let artwork = text(track, "/artwork_url")
++            .or_else(|| text(track, "/user/avatar_url"))
++            .map(|v| v.replace("-large.", "-t500x500."))
++            .filter(|v| valid_url(v));
++        let mut metadata = MediaMetadata {
++            metadata_type: 3,
++            title: title.clone(),
++            artist: artist.clone(),
++            ..MediaMetadata::default()
++        };
++        if let Some(url) = artwork {
++            metadata.images = vec![MediaImage { url, height: None, width: None }];
++        }
++        let mut media = PlaybackMedia::new(
++            &ctx.session_id,
++            vec![PlaybackStream {
++                source: StreamSource::Url(source),
++                content_type: content_type.into(),
++                drm: None,
++            }],
++            StreamType::Buffered,
++        );
++        media.content_id = Some(urn.to_owned());
++        media.title = title;
++        media.subtitle = artist;
++        media.images = metadata.images.clone();
++        media.metadata = Some(metadata);
++        media.duration = track
++            .get("duration")
++            .and_then(Value::as_f64)
++            .map(|ms| ms / 1000.0);
++        // The Android app sends LOAD with autoplay=false yet shows the track as
++        // playing and never follows up with PLAY (observed 22.11.2026); SoundCloud's
++        // own receiver starts playback, so do the same. Pause stays a sender command.
++        media.autoplay = true;
++        media.start_time = request.current_time;
++        // Echo only non-secret sender data; the authorization stays in this session.
++        media.custom_data = Some(json!({ "track": { "urn": urn } }));
++        Ok(media)
++    }
++}
++
++impl SoundCloudSession {
++    async fn api_json(
++        &self,
++        ctx: &AppContext,
++        url: &str,
++        query: &[(&str, &str)],
++        auth: &str,
++        step: &str,
++    ) -> Result<Value, MediaResolveError> {
++        let mut response = ctx
++            .http
++            .get(url)
++            .query(query)
++            .query(&[("client_id", CLIENT_ID)])
++            .header("Authorization", auth)
++            .timeout(self.timeout)
++            .send()
++            .await
++            .map_err(|_| upstream("SOUNDCLOUD_HTTP_ERROR"))?;
++        if !response.status().is_success() {
++            return Err(MediaResolveError::from_http_status(
++                response.status().as_u16(),
++                // Status and step only; response bodies and credentials stay private.
++                Some(format!("SOUNDCLOUD_HTTP_{}_{step}", response.status().as_u16())),
++            ));
++        }
++        let mut bytes = Vec::new();
++        while let Some(chunk) = response
++            .chunk()
++            .await
++            .map_err(|_| upstream("SOUNDCLOUD_HTTP_ERROR"))?
++        {
++            if chunk.len() > MAX_JSON_BYTES.saturating_sub(bytes.len()) {
++                return Err(upstream("SOUNDCLOUD_RESPONSE_TOO_LARGE"));
++            }
++            bytes.extend_from_slice(&chunk);
++        }
++        serde_json::from_slice(&bytes).map_err(|_| upstream("INVALID_SOUNDCLOUD_JSON"))
++    }
++}
++
++fn upstream(detail: &'static str) -> MediaResolveError {
++    MediaResolveError::new(MediaResolveCode::UpstreamFailure, detail)
++}
++
++#[cfg(test)]
++mod tests;
+diff --git a/crates/vibecast-apps-soundcloud/src/tests.rs b/crates/vibecast-apps-soundcloud/src/tests.rs
+new file mode 100644
+index 0000000..b49bdea
+--- /dev/null
++++ b/crates/vibecast-apps-soundcloud/src/tests.rs
+@@ -0,0 +1,210 @@
++use super::*;
++use tokio::io::{AsyncReadExt, AsyncWriteExt};
++use tokio::net::{TcpListener, TcpStream};
++use tokio::task::JoinHandle;
++use vibecast_sdk::{NoopSenderChannel, ReceiverContext};
++
++const AUTH: &str = "OAuth 2-000000-11111111-secretvalue";
++
++async fn read_request(socket: &mut TcpStream) -> String {
++    let mut request = Vec::new();
++    loop {
++        let mut byte = [0];
++        socket.read_exact(&mut byte).await.unwrap();
++        request.push(byte[0]);
++        if request.ends_with(b"\r\n\r\n") {
++            return String::from_utf8(request).unwrap();
++        }
++    }
++}
++
++/// Serves one JSON reply per connection and returns the raw request heads.
++async fn fixture(make: impl FnOnce(&str) -> Vec<(u16, Value)>) -> (SoundCloudSession, String, JoinHandle<Vec<String>>) {
++    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
++    let base = format!("http://{}", listener.local_addr().unwrap());
++    let replies = make(&base);
++    let server = tokio::spawn(async move {
++        let mut heads = Vec::new();
++        for (status, body) in replies {
++            let (mut socket, _) = listener.accept().await.unwrap();
++            heads.push(read_request(&mut socket).await);
++            let body = serde_json::to_vec(&body).unwrap();
++            let head = format!("HTTP/1.1 {status} R\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n", body.len());
++            socket.write_all(head.as_bytes()).await.unwrap();
++            socket.write_all(&body).await.unwrap();
++        }
++        heads
++    });
++    (SoundCloudSession { api_url: base.clone(), timeout: Duration::from_secs(2) }, base, server)
++}
++
++fn context() -> AppContext {
++    AppContext::new(
++        "session",
++        "transport",
++        "B143C57E",
++        reqwest::Client::new(),
++        ReceiverContext::new("Yamaha Cast", "Model", "device", Default::default()),
++        Arc::new(NoopSenderChannel),
++    )
++}
++
++fn load(urn: &str, auth: Option<&str>) -> LoadRequest {
++    let custom = match auth {
++        Some(a) => json!({"credentials": {"authorization": a}, "queue": [urn], "current_index": 0}),
++        None => json!({"queue": [urn]}),
++    };
++    serde_json::from_value(json!({
++        "requestId": 7,
++        "media": {"contentId": urn, "contentType": "audio/mpeg", "streamType": "BUFFERED", "customData": {}},
++        "customData": custom
++    }))
++    .unwrap()
++}
++
++fn track(_base: &str, transcodings: Value) -> Value {
++    json!([{
++        "urn": "soundcloud:tracks:42", "title": "Song", "duration": 185000,
++        "artwork_url": "https://i1.sndcdn.com/artworks-x-large.jpg",
++        "user": {"username": "Artist"},
++        "media": {"transcodings": transcodings}
++    }])
++}
++
++fn tc(base: &str, name: &str, protocol: &str, mime: &str) -> Value {
++    json!({"url": format!("{base}/media/soundcloud:tracks:42/x/stream/{name}"),
++           "format": {"protocol": protocol, "mime_type": mime}, "quality": "sq"})
++}
++
++#[test]
++fn advertises_the_soundcloud_cast_app() {
++    assert_eq!(SoundCloud.manifest().app_ids, &["B143C57E"]);
++}
++
++#[test]
++fn accepts_only_track_urns() {
++    assert_eq!(track_id("soundcloud:tracks:2425378014"), Some("2425378014"));
++    for bad in ["soundcloud:playlists:1", "soundcloud:tracks:", "soundcloud:tracks:12a", "https://x"] {
++        assert_eq!(track_id(bad), None, "{bad}");
++    }
++}
++
++#[tokio::test]
++async fn resolves_hls_mp3_and_keeps_authorization_on_api_only() {
++    let stream = "https://cf-hls-media.sndcdn.com/playlist/abc.m3u8?Policy=p&Signature=s";
++    let (session, _base, server) = fixture(|base| {
++        vec![
++            (200, track(base, json!([
++                tc(base, "enc", "ctr-encrypted-hls", "audio/mp4; codecs=\"mp4a.40.2\""),
++                tc(base, "hls", "hls", "audio/mpeg"),
++                tc(base, "prog", "progressive", "audio/mpeg"),
++            ]))),
++            (200, json!({"url": stream})),
++        ]
++    })
++    .await;
++    let mut request = load("soundcloud:tracks:42", Some(AUTH));
++    request.autoplay = false; // what the Android sender sends
++    let media = session.resolve_media(&context(), &request).await.unwrap();
++    assert!(media.autoplay, "SoundCloud LOAD must start playback like SoundCloud's receiver");
++    assert_eq!(media.streams[0].source.as_url(), Some(stream));
++    assert_eq!(media.streams[0].content_type, "application/x-mpegURL");
++    assert!(media.streams[0].drm.is_none());
++    assert_eq!(media.title.as_deref(), Some("Song"));
++    assert_eq!(media.metadata.as_ref().unwrap().artist.as_deref(), Some("Artist"));
++    assert_eq!(media.images[0].url, "https://i1.sndcdn.com/artworks-x-t500x500.jpg");
++    assert_eq!(media.duration, Some(185.0));
++    assert!(!serde_json::to_string(&media.custom_data).unwrap().contains("secretvalue"));
++    let heads = server.await.unwrap();
++    assert!(heads[0].starts_with("GET /tracks?ids=42&client_id="), "{}", heads[0]);
++    assert!(heads[1].contains("/stream/hls?app_id=soundcloud%3Aapplications%3A140141"), "{}", heads[1]);
++    for head in &heads {
++        assert!(head.to_ascii_lowercase().contains(&format!("authorization: {}", AUTH.to_ascii_lowercase())));
++    }
++}
++
++#[tokio::test]
++async fn falls_back_to_progressive_and_never_selects_encrypted() {
++    let (session, _base, server) = fixture(|base| {
++        vec![
++            (200, track(base, json!([
++                tc(base, "enc", "ctr-encrypted-hls", "audio/mp4"),
++                tc(base, "cbc", "cbc-encrypted-hls", "audio/mpeg"),
++                tc(base, "prog", "progressive", "audio/mpeg"),
++            ]))),
++            (200, json!({"url": "https://cf-media.sndcdn.com/abc.128.mp3"})),
++        ]
++    })
++    .await;
++    let media = session.resolve_media(&context(), &load("soundcloud:tracks:42", Some(AUTH))).await.unwrap();
++    assert_eq!(media.streams[0].content_type, "audio/mpeg");
++    assert!(server.await.unwrap()[1].contains("/stream/prog?"));
++}
++
++#[tokio::test]
++async fn encrypted_only_tracks_are_reported_unavailable() {
++    let (session, _base, _server) = fixture(|base| {
++        vec![(200, track(base, json!([tc(base, "enc", "ctr-encrypted-hls", "audio/mp4")])))]
++    })
++    .await;
++    let err = session.resolve_media(&context(), &load("soundcloud:tracks:42", Some(AUTH))).await.unwrap_err();
++    assert_eq!(err.detail_code.as_deref().unwrap_or(""), "SOUNDCLOUD_NO_UNENCRYPTED_STREAM");
++}
++
++#[tokio::test]
++async fn rejects_missing_auth_and_foreign_transcoding_hosts() {
++    let (session, _base, _server) = fixture(|_| vec![]).await;
++    let err = session.resolve_media(&context(), &load("soundcloud:tracks:42", None)).await.unwrap_err();
++    assert_eq!(err.detail_code.as_deref().unwrap_or(""), "SOUNDCLOUD_AUTH_MISSING");
++
++    let (session, _base, _server) = fixture(|_| {
++        vec![(200, json!([{ "urn": "soundcloud:tracks:42", "user": {},
++            "media": {"transcodings": [{"url": "https://evil.example/stream", "format": {"protocol": "hls", "mime_type": "audio/mpeg"}}]}}]))]
++    })
++    .await;
++    let err = session.resolve_media(&context(), &load("soundcloud:tracks:42", Some(AUTH))).await.unwrap_err();
++    assert_eq!(err.detail_code.as_deref().unwrap_or(""), "SOUNDCLOUD_UNEXPECTED_TRANSCODING_HOST");
++}
++
++#[tokio::test]
++async fn maps_api_http_errors() {
++    let (session, _base, _server) = fixture(|_| vec![(401, json!({"error": "unauthorized"}))]).await;
++    let err = session.resolve_media(&context(), &load("soundcloud:tracks:42", Some(AUTH))).await.unwrap_err();
++    assert_eq!(err.detail_code.as_deref().unwrap_or(""), "SOUNDCLOUD_HTTP_401_TRACKS");
++}
++
++#[tokio::test]
++async fn skips_retired_mpegurl_variant_and_uses_unencrypted_aac_hls() {
++    let aac = "https://playback.media-streaming.soundcloud.cloud/x/aac_160k/playlist.m3u8?Signature=s";
++    let (session, _base, server) = fixture(|base| {
++        vec![
++            (200, track(base, json!([
++                tc(base, "abr", "hls", "audio/mpegurl"),
++                tc(base, "enc", "ctr-encrypted-hls", "audio/mp4; codecs=\"mp4a.40.2\""),
++                tc(base, "aac", "hls", "audio/mp4; codecs=\"mp4a.40.2\""),
++            ]))),
++            (200, json!({"url": aac})),
++        ]
++    })
++    .await;
++    let media = session.resolve_media(&context(), &load("soundcloud:tracks:42", Some(AUTH))).await.unwrap();
++    assert_eq!(media.streams[0].source.as_url(), Some(aac));
++    assert_eq!(media.streams[0].content_type, "application/x-mpegURL");
++    assert!(server.await.unwrap()[1].contains("/stream/aac?"), "AAC must be tried before mpegurl");
++}
++
++#[tokio::test]
++async fn falls_through_a_404_stream_to_the_next_candidate() {
++    let (session, _base, server) = fixture(|base| {
++        vec![
++            (200, track(base, json!([tc(base, "abr", "hls", "audio/mpegurl"), tc(base, "prog", "progressive", "audio/mpeg")]))),
++            (404, json!({})),
++            (404, json!({})),
++        ]
++    })
++    .await;
++    let err = session.resolve_media(&context(), &load("soundcloud:tracks:42", Some(AUTH))).await.unwrap_err();
++    assert_eq!(err.detail_code.as_deref(), Some("SOUNDCLOUD_HTTP_404_STREAM"));
++    let heads = server.await.unwrap();
++    assert!(heads[1].contains("/stream/prog?") && heads[2].contains("/stream/abr?"), "{heads:?}");
++}
+diff --git a/crates/vibecast-core/src/hub.rs b/crates/vibecast-core/src/hub.rs
+index e8775b5..9586d4d 100644
+--- a/crates/vibecast-core/src/hub.rs
++++ b/crates/vibecast-core/src/hub.rs
+@@ -2383,7 +2383,10 @@ impl DeviceHub {
+             }
+             None => return,
+         };
+-        if player_state == PlayerState::Idle {
++        // A reason-less Idle is a state echo (e.g. the reply to the pre-load
++        // volume command arriving after LOAD registered its proxies), not an
++        // ending; releasing proxies there makes the new manifest 404.
++        if player_state == PlayerState::Idle && idle_reason.is_some() {
+             // EOF is not eviction: repeat-one reopens the same bytes. Errors,
+             // user Stop, a new title and session teardown release them.
+             if idle_reason != Some(IdleReason::Finished) {
+diff --git a/crates/vibecast-core/src/tests.rs b/crates/vibecast-core/src/tests.rs
+index dc15007..922566f 100644
+--- a/crates/vibecast-core/src/tests.rs
++++ b/crates/vibecast-core/src/tests.rs
+@@ -1608,6 +1608,40 @@ async fn cache_failure_recovers_on_buffering_without_eof_and_rejects_old_reports
+     }
+ }
+
++#[tokio::test]
++async fn reasonless_idle_echo_keeps_the_new_manifest_registered() {
++    let mut h = setup().await;
++    let session = launch(&mut h.client).await;
++    send(&mut h.client, FAKE_NS, &session, r#"{"type":"PUSH_CACHE"}"#).await;
++    tokio::time::timeout(std::time::Duration::from_secs(2), async {
++        while !h.proxy.manifests.lock().unwrap().contains_key(&session) {
++            tokio::task::yield_now().await;
++        }
++    })
++    .await
++    .unwrap();
++    // The state reply to the pre-load volume command arrives after LOAD.
++    h.hub
++        .send_player_report(PlayerReport::State {
++            media_session_id: None,
++            session_id: session.clone(),
++            player_state: PlayerState::Idle,
++            current_time: 0.0,
++            duration: None,
++            idle_reason: None,
++            volume_revision: None,
++            volume: None,
++            muted: None,
++        })
++        .await
++        .unwrap();
++    for _ in 0..50 {
++        tokio::task::yield_now().await;
++    }
++    assert!(h.proxy.manifests.lock().unwrap().contains_key(&session));
++    h.hub.shutdown().await;
++}
++
+ #[tokio::test]
+ async fn current_cache_survives_eof_repeat_but_not_title_change_or_stop() {
+     async fn push(h: &mut Harness, session: &str, kind: &str, loads: usize) -> String {
+diff --git a/crates/vibecast-platform/Cargo.toml b/crates/vibecast-platform/Cargo.toml
+index 0f305f4..69908d9 100644
+--- a/crates/vibecast-platform/Cargo.toml
++++ b/crates/vibecast-platform/Cargo.toml
+@@ -31,6 +31,7 @@ vibecast-apps-viaplay = { path = "../vibecast-apps-viaplay" }
+ vibecast-apps-primevideo = { path = "../vibecast-apps-primevideo" }
+ vibecast-apps-youtube = { path = "../vibecast-apps-youtube" }
+ vibecast-apps-default-media = { path = "../vibecast-apps-default-media" }
++vibecast-apps-soundcloud = { path = "../vibecast-apps-soundcloud" }
+ vibecast-apps-tunein = { path = "../vibecast-apps-tunein" }
+
+ tokio = { workspace = true }
+diff --git a/crates/vibecast-platform/src/lib.rs b/crates/vibecast-platform/src/lib.rs
+index 650206d..fc66632 100644
+--- a/crates/vibecast-platform/src/lib.rs
++++ b/crates/vibecast-platform/src/lib.rs
+@@ -35,6 +35,7 @@ use tokio_util::sync::CancellationToken;
+ use vibecast_apps_default_media::DefaultMedia;
+ use vibecast_apps_primevideo::PrimeVideo;
+ use vibecast_apps_svtplay::SvtPlay;
++use vibecast_apps_soundcloud::SoundCloud;
+ use vibecast_apps_tunein::TuneIn;
+ use vibecast_apps_tv4play::Tv4Play;
+ use vibecast_apps_viaplay::Viaplay;
+@@ -417,6 +418,7 @@ fn build_app_providers() -> Vec<Arc<dyn AppProvider>> {
+         Arc::new(YouTube::new()),
+         Arc::new(DefaultMedia),
+         Arc::new(TuneIn),
++        Arc::new(SoundCloud),
+     ]
+ }
+
+@@ -887,6 +889,7 @@ mod tests {
+         assert!(keys.contains(&"youtube"));
+         assert!(keys.contains(&"default_media"));
+         assert!(keys.contains(&"tunein"));
++        assert!(keys.contains(&"soundcloud"));
+     }
+
+     #[tokio::test]
