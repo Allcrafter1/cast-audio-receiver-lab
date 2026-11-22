@@ -2,7 +2,7 @@
 
 # Native amd64/arm64 builds use the same sources and package versions, with
 # separately verified native assets and wheel hashes for each target.
-FROM rust:1.98-bookworm AS vibecast-builder
+FROM rust:1.100-bookworm AS vibecast-builder
 ARG VIBECAST_REPOSITORY=https://github.com/Allcrafter1/vibecast.git
 ARG VIBECAST_COMMIT=83ba470158189de3bc223701decdc4c502d47644
 COPY patches/vibecast-0.8.0.dev2-current.patch /tmp/vibecast-current.patch
