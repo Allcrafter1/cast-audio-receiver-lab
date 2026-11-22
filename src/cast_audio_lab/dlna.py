@@ -55,6 +55,15 @@ async def _create_profile(description_url: str):
     return DmrDevice(device, event_handler=None)
 
 
+def with_res_duration(didl: str, seconds) -> str:
+    """Add res@duration so renderers can show total time and progress."""
+    if not seconds or seconds <= 0 or "<res " not in didl or " duration=" in didl:
+        return didl
+    hours, rest = divmod(int(seconds), 3600)
+    minutes, secs = divmod(rest, 60)
+    return didl.replace("<res ", f'<res duration="{hours}:{minutes:02d}:{secs:02d}.000" ', 1)
+
+
 def should_stream(content_type: str, duration) -> bool:
     """HLS and long items start instantly as a progressive stream."""
     mime = (content_type or "").lower()
@@ -139,8 +148,12 @@ class DlnaAudioBackend(NullAudioBackend):
             self.metadata.title or "Cast audio",
             override_mime_type=content_type,
             override_dlna_features="*",
+            # audioItem has no artist/albumArtURI: async-upnp-client silently drops them.
+            override_upnp_class="object.item.audioItem.musicTrack",
             meta_data=meta,
         )
+        duration = self.metadata.duration
+        didl = with_res_duration(didl, duration - self._stream_offset if duration else None)
         self._load_started = time.monotonic()
         await profile.async_set_transport_uri(url, self.metadata.title or "Cast audio", didl)
         if autoplay:
