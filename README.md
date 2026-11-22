@@ -129,6 +129,7 @@ short maintainer map.
 | Home Assistant direct media / radio | Tested through the Default Media Receiver path. This does not imply support for every Cast app or DRM service. |
 | TuneIn public live radio | Implemented and tested with public stations, metadata, switching and controls. Premium/DRM, every station and every ad flow are not claimed. |
 | DLNA | Tested on an older Samsung TV, including its connection-approval flow; renderer compatibility still varies. |
+| SoundCloud → DLNA (Yamaha MusicCast) | SoundCloud Android app casting to a Yamaha MusicCast stereo pair: instant start for long sets, seek, pause, volume, track change and metadata verified on hardware. See [SoundCloud → Yamaha notes](docs/soundcloud-yamaha-dlna.md). |
 | Sonos | AirPlay use reported by contributor; direct Sonos has automated/FFmpeg coverage, hardware acceptance pending. |
 | amd64 / ARM64 containers | Both are built and smoke-tested natively. Physical ARM output acceptance remains open. |
 

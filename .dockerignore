@@ -10,3 +10,4 @@ third_party
 research
 patches/*
 !patches/vibecast-0.8.0.dev2-current.patch
+!patches/vibecast-soundcloud.patch

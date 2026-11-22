@@ -164,3 +164,28 @@ class DlnaBackendTests(unittest.IsolatedAsyncioTestCase):
 
 
 if __name__ == "__main__": unittest.main()
+
+
+class DidlMetadataTests(unittest.IsolatedAsyncioTestCase):
+    async def test_music_track_class_and_res_duration(self):
+        profile = FakeDmr()
+        async def metadata(url, title, **kwargs):
+            profile.calls.append(("metadata", url, title, kwargs))
+            return '<DIDL-Lite><item><res protocolInfo="http-get:*:audio/mpeg:*">%s</res></item></DIDL-Lite>' % url
+        profile.construct_play_media_metadata = metadata
+        backend = DlnaAudioBackend("http://192.0.2.2/device.xml", profile_factory=AsyncMock(return_value=profile))
+        await backend.set_metadata(MediaMetadata(title="Set", artist="DJ", duration=3725.4))
+        try:
+            await backend.load("http://source/a.mp3", "audio/mpeg", False, 0)
+            kwargs = next(c for c in profile.calls if c[0] == "metadata")[3]
+            self.assertEqual(kwargs["override_upnp_class"], "object.item.audioItem.musicTrack")
+            self.assertEqual(kwargs["meta_data"]["artist"], "DJ")
+            didl = next(c for c in profile.calls if c[0] == "load")[3]
+            self.assertIn('<res duration="1:02:05.000" ', didl)
+        finally:
+            await backend.shutdown()
+
+    def test_res_duration_is_left_alone_without_duration(self):
+        from cast_audio_lab.dlna import with_res_duration
+        self.assertEqual(with_res_duration("<res>u</res>", None), "<res>u</res>")
+        self.assertEqual(with_res_duration('<res duration="0:01:00.000" >u</res>', 99), '<res duration="0:01:00.000" >u</res>')
